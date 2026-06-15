@@ -134,8 +134,7 @@ function OrphanRowCard({ row }: { row: OrphanRow }) {
           {row.inspection_title || "Untitled inspection"}
         </div>
         <div className="text-xs text-muted-foreground">
-          {row.site_name ?? "Unknown site"} · {row.inspection_status} ·{" "}
-          {createdDate}
+          {row.site_name ?? "Unknown site"} · {createdDate}
         </div>
         {orphanTyped && (
           <div className="mt-1 text-sm">

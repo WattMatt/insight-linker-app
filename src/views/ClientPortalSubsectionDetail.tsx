@@ -166,15 +166,6 @@ const ClientPortalSubsectionDetail = () => {
     }
   };
 
-  const getInspectionStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'completed': return 'bg-emerald-500';
-      case 'in_progress': return 'bg-amber-500';
-      case 'scheduled': return 'bg-blue-500';
-      default: return 'bg-muted';
-    }
-  };
-
   if (subsectionLoading) {
     return (
       <div className="space-y-6">
@@ -209,7 +200,7 @@ const ClientPortalSubsectionDetail = () => {
   }, {} as Record<string, typeof documents>);
 
   const totalPins = floorPlans.reduce((sum, fp) => sum + (fp.floor_plan_pins?.length || 0), 0);
-  const completedInspections = inspections.filter(i => (i.status || '').toLowerCase() === "completed").length;
+  const totalInspections = inspections.length;
 
   return (
     <div className="space-y-6">
@@ -359,8 +350,8 @@ const ClientPortalSubsectionDetail = () => {
                       <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">{completedInspections}</p>
-                      <p className="text-xs text-muted-foreground">Completed Inspections</p>
+                      <p className="text-2xl font-bold">{totalInspections}</p>
+                      <p className="text-xs text-muted-foreground">Inspections</p>
                     </div>
                   </div>
                 </div>
@@ -463,12 +454,8 @@ const ClientPortalSubsectionDetail = () => {
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
-                        <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                          (inspection.status || '').toLowerCase() === "completed" ? "bg-emerald-500/10" : "bg-amber-500/10"
-                        }`}>
-                          <ShieldCheck className={`h-5 w-5 ${
-                            (inspection.status || '').toLowerCase() === "completed" ? "text-emerald-600" : "text-amber-600"
-                          }`} />
+                        <div className="h-10 w-10 rounded-lg flex items-center justify-center bg-muted">
+                          <ShieldCheck className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div>
                           <p className="font-medium">{inspection.title}</p>
@@ -492,12 +479,6 @@ const ClientPortalSubsectionDetail = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge
-                          variant={(inspection.status || '').toLowerCase() === "completed" ? "default" : "secondary"}
-                          className={(inspection.status || '').toLowerCase() === "completed" ? "bg-emerald-500" : ""}
-                        >
-                          {inspection.status}
-                        </Badge>
                         <Button
                           variant="outline"
                           size="sm"
@@ -556,13 +537,6 @@ const ClientPortalSubsectionDetail = () => {
               <div className="px-6 py-4 space-y-6">
                 {/* Summary Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="p-3 rounded-lg bg-muted/50">
-                    <span className="text-xs text-muted-foreground block mb-1">Status</span>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2.5 h-2.5 rounded-full ${getInspectionStatusColor(inspectionDetails.status)}`} />
-                      <span className="font-semibold capitalize text-sm">{inspectionDetails.status}</span>
-                    </div>
-                  </div>
                   {inspectionDetails.inspection_date && (
                     <div className="p-3 rounded-lg bg-muted/50">
                       <span className="text-xs text-muted-foreground block mb-1">Date</span>

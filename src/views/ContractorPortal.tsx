@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { ClipboardList, AlertCircle, CheckCircle, FileText, Clock, Search } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle, FileText, Search } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import ContractorPortalLayout from "@/components/ContractorPortalLayout";
@@ -30,22 +30,6 @@ const ContractorPortal = () => {
         .select("*")
         .eq("site_id", siteId)
         .order("name");
-
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!siteId,
-  });
-
-  const { data: inspections } = useQuery({
-    queryKey: ["contractor-inspections", siteId],
-    queryFn: async () => {
-      if (!siteId) return [];
-      const { data, error } = await supabase
-        .from("inspections")
-        .select("*")
-        .eq("site_id", siteId)
-        .order("inspection_date", { ascending: false });
 
       if (error) throw error;
       return data;
@@ -79,8 +63,6 @@ const ContractorPortal = () => {
     s.coc_status === "Missing" || s.coc_status === "Expired"
   ).length || 0;
   const totalDocuments = documents?.length || 0;
-  const pendingInspections = inspections?.filter(i => i.status === "Pending").length || 0;
-  const completedInspections = inspections?.filter(i => i.status === "Completed").length || 0;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -201,29 +183,6 @@ const ContractorPortal = () => {
               </Card>
             </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Inspection Status</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="flex items-center gap-4 p-4 border rounded-lg">
-                    <Clock className="h-8 w-8 text-yellow-600" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Pending Inspections</p>
-                      <p className="text-2xl font-bold">{pendingInspections}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 p-4 border rounded-lg">
-                    <CheckCircle className="h-8 w-8 text-green-600" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Completed Inspections</p>
-                      <p className="text-2xl font-bold">{completedInspections}</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
 
           <TabsContent value="subsections" className="space-y-6">

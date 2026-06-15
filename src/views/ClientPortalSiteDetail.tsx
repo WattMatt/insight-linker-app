@@ -191,7 +191,6 @@ const ClientPortalSiteDetail = () => {
   const totalSubsections = subsections.length;
   const totalDocuments = siteDocuments.length + subsectionDocuments.length;
   const totalInspections = inspections.length;
-  const completedInspections = inspections.filter(i => i.status?.toLowerCase() === "completed").length;
 
   const sitesUrl = `/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`;
 
@@ -311,9 +310,6 @@ const ClientPortalSiteDetail = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalInspections}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {completedInspections} completed
-                </p>
               </CardContent>
             </Card>
           </div>

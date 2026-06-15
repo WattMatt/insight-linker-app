@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Building2, Users, ClipboardCheck, Activity, CheckCircle, AlertTriangle, FileText, Layers, Shield, AlertCircle, Plus, QrCode, FileText as TemplateIcon } from "lucide-react";
+import { Building2, Users, Activity, CheckCircle, AlertTriangle, FileText, Layers, Shield, AlertCircle, Plus, QrCode, FileText as TemplateIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format, differenceInDays } from "date-fns";
@@ -17,8 +17,6 @@ interface DashboardStats {
   totalSites: number;
   totalSubsections: number;
   totalInspections: number;
-  completedInspections: number;
-  activeInspections: number;
   totalSnags: number;
   openSnags: number;
   closedSnags: number;
@@ -66,8 +64,6 @@ const Dashboard = () => {
     totalSites: 0,
     totalSubsections: 0,
     totalInspections: 0,
-    completedInspections: 0,
-    activeInspections: 0,
     totalSnags: 0,
     openSnags: 0,
     closedSnags: 0,
@@ -104,7 +100,7 @@ const Dashboard = () => {
         supabase.from("clients").select("id", { count: "exact", head: true }),
         supabase.from("sites").select("id", { count: "exact", head: true }),
         supabase.from("subsections").select("id, coc_status, is_coc_required", { count: "exact" }),
-        supabase.from("inspections").select("id, status", { count: "exact" }),
+        supabase.from("inspections").select("id", { count: "exact" }),
         supabase.from("snags").select("id, status", { count: "exact" }),
         supabase.from("activity_logs").select("*").order("created_at", { ascending: false }).limit(5),
         supabase.from("calendar_events").select("*").gte("start_date", today).order("start_date", { ascending: true }).limit(5),
@@ -136,14 +132,6 @@ const Dashboard = () => {
       const totalSubsections = supabaseSubsectionsRes.count || 0;
       const totalInspections = supabaseInspectionsRes.count || 0;
 
-      const completedInspections = supabaseInspectionsRes.data?.filter(
-        (i) => i.status === "Completed"
-      ).length || 0;
-
-      const activeInspections = supabaseInspectionsRes.data?.filter(
-        (i) => i.status === "In Progress" || i.status === "Scheduled"
-      ).length || 0;
-
       const totalSnags = supabaseSnagsRes.count || 0;
       const openSnags = supabaseSnagsRes.data?.filter(s => s.status === 'Open' || s.status === 'In Progress').length || 0;
       const closedSnags = supabaseSnagsRes.data?.filter(s => s.status === 'Closed' || s.status === 'Resolved').length || 0;
@@ -158,8 +146,6 @@ const Dashboard = () => {
         totalSites,
         totalSubsections,
         totalInspections,
-        completedInspections,
-        activeInspections,
         totalSnags,
         openSnags,
         closedSnags,
@@ -315,35 +301,10 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="glass-card border-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Inspections</CardTitle>
-            <div className="p-2 bg-orange-500/10 rounded-full">
-              <Activity className="h-4 w-4 text-orange-500" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.activeInspections}</div>
-            <p className="text-xs text-muted-foreground">In progress or scheduled</p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Secondary KPIs - Compliance & Snags */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Inspections Completed</CardTitle>
-            <ClipboardCheck className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.completedInspections}</div>
-            <p className="text-xs text-muted-foreground">
-              of {stats.totalInspections} total inspections
-            </p>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">COC Compliance</CardTitle>

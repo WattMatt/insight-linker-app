@@ -476,9 +476,6 @@ const ClientDetail = () => {
                                   </div>
                                 </div>
                                 <div className="flex gap-2">
-                                  <Badge variant={inspection.status === 'Completed' ? 'default' : 'secondary'}>
-                                    {inspection.status}
-                                  </Badge>
                                   {inspection.priority && (
                                     <Badge variant="outline">{inspection.priority}</Badge>
                                   )}

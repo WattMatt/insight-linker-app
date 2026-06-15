@@ -24,7 +24,6 @@ export interface SearchFilters {
   clientIds?: string[];
   siteTypes?: string[];
   cocStatuses?: string[];
-  inspectionStatuses?: string[];
   dateFrom?: Date;
   dateTo?: Date;
 }
@@ -172,10 +171,6 @@ export const useGlobalSearch = (
         .or(`title.ilike.%${query}%,description.ilike.%${query}%`)
         .limit(10);
 
-      if (filters.inspectionStatuses?.length) {
-        inspectionQuery = inspectionQuery.in("status", filters.inspectionStatuses);
-      }
-
       if (filters.dateFrom) {
         inspectionQuery = inspectionQuery.gte(
           "inspection_date",
@@ -266,6 +261,5 @@ export const useSearchFilterOptions = () => {
     clients: clients || [],
     siteTypes: siteTypes || [],
     cocStatuses: ["Valid", "Expired", "Missing", "Pending"],
-    inspectionStatuses: ["Pending", "In Progress", "Completed", "Failed"],
   };
 };

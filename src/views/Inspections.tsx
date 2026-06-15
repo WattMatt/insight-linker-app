@@ -57,7 +57,6 @@ const Inspections = () => {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    status: "Pending",
     inspection_date: "",
     site_id: "",
   });
@@ -174,7 +173,6 @@ const Inspections = () => {
       await createInspection({
         title: validated.title,
         description: validated.description,
-        status: validated.status,
         inspection_date: validated.inspection_date,
         site_id: validated.site_id,
         inspector_id: user?.id,
@@ -184,7 +182,6 @@ const Inspections = () => {
       setFormData({
         title: "",
         description: "",
-        status: "Pending",
         inspection_date: "",
         site_id: "",
       });
@@ -250,19 +247,6 @@ const Inspections = () => {
       toast.error("Failed to link inspection");
     } finally {
       setAssignSaving(false);
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Completed":
-        return "bg-green-500/10 text-green-500 border-green-500/20";
-      case "In Progress":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-      case "Pending":
-        return "bg-orange-500/10 text-orange-500 border-orange-500/20";
-      default:
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20";
     }
   };
 
@@ -357,23 +341,6 @@ const Inspections = () => {
                     onChange={(e) => setFormData({ ...formData, inspection_date: e.target.value })}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status *</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) => setFormData({ ...formData, status: value })}
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pending">Pending</SelectItem>
-                      <SelectItem value="In Progress">In Progress</SelectItem>
-                      <SelectItem value="Completed">Completed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
               <DialogFooter>
                 <Button type="submit">Create Inspection</Button>
@@ -424,7 +391,6 @@ const Inspections = () => {
                   <TableHead>Site</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -480,11 +446,6 @@ const Inspections = () => {
                       {inspection.inspection_date
                         ? format(new Date(inspection.inspection_date), "MMM dd, yyyy")
                         : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={getStatusColor(inspection.status)}>
-                        {inspection.status}
-                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button

@@ -80,7 +80,6 @@ export const GlobalSearch = () => {
     (filters.clientIds?.length || 0) +
     (filters.siteTypes?.length || 0) +
     (filters.cocStatuses?.length || 0) +
-    (filters.inspectionStatuses?.length || 0) +
     (filters.dateFrom ? 1 : 0) +
     (filters.dateTo ? 1 : 0);
 
@@ -217,35 +216,6 @@ export const GlobalSearch = () => {
                         />
                         <Label
                           htmlFor={`coc-${status}`}
-                          className="text-sm font-normal cursor-pointer"
-                        >
-                          {status}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-
-                  <CommandSeparator />
-
-                  {/* Inspection Status Filter */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Inspection Status</Label>
-                    {filterOptions.inspectionStatuses.map((status) => (
-                      <div key={status} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`inspection-${status}`}
-                          checked={filters.inspectionStatuses?.includes(status)}
-                          onCheckedChange={(checked) => {
-                            setFilters((prev) => ({
-                              ...prev,
-                              inspectionStatuses: checked
-                                ? [...(prev.inspectionStatuses || []), status]
-                                : prev.inspectionStatuses?.filter((s) => s !== status),
-                            }));
-                          }}
-                        />
-                        <Label
-                          htmlFor={`inspection-${status}`}
                           className="text-sm font-normal cursor-pointer"
                         >
                           {status}

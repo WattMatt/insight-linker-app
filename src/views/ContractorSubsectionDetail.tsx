@@ -204,9 +204,6 @@ const ContractorSubsectionDetail = () => {
                         </div>
                       )}
                     </div>
-                    <Badge className={getStatusColor(inspection.status)}>
-                      {inspection.status}
-                    </Badge>
                   </div>
                 ))}
               </div>

@@ -239,15 +239,6 @@ const PublicSubsectionReview = () => {
     }
   };
 
-  const getInspectionStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'completed': return 'bg-green-500';
-      case 'in_progress': return 'bg-amber-500';
-      case 'scheduled': return 'bg-blue-500';
-      default: return 'bg-muted';
-    }
-  };
-
   // Group documents by category
   const groupedDocuments = documents.reduce((acc, doc) => {
     const category = doc.category_name || 'Uncategorized';
@@ -267,7 +258,6 @@ const PublicSubsectionReview = () => {
     const status = normalizeSnagStatus(s.status);
     return status === 'rectified' || status === 'closed';
   }).length;
-  const completedInspections = inspections.filter(i => i.status?.toLowerCase() === 'completed').length;
   const totalFloorPlanPins = floorPlans.reduce((sum, fp) => sum + fp.pins_count, 0);
 
   // Build full inspection details from the already-loaded payload (no extra
@@ -541,14 +531,13 @@ const PublicSubsectionReview = () => {
                     <div className="space-y-3">
                       {inspections.slice(0, 3).map((insp) => (
                         <div key={insp.id} className="flex items-center gap-3 p-3 rounded-lg border">
-                          <div className={`w-2 h-2 rounded-full ${getInspectionStatusColor(insp.status)}`} />
+                          <ClipboardList className="h-4 w-4 text-muted-foreground" />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{insp.title}</p>
                             <p className="text-xs text-muted-foreground">
                               {insp.inspection_date ? new Date(insp.inspection_date).toLocaleDateString() : 'No date'}
                             </p>
                           </div>
-                          <Badge variant="outline" className="text-xs">{insp.status}</Badge>
                         </div>
                       ))}
                       {snags.slice(0, 2).map((snag) => (
@@ -655,7 +644,7 @@ const PublicSubsectionReview = () => {
               <CardHeader>
                 <CardTitle>Inspections</CardTitle>
                 <CardDescription>
-                  {inspections.length} inspection{inspections.length !== 1 ? 's' : ''} recorded • {completedInspections} completed
+                  {inspections.length} inspection{inspections.length !== 1 ? 's' : ''} recorded
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -667,7 +656,7 @@ const PublicSubsectionReview = () => {
                         className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
                       >
                         <div className="flex items-center gap-4">
-                          <div className={`w-3 h-3 rounded-full ${getInspectionStatusColor(insp.status)}`} />
+                          <ClipboardList className="h-5 w-5 text-muted-foreground" />
                           <div>
                             <p className="font-medium">{insp.title}</p>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
@@ -698,12 +687,6 @@ const PublicSubsectionReview = () => {
                               {insp.quality_rating}/5
                             </Badge>
                           )}
-                          <Badge 
-                            variant={insp.status?.toLowerCase() === 'completed' ? 'default' : 'secondary'}
-                            className={insp.status?.toLowerCase() === 'completed' ? 'bg-green-500 text-white' : ''}
-                          >
-                            {insp.status || 'Unknown'}
-                          </Badge>
                           <Button
                             variant="outline"
                             size="sm"
@@ -832,13 +815,6 @@ const PublicSubsectionReview = () => {
               <div className="px-6 py-4 space-y-6">
                 {/* Summary Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="p-3 rounded-lg bg-muted/50">
-                    <span className="text-xs text-muted-foreground block mb-1">Status</span>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2.5 h-2.5 rounded-full ${getInspectionStatusColor(inspectionDetails.status)}`} />
-                      <span className="font-semibold capitalize text-sm">{inspectionDetails.status}</span>
-                    </div>
-                  </div>
                   {inspectionDetails.inspection_date && (
                     <div className="p-3 rounded-lg bg-muted/50">
                       <span className="text-xs text-muted-foreground block mb-1">Date</span>

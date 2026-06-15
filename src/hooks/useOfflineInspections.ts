@@ -9,7 +9,7 @@ import { checkStorageAvailable } from '@/lib/storageQuota';
 export interface InspectionData {
   title: string;
   description?: string | null;
-  status: string;
+  status?: string;
   inspection_date?: string | null;
   site_id: string;
   inspector_id?: string;
@@ -50,6 +50,7 @@ export function useOfflineInspections() {
     // Offline mode
     await offlineDB.saveInspection({
       ...inspectionData,
+      status: inspectionData.status ?? '',
       description: inspectionData.description ?? null,
       inspection_date: inspectionData.inspection_date ?? null,
       synced: false,
