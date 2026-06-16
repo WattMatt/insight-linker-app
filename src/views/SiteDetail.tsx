@@ -6,7 +6,6 @@ import { FileText, QrCode, Layers, MapPin, Building, FileBarChart, LayoutGrid, C
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
-import { SiteCocHierarchy } from "@/components/coc/SiteCocHierarchy";
 import { DocumentPreviewDialog } from '@/components/DocumentPreviewDialog';
 import { downloadFile } from '@/lib/fileDownload';
 import { Site, Subsection, SiteStats } from "@/types/site";
@@ -684,7 +683,6 @@ const SiteDetail = () => {
 
         <TabsContent value="compliance" className="space-y-6">
           <ComplianceDashboard siteId={siteId!} subsections={subsections} inspections={inspections} />
-          <SiteCocHierarchy subsections={subsections.map((s: any) => ({ id: s.id, name: s.name, tenantName: s.tenant_name ?? s.tenantName ?? null }))} />
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-6">

@@ -22,3 +22,15 @@ const TERMINAL_SNAG_STATUSES = ["rectified", "closed"];
 export function isSnagOpen(status: string | null | undefined): boolean {
   return !TERMINAL_SNAG_STATUSES.includes((status || "").toLowerCase());
 }
+
+export type SnagBucket = "open" | "inProgress" | "closed";
+
+// Three-way bucket for snag-status displays (pie charts, summaries). Case-insensitive,
+// and treats `rectified`/`closed` as terminal — consistent with isSnagOpen above, so the
+// dashboards never undercount resolved snags due to casing (e.g. a lowercase "rectified").
+export function snagStatusBucket(status: string | null | undefined): SnagBucket {
+  const s = (status || "").toLowerCase();
+  if (TERMINAL_SNAG_STATUSES.includes(s)) return "closed";
+  if (s === "in progress" || s === "in_progress") return "inProgress";
+  return "open";
+}

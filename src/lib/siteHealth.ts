@@ -36,7 +36,10 @@ export function isMetered(s: SubsectionForHealth): boolean {
   return s.metering_status === 'Installed' || !!s.meter_serial_number;
 }
 export function isSnagResolved(snag: SnagForHealth): boolean {
-  return !!snag.status && RESOLVED_SNAG_STATUSES.includes(snag.status);
+  // Case-insensitive: prod data carries mixed casing (e.g. lowercase "rectified"),
+  // which an exact match would drop — undercounting resolved snags in the health score.
+  const s = (snag.status || "").toLowerCase();
+  return RESOLVED_SNAG_STATUSES.some(r => r.toLowerCase() === s);
 }
 // Existence-based model: inspection status markers were removed, so any non-deleted
 // inspection counts toward health/compliance simply by existing. (Kept this name so the

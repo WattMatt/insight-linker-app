@@ -22,6 +22,11 @@ describe('predicates', () => {
     expect(isSnagResolved({ subsection_id: 's', status: 'Closed' })).toBe(true);
     expect(isSnagResolved({ subsection_id: 's', status: 'Open' })).toBe(false);
   });
+  it('isSnagResolved: case-insensitive — lowercase rectified/closed still count', () => {
+    expect(isSnagResolved({ subsection_id: 's', status: 'rectified' })).toBe(true);
+    expect(isSnagResolved({ subsection_id: 's', status: 'closed' })).toBe(true);
+    expect(isSnagResolved({ subsection_id: 's', status: null })).toBe(false);
+  });
   it('isInspectionCompleted: existence-based — any inspection counts', () => {
     expect(isInspectionCompleted({ status: 'Completed' })).toBe(true);
     expect(isInspectionCompleted({ status: 'Pending' })).toBe(true);

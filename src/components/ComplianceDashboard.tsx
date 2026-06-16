@@ -16,6 +16,7 @@ import {
   FileCheck,
   Gauge,
   AlertTriangle,
+  ClipboardCheck,
   CheckCircle2,
   XCircle,
   Clock
@@ -24,6 +25,7 @@ import {
   calculateCocComplianceStats
 } from "@/lib/complianceCalculations";
 import { factorScores, siteHealthScore, isMetered } from "@/lib/siteHealth";
+import { snagStatusBucket } from "@/lib/subsectionStatus";
 
 // Inspection findings are stored as a nested map: jsonData[sectionKey][itemKey] = { status, notes, photos }
 // (written by InspectionDetail.handleItemChange, read by ComprehensiveInspectionReport).
@@ -88,6 +90,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [healthSnags, setHealthSnags] = useState<Array<{ subsection_id: string; status: string | null; risk_level: string | null }>>([]);
   const [healthInspections, setHealthInspections] = useState<Array<{ subsection_id: string | null; status: string | null }>>([]);
   const [loading, setLoading] = useState(true);
+  const [snagError, setSnagError] = useState(false);
 
   // Calculate overall Site Health score from the single source of truth (siteHealth.ts).
   // COC is tracked separately and is intentionally NOT folded into this score.
@@ -100,7 +103,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     const categories: CategoryScore[] = [
       { name: 'COC Compliance', score: 0, total: 0, compliant: 0, color: 'hsl(var(--chart-1))' },
       { name: 'Metering Status', score: 0, total: 0, compliant: 0, color: 'hsl(var(--chart-2))' },
-      { name: 'Snag Resolution', score: 0, total: 0, compliant: 0, color: 'hsl(var(--chart-3))' },
+      { name: 'Inspection Pass Rate', score: 0, total: 0, compliant: 0, color: 'hsl(var(--chart-3))' },
     ];
     
     // COC Compliance - using shared utility calculation
@@ -109,16 +112,15 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     categories[0].compliant = complianceStats.cocApprovedCount;
     categories[0].score = complianceStats.cocComplianceRate;
     
-    // Metering Status
-    const meteringRequired = subsections.filter(s => s.is_coc_required);
-    const meteringInstalled = meteringRequired.filter(isMetered);
-    categories[1].total = meteringRequired.length;
+    // Metering Status — denominator is ALL subsections, matching siteHealth.ts's metering factor.
+    const meteringInstalled = subsections.filter(isMetered);
+    categories[1].total = subsections.length;
     categories[1].compliant = meteringInstalled.length;
-    categories[1].score = meteringRequired.length > 0 
-      ? Math.round((meteringInstalled.length / meteringRequired.length) * 100) 
+    categories[1].score = subsections.length > 0
+      ? Math.round((meteringInstalled.length / subsections.length) * 100)
       : 100;
-    
-    // Snag Resolution - calculated based on inspections with all items passed
+
+    // Inspection Pass Rate - subsections whose latest inspection has all items passing
     let totalInspected = 0;
     let allPassed = 0;
     
@@ -150,21 +152,21 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
       let fetchedHealthInspections: Array<{ subsection_id: string | null; status: string | null }> = [];
 
       try {
+        setSnagError(false);
         // Fetch snags for this site's subsections
         const subsectionIds = subsections.map(s => s.id);
 
         if (subsectionIds.length > 0) {
-          const { data: snags } = await supabase
+          const { data: snags, error: snagsErr } = await supabase
             .from('snags')
             .select('id, subsection_id, status, risk_level, created_at, rectified_at')
             .in('subsection_id', subsectionIds);
+          if (snagsErr) throw snagsErr;
 
           if (snags) {
-            setSnagCounts({
-              open: snags.filter(s => s.status === 'Open' || s.status === 'open').length,
-              inProgress: snags.filter(s => s.status === 'In Progress' || s.status === 'in_progress').length,
-              closed: snags.filter(s => s.status === 'Closed' || s.status === 'closed' || s.status === 'Rectified').length,
-            });
+            const counts = { open: 0, inProgress: 0, closed: 0 };
+            for (const s of snags) counts[snagStatusBucket(s.status)]++;
+            setSnagCounts(counts);
             // Feed the health model (siteHealth.ts) with the fields it needs.
             fetchedHealthSnags = snags.map(s => ({ subsection_id: s.subsection_id, status: s.status, risk_level: s.risk_level }));
             setHealthSnags(fetchedHealthSnags);
@@ -206,6 +208,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
         }
       } catch (error) {
         console.error('Error fetching compliance data:', error);
+        setSnagError(true);
       } finally {
         setLoading(false);
       }
@@ -274,9 +277,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
               {getScoreBadge(overallScore)}
             </div>
             <Progress value={overallScore} className="mt-4 h-3" />
-            <p className="text-sm text-muted-foreground mt-2">
-              {subsections.filter(s => s.is_compliant === true).length} of {subsections.length} subsections compliant
-            </p>
           </CardContent>
         </Card>
 
@@ -287,7 +287,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
                 {idx === 0 && <FileCheck className="h-4 w-4 text-muted-foreground" />}
                 {idx === 1 && <Gauge className="h-4 w-4 text-muted-foreground" />}
-                {idx === 2 && <AlertTriangle className="h-4 w-4 text-muted-foreground" />}
+                {idx === 2 && <ClipboardCheck className="h-4 w-4 text-muted-foreground" />}
                 {cat.name}
               </CardTitle>
             </CardHeader>
@@ -315,7 +315,15 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
             <CardDescription>Current status of all snags and observations</CardDescription>
           </CardHeader>
           <CardContent>
-            {totalSnags > 0 ? (
+            {snagError ? (
+              <div className="h-[250px] flex items-center justify-center text-muted-foreground">
+                <div className="text-center">
+                  <AlertTriangle className="h-12 w-12 mx-auto mb-2 text-amber-500" />
+                  <p>Couldn't load snag data</p>
+                  <p className="text-xs">The counts below may be incomplete — try refreshing.</p>
+                </div>
+              </div>
+            ) : totalSnags > 0 ? (
               <div className="h-[250px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
