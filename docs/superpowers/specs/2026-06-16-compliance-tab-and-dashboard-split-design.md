@@ -39,3 +39,8 @@ Wrap `Dashboard.tsx` content in shadcn `Tabs` (same pattern as `SiteDetail`), de
 
 ## Sequence
 A (drop COC) → B (bug fixes) → C (split-view), each verified before the next.
+
+## Revision — 2026-06-16 (same day, after first ship `28e29ad`)
+User clarified the split-view belonged on the **per-site** dashboard, not the main app home page. Course-correction:
+- **Reverted** the `Dashboard.tsx` (home `/`) KPI/Outstanding split back to its original single-scroll layout (`git checkout 5b46e54 -- src/views/Dashboard.tsx`).
+- **Consolidated at the site level instead:** the SiteDetail **"Dashboard" (overview)** tab now hosts inner sub-tabs — **KPIs** (`ComplianceDashboard`, default landing) and **Checklist** (`SiteComplianceChecklist`). The top-level **Compliance** tab is removed; stale `?tab=compliance` URLs redirect to `overview`. `ComplianceDashboard` + its bug fixes (Thread B) are unchanged — just relocated.

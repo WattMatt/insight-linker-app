@@ -54,7 +54,11 @@ const SiteDetail = () => {
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [stats, setStats] = useState<SiteStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "overview");
+  // The 'compliance' tab was merged into the overview ('Dashboard') tab — redirect stale links.
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = searchParams.get('tab');
+    return !t || t === 'compliance' ? 'overview' : t;
+  });
   const [siteDocuments, setSiteDocuments] = useState<any[]>([]);
   const [subsectionDocuments, setSubsectionDocuments] = useState<any[]>([]);
   const [previewDocument, setPreviewDocument] = useState<{ url: string, name: string } | null>(null);
@@ -589,7 +593,7 @@ const SiteDetail = () => {
   // fetchSiteData/fetchSiteDocuments do not toggle the page `loading` flag, so this is silent.
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    if (value === 'overview' || value === 'compliance') {
+    if (value === 'overview') {
       fetchSiteData();
       fetchSiteDocuments();
     }
@@ -643,10 +647,6 @@ const SiteDetail = () => {
             <ShieldCheck className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Asset Verification</span>
           </TabsTrigger>
-          <TabsTrigger value="compliance" className="gap-2 shrink-0">
-            <Shield className="h-4 w-4 shrink-0" />
-            <span className="hidden lg:inline">Compliance</span>
-          </TabsTrigger>
           <TabsTrigger value="documents" className="gap-2 shrink-0">
             <FileText className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Documents</span>
@@ -670,7 +670,25 @@ const SiteDetail = () => {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 mt-6">
-          <SiteComplianceChecklist summary={deliverablesSummary} clientId={clientId!} siteId={siteId!} />
+          {/* Site Dashboard: KPI health metrics + the get-compliant checklist, as inner tabs */}
+          <Tabs defaultValue="kpi" className="space-y-6">
+            <TabsList>
+              <TabsTrigger value="kpi" className="gap-2">
+                <Shield className="h-4 w-4" />
+                KPIs
+              </TabsTrigger>
+              <TabsTrigger value="checklist" className="gap-2">
+                <ClipboardCheck className="h-4 w-4" />
+                Checklist
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="kpi" className="space-y-6 mt-0">
+              <ComplianceDashboard siteId={siteId!} subsections={subsections} inspections={inspections} />
+            </TabsContent>
+            <TabsContent value="checklist" className="space-y-6 mt-0">
+              <SiteComplianceChecklist summary={deliverablesSummary} clientId={clientId!} siteId={siteId!} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="schematic" className="space-y-6 mt-6">
@@ -679,10 +697,6 @@ const SiteDetail = () => {
 
         <TabsContent value="asset-verification" className="space-y-6 mt-6">
           <AssetVerification siteId={siteId!} siteName={site.name} />
-        </TabsContent>
-
-        <TabsContent value="compliance" className="space-y-6">
-          <ComplianceDashboard siteId={siteId!} subsections={subsections} inspections={inspections} />
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-6">
