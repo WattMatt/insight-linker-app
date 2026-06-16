@@ -4,6 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "@/lib/navigation";
+import { LineChart, Line, ResponsiveContainer } from "recharts";
 import {
   ShieldCheck, FileCheck, Gauge, ClipboardCheck, AlertTriangle, Bug,
   Workflow, ListChecks, Thermometer, FileText, CalendarClock,
@@ -66,12 +67,26 @@ const deliverableColor = (d: DeliverableResult) => {
   return "text-yellow-600 dark:text-yellow-400";
 };
 
+type Snap = { captured_at: string; health_score: number | null; outstanding_count: number | null; completion_pct: number | null };
+
+const Spark = ({ label, data, dataKey, color }: { label: string; data: Snap[]; dataKey: keyof Snap; color: string }) => (
+  <div>
+    <p className="text-xs text-muted-foreground mb-1">{label}</p>
+    <ResponsiveContainer width="100%" height={40}>
+      <LineChart data={data}>
+        <Line type="monotone" dataKey={dataKey as string} stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  </div>
+);
+
 export const ComplianceDashboard = ({
   siteId, clientId, subsections, inspections, deliverablesSummary,
 }: ComplianceDashboardProps) => {
   const [snagRows, setSnagRows] = useState<SnagRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [snagError, setSnagError] = useState(false);
+  const [snapshots, setSnapshots] = useState<Snap[]>([]);
   const navigate = useNavigate();
 
   // Snags carry timestamps/risk we need for aging + readiness; the rest of the dashboard
@@ -88,6 +103,16 @@ export const ComplianceDashboard = ({
           .in("subsection_id", ids);
         if (error) throw error;
         setSnagRows(data ?? []);
+
+        // Trend snapshots — cast: generated DB types don't include the new table until regen;
+        // table may also not exist yet in an env, so this fails soft to the placeholder.
+        const { data: snaps } = await (supabase as any)
+          .from("site_health_snapshots")
+          .select("captured_at, health_score, outstanding_count, completion_pct")
+          .eq("site_id", siteId)
+          .order("captured_at", { ascending: true })
+          .limit(60);
+        if (snaps) setSnapshots(snaps as Snap[]);
       } catch (e) {
         console.error("KPI snag fetch failed:", e);
         setSnagError(true);
@@ -315,9 +340,17 @@ export const ComplianceDashboard = ({
           <CardDescription>Weekly health, outstanding &amp; completion</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Collecting data — weekly trends appear here once snapshots accrue.
-          </p>
+          {snapshots.length < 2 ? (
+            <p className="text-sm text-muted-foreground">
+              Collecting data — weekly trends appear here once snapshots accrue.
+            </p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Spark label="Health score" data={snapshots} dataKey="health_score" color="hsl(var(--chart-2))" />
+              <Spark label="Outstanding" data={snapshots} dataKey="outstanding_count" color="hsl(var(--destructive))" />
+              <Spark label="Completion %" data={snapshots} dataKey="completion_pct" color="hsl(var(--chart-1))" />
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
