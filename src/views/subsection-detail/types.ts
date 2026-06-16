@@ -13,6 +13,7 @@ export interface SubsectionData {
   ctRatio?: string;
   isCocRequired: boolean;
   isThermalRequired: boolean;
+  isInspectionRequired: boolean;
   isCompliant?: boolean | null;
   inspections?: Record<string, any>;
   files?: Record<string, any>;

@@ -283,6 +283,7 @@ export function useSubsectionDetail() {
         ctRatio: fullSubsection.ct_ratio,
         isCocRequired: fullSubsection.is_coc_required ?? true,
         isThermalRequired: (fullSubsection as any).is_thermal_required ?? false,
+        isInspectionRequired: (fullSubsection as any).is_inspection_required ?? true,
         isCompliant: fullSubsection.is_compliant,
         inspections: inspectionsObj
       });
