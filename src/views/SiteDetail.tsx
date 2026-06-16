@@ -683,7 +683,7 @@ const SiteDetail = () => {
               </TabsTrigger>
             </TabsList>
             <TabsContent value="kpi" className="space-y-6 mt-0">
-              <ComplianceDashboard siteId={siteId!} subsections={subsections} inspections={inspections} />
+              <ComplianceDashboard siteId={siteId!} clientId={clientId!} subsections={subsections} inspections={inspections} deliverablesSummary={deliverablesSummary} />
             </TabsContent>
             <TabsContent value="checklist" className="space-y-6 mt-0">
               <SiteComplianceChecklist summary={deliverablesSummary} clientId={clientId!} siteId={siteId!} />
