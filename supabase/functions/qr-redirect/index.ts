@@ -37,7 +37,7 @@ serve(async (req) => {
       .select('qr_base_url')
       .limit(1)
       .maybeSingle();
-    const appOrigin = (settingsRow?.qr_base_url?.trim() || 'https://watsonmattheus.com').replace(/\/$/, '');
+    const appOrigin = (settingsRow?.qr_base_url?.trim() || 'https://insight-linker-app.vercel.app').replace(/\/$/, '');
     console.log('App origin:', appOrigin);
 
     // Handle malformed URLs with double slashes (from old QR codes)

@@ -7,10 +7,11 @@
 // staging / localhost deploy would otherwise bake an ephemeral, soon-dead
 // origin into the QR code.
 //
-// DEFAULT_QR_ORIGIN matches the live qr-redirect function and the PDF/report
-// defaults, so legacy-redirect targets and freshly-generated QR targets agree.
-// It is only used when settings.qr_base_url is unset (production sets it).
-export const DEFAULT_QR_ORIGIN = "https://watsonmattheus.com";
+// DEFAULT_QR_ORIGIN is the canonical Next.js production deployment on Vercel.
+// IMPORTANT: it must NOT be the Lovable host (wm-compliance.lovable.app) — that's
+// a separate, divergent Vite build that does not receive our deploys. It is only
+// used when settings.qr_base_url is unset (production sets it to this Vercel URL).
+export const DEFAULT_QR_ORIGIN = "https://insight-linker-app.vercel.app";
 
 /** Normalize a configured base URL (or the default) — strips a trailing slash. */
 export function resolveQrBaseUrl(configured?: string | null): string {
