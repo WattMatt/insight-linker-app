@@ -10,6 +10,7 @@ export interface SubsectionForHealth {
   id: string;
   metering_status?: string | null;
   meter_serial_number?: string | null;
+  is_inspection_required?: boolean | null;
 }
 export interface SnagForHealth {
   subsection_id: string;
@@ -62,7 +63,10 @@ export function factorScores(
   const inspectedIds = new Set(
     inspections.filter(isInspectionCompleted).map(i => i.subsection_id).filter(Boolean) as string[],
   );
-  const inspections_ = total === 0 ? 100 : Math.round((subsections.filter(s => inspectedIds.has(s.id)).length / total) * 100);
+  // Inspection-not-applicable subsections are waived: neither inspected nor missing.
+  const inspectionReq = subsections.filter(s => s.is_inspection_required !== false);
+  const inspections_ = inspectionReq.length === 0 ? 100
+    : Math.round((inspectionReq.filter(s => inspectedIds.has(s.id)).length / inspectionReq.length) * 100);
   return { metering, snags: snagScore, inspections: inspections_ };
 }
 
@@ -85,7 +89,8 @@ export function readiness(
   for (const s of subsections) {
     const metered = isMetered(s);
     const blocked = blockedIds.has(s.id);
-    const inspected = inspectedIds.has(s.id);
+    // Waived subsections (is_inspection_required === false) are treated as inspection-satisfied.
+    const inspected = s.is_inspection_required === false || inspectedIds.has(s.id);
     if (!metered) failMeter++;
     if (blocked) failSnag++;
     if (!inspected) failInsp++;

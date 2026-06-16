@@ -106,3 +106,31 @@ describe('getHealthBand', () => {
     expect(getHealthBand(49)).toBe('danger');
   });
 });
+
+describe('inspection-not-applicable waiver', () => {
+  it('factorScores: a waived subsection is excluded from the inspection denominator', () => {
+    const subs = [
+      { id: 'a' },                                 // required, inspected
+      { id: 'b' },                                 // required, NOT inspected
+      { id: 'c', is_inspection_required: false },  // waived
+    ];
+    const insps = [{ subsection_id: 'a' }];
+    // Required = a,b. Inspected = a. Factor = 1/2 = 50 (c neither counts nor drags).
+    expect(factorScores(subs, [], insps).inspections).toBe(50);
+  });
+
+  it('factorScores: all-waived site scores 100 on inspections (vacuous)', () => {
+    const subs = [{ id: 'a', is_inspection_required: false }];
+    expect(factorScores(subs, [], []).inspections).toBe(100);
+  });
+
+  it('readiness: a waived subsection is not counted as inspection-failing', () => {
+    const subs = [
+      { id: 'a', metering_status: 'Installed', is_inspection_required: false },
+      { id: 'b', metering_status: 'Installed' }, // required, not inspected -> fails inspection
+    ];
+    const r = readiness(subs, [], []);
+    expect(r.failing.inspection).toBe(1); // only b
+    expect(r.ready).toBe(1);              // a is ready (metered, no snag, inspection waived)
+  });
+});
