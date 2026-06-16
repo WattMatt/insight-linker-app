@@ -181,8 +181,10 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
       isSnagOpen(s.status)
     );
     
-    // Generate QR URL if not stored - use public subsection URL
-    const qrUrl = sub.qr_code_url || `${qrBaseUrl}/public/subsections/${sub.id}`;
+    // Always encode the live public-subsection URL (NOT the stored qr_code_url,
+    // which is a PNG image URL — encoding that made the report QR open the image
+    // file instead of the landing page, and pinned it to the old domain).
+    const qrUrl = publicSubsectionUrl(sub.id, qrBaseUrl);
     
     // Find matching asset by premises_id or trade_as containing the subsection name
     // premises_id may have format like "YA - KIOSK" while subsection name is just "KIOSK"
