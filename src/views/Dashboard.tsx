@@ -10,7 +10,7 @@ import { RecentAssignmentsWidget } from "@/components/RecentAssignmentsWidget";
 import { Progress } from "@/components/ui/progress";
 import { calculateCocComplianceStats } from "@/lib/complianceCalculations";
 import { SitesNeedingAttention } from "@/components/dashboard/SitesNeedingAttention";
-import { summarizeSitesForTriage, type SiteDeliverablesInput, type SiteTriageRow } from "@/lib/siteDeliverables";
+import { summarizeSitesForTriage, categoryMatches, THERMAL_CATEGORY_PATTERNS, type SiteDeliverablesInput, type SiteTriageRow } from "@/lib/siteDeliverables";
 
 interface DashboardStats {
   totalClients: number;
@@ -165,18 +165,21 @@ const Dashboard = () => {
 
   const fetchTriageData = async () => {
     try {
-      const [sitesRes, subsRes, snagsRes, inspRes, schematicsRes, assetsRes, docsRes] = await Promise.all([
+      const [sitesRes, subsRes, snagsRes, inspRes, schematicsRes, assetsRes, docsRes, subDocsRes] = await Promise.all([
         supabase.from("sites").select("id, name, client_id"),
-        supabase.from("subsections").select("id, site_id, name, coc_status, is_coc_required, metering_status, meter_serial_number"),
+        supabase.from("subsections").select("id, site_id, name, coc_status, is_coc_required, is_thermal_required, metering_status, meter_serial_number"),
         supabase.from("snags").select("id, subsection_id, status, risk_level, title"),
         supabase.from("inspections").select("subsection_id, status, site_id"),
         supabase.from("site_schematics").select("site_id"),
         supabase.from("site_assets").select("site_id"),
         supabase.from("site_documents").select("site_id, category"),
+        supabase.from("subsection_documents").select("subsection_id, document_categories(name)"),
       ]);
 
       const sites = sitesRes.data || [];
-      const subs = subsRes.data || [];
+      // Cast: generated Supabase types predate the is_thermal_required column (added by migration);
+      // without this the select string types as a SelectQueryError. Runtime query is correct.
+      const subs = (subsRes.data || []) as any[];
       const snags = snagsRes.data || [];
       const insps = inspRes.data || [];
 
@@ -199,6 +202,10 @@ const Dashboard = () => {
       const snagsBySite = group(snags, (n: any) => subToSite.get(n.subsection_id));
       const inspBySite = group(insps, (i: any) => i.site_id);
       const docsBySite = group(docsRes.data || [], (d: any) => d.site_id);
+      // Thermal lives per-subsection (subsection_documents); collect every subsection that has one.
+      const thermalDocSubsectionIds = (subDocsRes.data || [])
+        .filter((d: any) => categoryMatches([d.document_categories?.name], THERMAL_CATEGORY_PATTERNS))
+        .map((d: any) => d.subsection_id);
 
       const inputs: SiteDeliverablesInput[] = sites.map((site: any) => ({
         siteId: site.id,
@@ -209,6 +216,7 @@ const Dashboard = () => {
         hasSchematic: schematicSites.has(site.id),
         assetCount: (assetSites.has(site.id) ? 1 : 0),
         documentCategories: (docsBySite.get(site.id) || []).map((d: any) => d.category),
+        thermalDocSubsectionIds,
       }));
 
       setSiteClientMap(Object.fromEntries(sites.map((s: any) => [s.id, s.client_id])));

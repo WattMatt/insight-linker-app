@@ -17,7 +17,7 @@ export function buildActionHref(item: OutstandingItem, ctx: ActionHrefContext): 
   switch (item.category) {
     case 'schematic':       return `${base}?tab=schematic`;
     case 'asset_register':  return `${base}?tab=asset-verification`;
-    case 'thermal':         return `${base}?tab=documents&upload=thermal`;
+    case 'thermal':         return sub ? `${sub}?tab=documents` : `${base}?tab=documents&upload=thermal`;
     case 'summary_report':  return `${base}?tab=reports&generate=1`;
     case 'coc':             return sub ? `${sub}?tab=coc-metering` : `${base}?tab=subsections`;
     case 'metering':        return sub ? `${sub}?tab=coc-metering&focus=meter` : `${base}?tab=subsections`;

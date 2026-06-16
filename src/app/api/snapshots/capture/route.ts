@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { computeSiteDeliverables, type SiteDeliverablesInput } from "@/lib/siteDeliverables";
+import { computeSiteDeliverables, categoryMatches, THERMAL_CATEGORY_PATTERNS, type SiteDeliverablesInput } from "@/lib/siteDeliverables";
 import { factorScores, siteHealthScore, readiness } from "@/lib/siteHealth";
 import { isSnagOpen } from "@/lib/subsectionStatus";
 import { toSnapshotRow } from "@/lib/snapshotMetrics";
@@ -47,14 +47,15 @@ export async function GET(req: Request) {
   const capturedAt = new Date().toISOString().slice(0, 10);
 
   try {
-    const [sites, subs, snags, insps, schematics, assets, docs] = await Promise.all([
+    const [sites, subs, snags, insps, schematics, assets, docs, subDocs] = await Promise.all([
       fetchAll(supabase, "sites", "id, name, client_id"),
-      fetchAll(supabase, "subsections", "id, site_id, name, coc_status, is_coc_required, metering_status, meter_serial_number"),
+      fetchAll(supabase, "subsections", "id, site_id, name, coc_status, is_coc_required, is_thermal_required, metering_status, meter_serial_number"),
       fetchAll(supabase, "snags", "id, subsection_id, status, risk_level, title"),
       fetchAll(supabase, "inspections", "subsection_id, status, site_id"),
       fetchAll(supabase, "site_schematics", "site_id"),
       fetchAll(supabase, "site_assets", "site_id"),
       fetchAll(supabase, "site_documents", "site_id, category"),
+      fetchAll(supabase, "subsection_documents", "subsection_id, document_categories(name)"),
     ]);
 
     const subToSite = new Map<string, string>(subs.map((s) => [s.id, s.site_id]));
@@ -64,6 +65,9 @@ export async function GET(req: Request) {
     const snagsBySite = groupBy(snags, (n) => subToSite.get(n.subsection_id));
     const inspBySite = groupBy(insps, (i) => i.site_id);
     const docsBySite = groupBy(docs, (d) => d.site_id);
+    const thermalDocSubsectionIds = subDocs
+      .filter((d: any) => categoryMatches([d.document_categories?.name], THERMAL_CATEGORY_PATTERNS))
+      .map((d: any) => d.subsection_id);
 
     const rows = sites.map((site) => {
       const input: SiteDeliverablesInput = {
@@ -75,6 +79,7 @@ export async function GET(req: Request) {
         hasSchematic: schematicSites.has(site.id),
         assetCount: assetSites.has(site.id) ? 1 : 0,
         documentCategories: (docsBySite.get(site.id) || []).map((d: any) => d.category),
+        thermalDocSubsectionIds,
       };
       const summary = computeSiteDeliverables(input);
       const rd = readiness(input.subsections, input.snags, input.inspections);

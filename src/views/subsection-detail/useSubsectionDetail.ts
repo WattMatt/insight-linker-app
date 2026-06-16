@@ -282,6 +282,7 @@ export function useSubsectionDetail() {
         meteringStatus: fullSubsection.metering_status,
         ctRatio: fullSubsection.ct_ratio,
         isCocRequired: fullSubsection.is_coc_required ?? true,
+        isThermalRequired: (fullSubsection as any).is_thermal_required ?? false,
         isCompliant: fullSubsection.is_compliant,
         inspections: inspectionsObj
       });

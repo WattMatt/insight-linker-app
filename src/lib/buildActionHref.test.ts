@@ -20,6 +20,7 @@ describe('buildActionHref', () => {
     expect(buildActionHref(item({ category: 'metering', ...sub }), ctx)).toBe('/clients/c1/sites/s1/subsections/sub9?tab=coc-metering&focus=meter');
     expect(buildActionHref(item({ category: 'inspections', ...sub }), ctx)).toBe('/clients/c1/sites/s1/subsections/sub9?tab=inspections&create=1');
     expect(buildActionHref(item({ id: 'snag5', category: 'snags', ...sub }), ctx)).toBe('/clients/c1/sites/s1/subsections/sub9?tab=overview&snag=snag5');
+    expect(buildActionHref(item({ category: 'thermal', ...sub }), ctx)).toBe('/clients/c1/sites/s1/subsections/sub9?tab=documents');
   });
   it('subsection deliverable without subsectionId falls back to the subsections tab', () => {
     for (const category of ['coc', 'metering', 'inspections', 'snags'] as const) {

@@ -22,6 +22,7 @@ export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'none';
 export interface SubsectionForDeliverables extends SubsectionForHealth, SubsectionForCompliance {
   id: string;
   name?: string | null;
+  is_thermal_required?: boolean | null;
 }
 export interface SnagForDeliverables extends SnagForHealth {
   id: string;
@@ -33,6 +34,9 @@ export interface OutstandingItem {
   id: string;
   category: DeliverableKey;
   label: string;
+  // Per-item action verb override (e.g. COC: "Set COC" vs "Verify COC" vs "Review COC").
+  // Falls back to the category-level verb in the UI when absent.
+  actionLabel?: string;
   severity: Severity;
   blocking: boolean;
   // Populated for subsection-scoped items (snags/inspections/metering/COC). Phase 1 consumers
@@ -61,6 +65,10 @@ export interface SiteDeliverablesInput {
   hasSchematic: boolean;
   assetCount: number;
   documentCategories: (string | null | undefined)[];
+  // Subsection IDs that have a thermal/infrared document (subsection_documents). Thermal is a
+  // per-subsection deliverable — a site never holds a thermal report itself. Optional so older
+  // call sites keep compiling; treated as empty when absent.
+  thermalDocSubsectionIds?: string[];
 }
 
 export interface SiteDeliverablesSummary {
@@ -104,7 +112,7 @@ export const DELIVERABLE_ORDER: DeliverableKey[] = [
 // NOTE: "IR" alone is intentionally NOT matched — in SANS 10142 electrical-compliance
 // "IR" means Insulation Resistance, not infrared, so a bare /\bir\b/ would false-positive.
 // Phase 2 replaces this text-matching with explicit deliverable status.
-export const THERMAL_CATEGORY_PATTERNS: readonly RegExp[] = [/thermal/i, /infrared/i, /thermograph/i];
+export const THERMAL_CATEGORY_PATTERNS: readonly RegExp[] = [/thermal/i, /thermo/i, /infrared/i, /thermograph/i];
 export const SUMMARY_CATEGORY_PATTERNS: readonly RegExp[] = [/site summary/i, /summary report/i];
 
 export function categoryMatches(
@@ -117,9 +125,19 @@ export function categoryMatches(
 const BINARY_ACTION_LABELS: Partial<Record<DeliverableKey, string>> = {
   schematic: 'Upload schematic',
   asset_register: 'Load asset register',
-  thermal: 'Upload infrared/thermal docs',
   summary_report: 'Generate site summary report',
 };
+
+/**
+ * COC outstanding copy keyed off the rolled-up verdict. A failed or unverified COC is NOT the
+ * same as a missing one — "Set COC" is wrong when the certificate is already there.
+ */
+function cocItemCopy(coc_status?: string | null): { label: string; action: string } {
+  const st = (coc_status || '').toLowerCase();
+  if (['fail', 'failed', 'rejected'].includes(st)) return { label: 'COC failed', action: 'Review COC' };
+  if (st === 'pending') return { label: 'COC awaiting verdict', action: 'Verify COC' };
+  return { label: 'COC missing', action: 'Set COC' };
+}
 
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3, none: 4 };
 
@@ -161,12 +179,16 @@ function buildCoc(input: SiteDeliverablesInput, subName: Map<string, string>): D
   const required = input.subsections.filter(s => s.is_coc_required === true);
   const compliant = required.filter(isSubsectionCocCompliant).length;
   const outstanding = required.filter(s => !isSubsectionCocCompliant(s));
-  const items: OutstandingItem[] = outstanding.map(s => ({
-    id: `coc-${s.id}`, category: 'coc',
-    label: `COC outstanding: ${subName.get(s.id) ?? 'Subsection'}`,
-    severity: 'high', blocking: true,
-    subsectionId: s.id, subsectionName: subName.get(s.id),
-  }));
+  const items: OutstandingItem[] = outstanding.map(s => {
+    const copy = cocItemCopy(s.coc_status);
+    const name = subName.get(s.id) ?? 'Subsection';
+    return {
+      id: `coc-${s.id}`, category: 'coc',
+      label: `${copy.label}: ${name}`, actionLabel: copy.action,
+      severity: 'high', blocking: true,
+      subsectionId: s.id, subsectionName: name,
+    };
+  });
   const total = required.length;
   return {
     key: 'coc', label: DELIVERABLE_LABELS.coc, kind: 'count',
@@ -219,6 +241,29 @@ function buildMetering(input: SiteDeliverablesInput, subName: Map<string, string
   };
 }
 
+function buildThermal(input: SiteDeliverablesInput, subName: Map<string, string>): DeliverableResult {
+  // Per-subsection, required only where flagged (is_thermal_required). A site itself never has a
+  // thermal report; reports live in subsection_documents under a thermal/infrared category.
+  const required = input.subsections.filter(s => s.is_thermal_required === true);
+  const have = new Set(input.thermalDocSubsectionIds ?? []);
+  const done = required.filter(s => have.has(s.id)).length;
+  const items: OutstandingItem[] = required
+    .filter(s => !have.has(s.id))
+    .map(s => ({
+      id: `thermal-${s.id}`, category: 'thermal',
+      label: `Thermal/IR report outstanding: ${subName.get(s.id) ?? 'Subsection'}`,
+      severity: 'none', blocking: false,
+      subsectionId: s.id, subsectionName: subName.get(s.id),
+    }));
+  const total = required.length;
+  return {
+    key: 'thermal', label: DELIVERABLE_LABELS.thermal, kind: 'count',
+    done, total,
+    status: total === 0 ? 'not_required' : done === total ? 'complete' : 'outstanding',
+    blocking: false, outstandingItems: items,
+  };
+}
+
 function buildBinary(key: DeliverableKey, done: boolean): DeliverableResult {
   return {
     key, label: DELIVERABLE_LABELS[key], kind: 'binary',
@@ -249,7 +294,7 @@ export function computeSiteDeliverables(input: SiteDeliverablesInput): SiteDeliv
     buildMetering(input, subName),
     buildBinary('schematic', input.hasSchematic),
     buildBinary('asset_register', input.assetCount > 0),
-    buildBinary('thermal', categoryMatches(input.documentCategories, THERMAL_CATEGORY_PATTERNS)),
+    buildThermal(input, subName),
     buildBinary('summary_report', categoryMatches(input.documentCategories, SUMMARY_CATEGORY_PATTERNS)),
   ];
   const applicable = deliverables.filter(d => d.status !== 'not_required');

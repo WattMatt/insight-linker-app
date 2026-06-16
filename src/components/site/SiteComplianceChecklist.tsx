@@ -97,7 +97,7 @@ export function SiteComplianceChecklist({ summary, clientId, siteId }: Props) {
                         <span className="truncate">{item.label}</span>
                       </span>
                       <span className="flex items-center gap-1 shrink-0 text-xs font-semibold text-primary">
-                        {ACTION_VERB[item.category]}
+                        {item.actionLabel ?? ACTION_VERB[item.category]}
                         <ChevronRight className="h-4 w-4" aria-hidden="true" />
                       </span>
                     </button>

@@ -140,6 +140,38 @@ export function OverviewTab({
             </div>
           </div>
           <div>
+            <p className="text-sm text-muted-foreground mb-1">Thermal / IR Required</p>
+            <div className="flex items-center gap-2">
+              <Badge variant={subsection.isThermalRequired ? "default" : "secondary"}>
+                {subsection.isThermalRequired ? "Yes" : "No"}
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={async () => {
+                  const newValue = !subsection.isThermalRequired;
+                  try {
+                    const { error } = await supabase
+                      .from('subsections')
+                      .update({ is_thermal_required: newValue } as any)
+                      .eq('id', subsectionId);
+
+                    if (error) throw error;
+
+                    setSubsection({ ...subsection, isThermalRequired: newValue });
+                    toast.success(`Thermal/IR requirement ${newValue ? 'enabled' : 'disabled'}`);
+                  } catch (error) {
+                    if (process.env.NODE_ENV === 'development') console.error('Error toggling thermal requirement:', error);
+                    toast.error('Failed to update thermal requirement');
+                  }
+                }}
+              >
+                {subsection.isThermalRequired ? "Disable" : "Enable"}
+              </Button>
+            </div>
+          </div>
+          <div>
             <p className="text-sm text-muted-foreground mb-1">Overall Status</p>
             <TooltipProvider>
               <Tooltip>

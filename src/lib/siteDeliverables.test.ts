@@ -106,15 +106,14 @@ describe('computeSiteDeliverables — counts', () => {
 });
 
 describe('computeSiteDeliverables — binary docs', () => {
-  it('schematic / asset / thermal / summary derive from presence', () => {
+  it('schematic / asset / summary derive from presence', () => {
     const s = computeSiteDeliverables(baseInput({
       hasSchematic: true,
       assetCount: 3,
-      documentCategories: ['05 Thermal Reports', 'Site Summary Reports'],
+      documentCategories: ['Site Summary Reports'],
     }));
     expect(get(s, 'schematic').status).toBe('complete');
     expect(get(s, 'asset_register').status).toBe('complete');
-    expect(get(s, 'thermal').status).toBe('complete');
     expect(get(s, 'summary_report').status).toBe('complete');
 
     const empty = computeSiteDeliverables(baseInput());
@@ -123,16 +122,72 @@ describe('computeSiteDeliverables — binary docs', () => {
   });
 });
 
+describe('computeSiteDeliverables — thermal (per-subsection, required-where-applicable)', () => {
+  it('not_required when no subsection is flagged thermal-required (a site never holds one)', () => {
+    const s = computeSiteDeliverables(baseInput({
+      subsections: [{ id: 'a', name: 'A' }],
+      // Even with a site-level "thermal" category present, thermal is NOT site-derived anymore.
+      documentCategories: ['05 Thermal Reports'],
+    }));
+    expect(get(s, 'thermal').status).toBe('not_required');
+  });
+
+  it('counts only thermal-required subsections; outstanding = required-but-missing', () => {
+    const s = computeSiteDeliverables(baseInput({
+      subsections: [
+        { id: 'a', name: 'A', is_thermal_required: true },
+        { id: 'b', name: 'B', is_thermal_required: true },
+        { id: 'c', name: 'C', is_thermal_required: false },
+      ],
+      thermalDocSubsectionIds: ['a'],
+    }));
+    const d = get(s, 'thermal');
+    expect(d.kind).toBe('count');
+    expect(d.done).toBe(1);
+    expect(d.total).toBe(2);
+    expect(d.status).toBe('outstanding');
+    expect(d.outstandingItems).toHaveLength(1);
+    expect(d.outstandingItems[0].subsectionId).toBe('b');
+  });
+
+  it('complete when every required subsection has a thermal doc', () => {
+    const s = computeSiteDeliverables(baseInput({
+      subsections: [{ id: 'a', name: 'A', is_thermal_required: true }],
+      thermalDocSubsectionIds: ['a'],
+    }));
+    expect(get(s, 'thermal').status).toBe('complete');
+  });
+});
+
+describe('computeSiteDeliverables — COC item copy reflects the verdict', () => {
+  it('distinguishes missing / pending / failed instead of a blanket "Set COC"', () => {
+    const s = computeSiteDeliverables(baseInput({
+      subsections: [
+        { id: 'm', name: 'M', is_coc_required: true, coc_status: 'Missing' },
+        { id: 'p', name: 'P', is_coc_required: true, coc_status: 'Pending' },
+        { id: 'f', name: 'F', is_coc_required: true, coc_status: 'Fail' },
+      ],
+    }));
+    const byId = Object.fromEntries(get(s, 'coc').outstandingItems.map(i => [i.subsectionId, i]));
+    expect(byId['m'].label).toContain('COC missing');
+    expect(byId['m'].actionLabel).toBe('Set COC');
+    expect(byId['p'].label).toContain('COC awaiting verdict');
+    expect(byId['p'].actionLabel).toBe('Verify COC');
+    expect(byId['f'].label).toContain('COC failed');
+    expect(byId['f'].actionLabel).toBe('Review COC');
+  });
+});
+
 describe('computeSiteDeliverables — aggregation', () => {
-  it('empty site: all binary outstanding, count categories complete/not_required, band danger', () => {
+  it('empty site: binary docs outstanding, count categories complete/not_required, band danger', () => {
     const s = computeSiteDeliverables(baseInput());
-    // snags(0/0 complete), inspections(0/0 complete), metering(not_required), coc(not_required),
-    // 4 binary outstanding -> complete 2 of applicable 6 => 33%
+    // snags(0/0 complete), inspections(0/0 complete), coc/metering/thermal(not_required),
+    // schematic+asset+summary outstanding -> complete 2 of applicable 5 => 40%
     expect(s.completeCount).toBe(2);
-    expect(s.applicableCount).toBe(6);
-    expect(s.completionPct).toBe(33);
+    expect(s.applicableCount).toBe(5);
+    expect(s.completionPct).toBe(40);
     expect(s.band).toBe('danger');
-    expect(s.outstandingCount).toBe(4);
+    expect(s.outstandingCount).toBe(3);
     expect(s.blockingCount).toBe(0);
   });
 

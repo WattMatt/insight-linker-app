@@ -611,6 +611,9 @@ const SiteDetail = () => {
     hasSchematic,
     assetCount,
     documentCategories: siteDocuments.map((d: any) => d.category),
+    thermalDocSubsectionIds: subsectionDocuments
+      .filter((d: any) => categoryMatches([d.category_name], THERMAL_CATEGORY_PATTERNS))
+      .map((d: any) => d.subsection_id),
   });
 
   return (
