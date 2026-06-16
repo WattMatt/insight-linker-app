@@ -10,7 +10,7 @@ import {
   isMetered, isSnagResolved, isInspectionCompleted, getHealthBand, BLOCKING_RISK_LEVELS,
   type SubsectionForHealth, type SnagForHealth, type InspectionForHealth,
 } from './siteHealth';
-import { isSubsectionCocCompliant, type SubsectionForCompliance } from './complianceCalculations';
+import { hasValidCocStatus, hasFailedCocStatus, type SubsectionForCompliance } from './complianceCalculations';
 
 export type DeliverableKey =
   | 'snags' | 'inspections' | 'metering' | 'coc'
@@ -175,10 +175,18 @@ function buildSnags(input: SiteDeliverablesInput): DeliverableResult {
   };
 }
 
+// A COC verdict is "recorded" once it is a Pass OR a Fail (incl. legacy vocab). Per Arno's
+// decision (2026-06-16): assessing the COC is the checklist task — a recorded Fail clears the
+// item. Actual compliance (Pass-only) still gates is_compliant + site health elsewhere, so a
+// failed COC is not hidden, it just stops reading as an open to-do here.
+function cocVerdictRecorded(s: SubsectionForCompliance): boolean {
+  return hasValidCocStatus(s.coc_status) || hasFailedCocStatus(s.coc_status);
+}
+
 function buildCoc(input: SiteDeliverablesInput, subName: Map<string, string>): DeliverableResult {
   const required = input.subsections.filter(s => s.is_coc_required === true);
-  const compliant = required.filter(isSubsectionCocCompliant).length;
-  const outstanding = required.filter(s => !isSubsectionCocCompliant(s));
+  const done = required.filter(cocVerdictRecorded).length;
+  const outstanding = required.filter(s => !cocVerdictRecorded(s)); // Missing / Pending only
   const items: OutstandingItem[] = outstanding.map(s => {
     const copy = cocItemCopy(s.coc_status);
     const name = subName.get(s.id) ?? 'Subsection';
@@ -192,8 +200,8 @@ function buildCoc(input: SiteDeliverablesInput, subName: Map<string, string>): D
   const total = required.length;
   return {
     key: 'coc', label: DELIVERABLE_LABELS.coc, kind: 'count',
-    done: compliant, total,
-    status: total === 0 ? 'not_required' : compliant === total ? 'complete' : 'outstanding',
+    done, total,
+    status: total === 0 ? 'not_required' : done === total ? 'complete' : 'outstanding',
     blocking: items.length > 0,
     outstandingItems: items,
   };

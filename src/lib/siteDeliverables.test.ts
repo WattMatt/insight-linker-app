@@ -58,19 +58,26 @@ describe('computeSiteDeliverables — counts', () => {
     expect(d.outstandingItems).toHaveLength(2);
   });
 
-  it('coc: only required subsections count; not_required when none required', () => {
+  it('coc: a recorded verdict (Pass OR Fail) counts as done; only Missing/Pending stay outstanding', () => {
     const s = computeSiteDeliverables(baseInput({
       subsections: [
         { id: 'a', name: 'A', is_coc_required: true, coc_status: 'Pass' },
         { id: 'b', name: 'B', is_coc_required: true, coc_status: 'Failed' },
+        { id: 'p', name: 'P', is_coc_required: true, coc_status: 'Pending' },
+        { id: 'm', name: 'M', is_coc_required: true, coc_status: 'Missing' },
         { id: 'c', name: 'C', is_coc_required: false, coc_status: null },
       ],
     }));
     const d = get(s, 'coc');
-    expect(d.done).toBe(1);
-    expect(d.total).toBe(2);
+    expect(d.done).toBe(2);   // Pass + Fail are both "assessed"
+    expect(d.total).toBe(4);  // 4 required (c is not_required)
     expect(d.status).toBe('outstanding');
-    expect(d.blocking).toBe(true);
+    expect(d.outstandingItems.map(i => i.subsectionId).sort()).toEqual(['m', 'p']);
+
+    const allAssessed = computeSiteDeliverables(baseInput({
+      subsections: [{ id: 'a', name: 'A', is_coc_required: true, coc_status: 'Fail' }],
+    }));
+    expect(get(allAssessed, 'coc').status).toBe('complete'); // a recorded Fail clears the item
 
     const none = computeSiteDeliverables(baseInput({
       subsections: [{ id: 'a', name: 'A', is_coc_required: false, coc_status: null }],
@@ -159,8 +166,8 @@ describe('computeSiteDeliverables — thermal (per-subsection, required-where-ap
   });
 });
 
-describe('computeSiteDeliverables — COC item copy reflects the verdict', () => {
-  it('distinguishes missing / pending / failed instead of a blanket "Set COC"', () => {
+describe('computeSiteDeliverables — outstanding COC copy distinguishes missing vs pending', () => {
+  it('labels Missing and Pending differently; an assessed Fail is NOT outstanding', () => {
     const s = computeSiteDeliverables(baseInput({
       subsections: [
         { id: 'm', name: 'M', is_coc_required: true, coc_status: 'Missing' },
@@ -168,13 +175,13 @@ describe('computeSiteDeliverables — COC item copy reflects the verdict', () =>
         { id: 'f', name: 'F', is_coc_required: true, coc_status: 'Fail' },
       ],
     }));
-    const byId = Object.fromEntries(get(s, 'coc').outstandingItems.map(i => [i.subsectionId, i]));
+    const items = get(s, 'coc').outstandingItems;
+    expect(items.map(i => i.subsectionId).sort()).toEqual(['m', 'p']); // 'f' assessed -> done
+    const byId = Object.fromEntries(items.map(i => [i.subsectionId, i]));
     expect(byId['m'].label).toContain('COC missing');
     expect(byId['m'].actionLabel).toBe('Set COC');
     expect(byId['p'].label).toContain('COC awaiting verdict');
     expect(byId['p'].actionLabel).toBe('Verify COC');
-    expect(byId['f'].label).toContain('COC failed');
-    expect(byId['f'].actionLabel).toBe('Review COC');
   });
 });
 
@@ -204,7 +211,7 @@ describe('computeSiteDeliverables — aggregation', () => {
 describe('computeSiteDeliverables — nextTasks ordering', () => {
   it('orders blocking items first, then by severity, before non-blocking', () => {
     const s = computeSiteDeliverables(baseInput({
-      subsections: [{ id: 'a', name: 'A', is_coc_required: true, coc_status: 'Failed' }],
+      subsections: [{ id: 'a', name: 'A', is_coc_required: true, coc_status: 'Missing' }],
       snags: [
         { id: 'low', subsection_id: 'a', status: 'Open', risk_level: 'Low', title: 'Minor' },
         { id: 'crit', subsection_id: 'a', status: 'Open', risk_level: 'Critical', title: 'Severe' },
@@ -228,7 +235,7 @@ describe('summarizeSitesForTriage', () => {
   it('ranks blocking first, then outstanding count, then completion asc', () => {
     const blocking = baseInput({
       siteId: 'blk', siteName: 'Blocking',
-      subsections: [{ id: 'a', name: 'A', is_coc_required: true, coc_status: 'Failed' }],
+      subsections: [{ id: 'a', name: 'A', is_coc_required: true, coc_status: 'Missing' }],
     });
     const manyOutstanding = baseInput({
       siteId: 'many', siteName: 'Many',

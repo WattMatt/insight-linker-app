@@ -30,6 +30,18 @@ function CocRow({ raw, isInitial, ...p }: { raw: SupabaseDocument; isInitial: bo
   const [saving, setSaving] = useState(false);
   const failing = cocDocFails({ ...d, cocStatus: status, cocExpiryDate: expiry || null }, today());
 
+  // "Needs save" = no verdict recorded yet, OR an edited field differs from what's stored.
+  // Once saved (onSaved refetches), the persisted props match the row again -> shows "Saved".
+  const norm = (v?: string | null) => (v ?? "").trim();
+  const verdictRecorded = ["Pass", "Fail", "Approved", "Valid", "Failed", "Rejected"].includes(d.cocStatus ?? "");
+  const fieldsChanged =
+    type !== d.cocType ||
+    norm(number) !== norm(d.cocNumber) ||
+    norm(issue) !== norm(d.cocIssueDate) ||
+    norm(expiry) !== norm(d.cocExpiryDate) ||
+    status !== (d.cocStatus === "Missing" ? "Pending" : d.cocStatus);
+  const needsSave = !verdictRecorded || fieldsChanged;
+
   const save = async () => {
     setSaving(true);
     const { error } = await supabase.from("subsection_documents").update({
@@ -88,9 +100,15 @@ function CocRow({ raw, isInitial, ...p }: { raw: SupabaseDocument; isInitial: bo
         </div>
       </div>
       <div className="flex justify-end">
-        <Button size="sm" onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}Save
-        </Button>
+        {needsSave ? (
+          <Button size="sm" onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}Save
+          </Button>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+            <Check className="h-4 w-4" /> Saved
+          </span>
+        )}
       </div>
     </div>
   );

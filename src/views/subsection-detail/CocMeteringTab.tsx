@@ -70,6 +70,16 @@ export function CocMeteringTab({
     }
   }, [searchParams]);
 
+  // Plain-English COC state so the user knows what's done vs what's required, at a glance.
+  const cocSummary = (() => {
+    if (!subsection.isCocRequired) return { cls: "bg-muted/40 text-muted-foreground border-border", text: "COC is not required for this subsection." };
+    const st = (subsection.cocStatus || "").toLowerCase();
+    if (["pass", "approved", "valid"].includes(st)) return { cls: "bg-emerald-50 text-emerald-700 border-emerald-200", text: "COC: PASS — complete." };
+    if (["fail", "failed", "rejected"].includes(st)) return { cls: "bg-red-50 text-red-700 border-red-200", text: "COC: FAILED — assessment recorded. The installation must be remediated and re-certified to become compliant." };
+    if (st === "pending") return { cls: "bg-amber-50 text-amber-700 border-amber-200", text: "COC: PENDING — set a verdict (Pass/Fail) on the certificate(s) below and Save." };
+    return { cls: "bg-amber-50 text-amber-700 border-amber-200", text: "COC: not yet recorded — upload the certificate and set its verdict below." };
+  })();
+
   return (
     <div className="space-y-6">
       {/* Certificates of Compliance */}
@@ -83,6 +93,8 @@ export function CocMeteringTab({
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className={`rounded-md border px-3 py-2 text-sm ${cocSummary.cls}`}>{cocSummary.text}</div>
+
           {/* Per-document COC capture: Initial + supplementaries, each with a Pass/Fail */}
           <CocCertificateList
             cocDocuments={getSupabaseCocDocuments()}
