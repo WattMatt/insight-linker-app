@@ -167,7 +167,7 @@ const Dashboard = () => {
     try {
       const [sitesRes, subsRes, snagsRes, inspRes, schematicsRes, assetsRes, docsRes, subDocsRes] = await Promise.all([
         supabase.from("sites").select("id, name, client_id"),
-        supabase.from("subsections").select("id, site_id, name, coc_status, is_coc_required, is_thermal_required, metering_status, meter_serial_number"),
+        supabase.from("subsections").select("id, site_id, name, coc_status, is_coc_required, is_thermal_required, is_inspection_required, metering_status, meter_serial_number"),
         supabase.from("snags").select("id, subsection_id, status, risk_level, title"),
         supabase.from("inspections").select("subsection_id, status, site_id"),
         supabase.from("site_schematics").select("site_id"),
