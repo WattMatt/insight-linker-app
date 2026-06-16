@@ -166,6 +166,30 @@ describe('computeSiteDeliverables — thermal (per-subsection, required-where-ap
   });
 });
 
+describe('computeSiteDeliverables — inspection-not-applicable', () => {
+  it('waived subsections drop out of the inspection count and outstanding list', () => {
+    const s = computeSiteDeliverables(baseInput({
+      subsections: [
+        { id: 'a', name: 'A' },                                // required, no inspection
+        { id: 'b', name: 'B', is_inspection_required: false }, // waived
+      ],
+      inspections: [],
+    }));
+    const d = get(s, 'inspections');
+    expect(d.total).toBe(1);                       // only A counts
+    expect(d.done).toBe(0);
+    expect(d.status).toBe('outstanding');
+    expect(d.outstandingItems.map(i => i.subsectionId)).toEqual(['a']); // B not listed
+  });
+
+  it('a site whose every subsection waives inspection reads not_required', () => {
+    const s = computeSiteDeliverables(baseInput({
+      subsections: [{ id: 'a', name: 'A', is_inspection_required: false }],
+    }));
+    expect(get(s, 'inspections').status).toBe('not_required');
+  });
+});
+
 describe('computeSiteDeliverables — outstanding COC copy distinguishes missing vs pending', () => {
   it('labels Missing and Pending differently; an assessed Fail is NOT outstanding', () => {
     const s = computeSiteDeliverables(baseInput({
@@ -188,11 +212,11 @@ describe('computeSiteDeliverables — outstanding COC copy distinguishes missing
 describe('computeSiteDeliverables — aggregation', () => {
   it('empty site: binary docs outstanding, count categories complete/not_required, band danger', () => {
     const s = computeSiteDeliverables(baseInput());
-    // snags(0/0 complete), inspections(0/0 complete), coc/metering/thermal(not_required),
-    // schematic+asset+summary outstanding -> complete 2 of applicable 5 => 40%
-    expect(s.completeCount).toBe(2);
-    expect(s.applicableCount).toBe(5);
-    expect(s.completionPct).toBe(40);
+    // snags(0/0 complete), inspections(not_required), coc/metering/thermal(not_required),
+    // schematic+asset+summary outstanding -> complete 1 of applicable 4 => 25%
+    expect(s.completeCount).toBe(1);
+    expect(s.applicableCount).toBe(4);
+    expect(s.completionPct).toBe(25);
     expect(s.band).toBe('danger');
     expect(s.outstandingCount).toBe(3);
     expect(s.blockingCount).toBe(0);

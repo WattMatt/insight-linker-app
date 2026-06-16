@@ -211,9 +211,11 @@ function buildInspections(input: SiteDeliverablesInput, subName: Map<string, str
   const inspected = new Set(
     input.inspections.filter(isInspectionCompleted).map(i => i.subsection_id).filter(Boolean) as string[],
   );
-  const total = input.subsections.length;
-  const done = input.subsections.filter(s => inspected.has(s.id)).length;
-  const items: OutstandingItem[] = input.subsections
+  // Inspection-not-applicable subsections (is_inspection_required === false) are waived.
+  const applicable = input.subsections.filter(s => s.is_inspection_required !== false);
+  const total = applicable.length;
+  const done = applicable.filter(s => inspected.has(s.id)).length;
+  const items: OutstandingItem[] = applicable
     .filter(s => !inspected.has(s.id))
     .map(s => ({
       id: `insp-${s.id}`, category: 'inspections',
@@ -224,7 +226,7 @@ function buildInspections(input: SiteDeliverablesInput, subName: Map<string, str
   return {
     key: 'inspections', label: DELIVERABLE_LABELS.inspections, kind: 'count',
     done, total,
-    status: total === 0 || done === total ? 'complete' : 'outstanding',
+    status: total === 0 ? 'not_required' : done === total ? 'complete' : 'outstanding',
     blocking: false, outstandingItems: items,
   };
 }
