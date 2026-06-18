@@ -1,13 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Download, QrCode } from "lucide-react";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { Subsection, Site } from "@/types/site";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
-import { resolveQrBaseUrl, publicSubsectionUrl } from "@/lib/qrBaseUrl";
+import { qrRedirectUrl } from "@/lib/qrBaseUrl";
 import JSZip from 'jszip';
 import { generatePdfBlob, DEFAULT_STYLES } from "@/lib/pdfMakeUtils";
 
@@ -32,21 +31,6 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
     setDownloadingAll,
     fetchSiteData
 }) => {
-    // Configured QR base URL (same source as handleDownloadAll / qrCodeGenerator)
-    const [qrBaseUrl, setQrBaseUrl] = useState<string>("");
-
-    useEffect(() => {
-        (async () => {
-            const { data: qrSettings } = await supabase
-                .from('settings')
-                .select('qr_base_url')
-                .single();
-            if (qrSettings?.qr_base_url) {
-                setQrBaseUrl(qrSettings.qr_base_url);
-            }
-        })();
-    }, []);
-
     const handleGenerateAll = async () => {
         setGeneratingAll(true);
         toast.info("Regenerating QR codes for all subsections...");
@@ -93,13 +77,6 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
             const QRCode = await import('qrcode');
             const zip = new JSZip();
 
-            // Get QR base URL from settings
-            const { data: qrSettings } = await supabase
-                .from('settings')
-                .select('qr_base_url')
-                .single();
-
-            const baseUrl = resolveQrBaseUrl(qrSettings?.qr_base_url);
             const qrCodeDataUrls: { dataUrl: string; name: string }[] = [];
 
             for (const subsection of subsections) {
@@ -124,7 +101,7 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
                     ctx.strokeRect(1.5, 1.5, totalWidth - 3, totalHeight - 3);
 
                     const tempCanvas = document.createElement('canvas');
-                    await QRCode.default.toCanvas(tempCanvas, `${baseUrl}/public/subsections/${subsection.id}`, {
+                    await QRCode.default.toCanvas(tempCanvas, qrRedirectUrl(subsection.id), {
                         width: qrSize,
                         margin: 1,
                         errorCorrectionLevel: 'H'
@@ -299,7 +276,7 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
                                 <CardContent className="p-4">
                                     <div className="bg-muted rounded-lg mb-3 flex items-center justify-center relative">
                                         <LabeledQRCode
-                                            url={publicSubsectionUrl(subsection.id, qrBaseUrl)}
+                                            url={qrRedirectUrl(subsection.id)}
                                             siteName={site.name}
                                             subsectionName={subsection.name}
                                             logoUrl={companyLogo || undefined}

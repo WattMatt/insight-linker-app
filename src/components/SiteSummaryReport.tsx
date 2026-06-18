@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
-import { resolveQrBaseUrl, publicSubsectionUrl } from "@/lib/qrBaseUrl";
+import { qrRedirectUrl } from "@/lib/qrBaseUrl";
 import QRCode from "qrcode";
 import {
   generateReport,
@@ -133,9 +133,9 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
   };
 
   // Helper function to generate QR code as base64 data URL
-  const generateQRCodeBase64 = async (subsectionId: string, qrBaseUrl: string): Promise<string | null> => {
+  const generateQRCodeBase64 = async (subsectionId: string): Promise<string | null> => {
     try {
-      const qrTargetUrl = publicSubsectionUrl(subsectionId, qrBaseUrl);
+      const qrTargetUrl = qrRedirectUrl(subsectionId);
 
       const dataUrl = await QRCode.toDataURL(qrTargetUrl, {
         width: 150,
@@ -175,16 +175,16 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
   };
 
   // Transform DB subsection to SubsectionCardData (extended for cards)
-  const transformToSubsectionCardData = (sub: any, allSnags: any[], qrBaseUrl: string, assets: any[]): SubsectionCardData => {
+  const transformToSubsectionCardData = (sub: any, allSnags: any[], assets: any[]): SubsectionCardData => {
     const subSnags = allSnags.filter(s =>
       s.subsection_id === sub.id &&
       isSnagOpen(s.status)
     );
-    
-    // Always encode the live public-subsection URL (NOT the stored qr_code_url,
-    // which is a PNG image URL — encoding that made the report QR open the image
-    // file instead of the landing page, and pinned it to the old domain).
-    const qrUrl = publicSubsectionUrl(sub.id, qrBaseUrl);
+
+    // Encode the STABLE qr-redirect endpoint (NOT the stored qr_code_url PNG, and
+    // NOT a domain-pinned landing URL). The redirect resolves the live domain at
+    // scan time, so this QR survives a frontend domain change. See src/lib/qrBaseUrl.ts.
+    const qrUrl = qrRedirectUrl(sub.id);
     
     // Find matching asset by premises_id or trade_as containing the subsection name
     // premises_id may have format like "YA - KIOSK" while subsection name is just "KIOSK"
@@ -259,21 +259,19 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
     const subsectionIds = subsections.map(s => s.id);
 
     // Fetch remaining data with proper filtering
-    const [inspectionsRes, docsRes, subsectionDocsRes, settingsRes, assetsRes, checklistRes] = await Promise.all([
+    const [inspectionsRes, docsRes, subsectionDocsRes, assetsRes, checklistRes] = await Promise.all([
       supabase.from("inspections").select("*").eq("site_id", siteId),
       supabase.from("site_documents").select("*, site_document_categories(name)").eq("site_id", siteId),
       // CRITICAL FIX: Filter subsection documents by subsection IDs belonging to this site
-      subsectionIds.length > 0 
+      subsectionIds.length > 0
         ? supabase.from("subsection_documents").select("subsection_id, file_name, category_id, document_categories(name)").in("subsection_id", subsectionIds)
         : Promise.resolve({ data: [], error: null }),
-      supabase.from("settings").select("qr_base_url").single(),
       supabase.from("site_assets").select("id, meter_serial_number, ct_ratio, breaker_size, premises_id, asset_category").eq("site_id", siteId).eq("asset_category", "electrical_meter"),
       supabase.from("site_marking_checklist").select("section_name, is_checked, status").eq("site_id", siteId),
     ]);
 
     const allInspections = inspectionsRes.data || [];
     const siteAssets = assetsRes.data || [];
-    const qrBaseUrl = resolveQrBaseUrl(settingsRes.data?.qr_base_url);
 
     // Fetch snags with full details for card rendering
     const snagsRes = subsectionIds.length > 0 
@@ -283,7 +281,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
 
     // Transform subsections to card format with snags and asset breaker size
     const subsectionCardData: SubsectionCardData[] = subsections.map(sub => 
-      transformToSubsectionCardData(sub, allSnags, qrBaseUrl, siteAssets)
+      transformToSubsectionCardData(sub, allSnags, siteAssets)
     );
 
     // Also create SubsectionData for metrics calculation

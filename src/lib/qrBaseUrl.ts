@@ -25,3 +25,20 @@ export function publicSubsectionUrl(
 ): string {
   return `${resolveQrBaseUrl(configured)}/public/subsections/${subsectionId}`;
 }
+
+// Build the STABLE redirect URL that QR codes encode. Unlike publicSubsectionUrl,
+// this points at the Supabase `qr-redirect` edge function (verify_jwt=false), whose
+// host is the project ref — NOT the frontend domain. An unauthenticated scan hits
+// the function, which 302s to `${settings.qr_base_url}/public/subsections/<id>`.
+//
+// Why: QR PNGs are permanent/printed artifacts. Baking the app domain into them
+// (publicSubsectionUrl) orphaned every printed code when the domain moved
+// (lovable → vercel). Encoding THIS endpoint instead makes a future domain change
+// settings-only — even already-printed codes re-target. Trade-off: +1 redirect hop.
+//
+// NEXT_PUBLIC_SUPABASE_URL is guaranteed at app boot (see integrations/supabase/client.ts,
+// which throws if it is missing) and is inlined by Next at build time.
+export function qrRedirectUrl(subsectionId: string): string {
+  const fnHost = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
+  return `${fnHost}/functions/v1/qr-redirect?path=${subsectionId}`;
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "@/lib/navigation";
 import { templateSupportsTenants } from "@/lib/templateTenants";
+import { qrRedirectUrl } from "@/lib/qrBaseUrl";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1072,8 +1073,10 @@ const InspectionDetail = () => {
         }
       });
 
-      // Generate QR code with logo
-      const url = `${window.location.origin.replace(/\/$/, '')}/public/subsections/${inspData.subsection_id || subsectionId}`;
+      // Generate QR code with logo. Encode the STABLE qr-redirect endpoint, not
+      // window.location.origin — the latter baked an ephemeral/preview origin into
+      // a printable QR. The redirect resolves the live domain at scan time.
+      const url = qrRedirectUrl(inspData.subsection_id || subsectionId);
 
       const canvas = document.createElement('canvas');
       const size = 200;

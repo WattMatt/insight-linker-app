@@ -9,7 +9,7 @@ import { QrCode, Search, ExternalLink, Building2, MapPin, Layers, Download } fro
 import { useNavigate } from "@/lib/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
-import { publicSubsectionUrl } from "@/lib/qrBaseUrl";
+import { qrRedirectUrl } from "@/lib/qrBaseUrl";
 
 interface QRCodeEntry {
   id: string;
@@ -34,7 +34,6 @@ const QRCodes = () => {
   const [loading, setLoading] = useState(true);
   const [selectedQR, setSelectedQR] = useState<QRCodeEntry | null>(null);
   const [companyLogo, setCompanyLogo] = useState<string>("");
-  const [qrBaseUrl, setQrBaseUrl] = useState<string>("");
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -47,15 +46,12 @@ const QRCodes = () => {
     try {
       const { data } = await supabase
         .from('settings')
-        .select('company_logo_url, qr_base_url')
+        .select('company_logo_url')
         .limit(1)
         .maybeSingle();
 
       if (data?.company_logo_url) {
         setCompanyLogo(data.company_logo_url);
-      }
-      if (data?.qr_base_url) {
-        setQrBaseUrl(data.qr_base_url);
       }
     } catch (error) {
       console.error('Error fetching company logo:', error);
@@ -273,7 +269,7 @@ const QRCodes = () => {
           {selectedQR && selectedQR.sites && (
             <div className="py-4">
               <LabeledQRCode
-                url={publicSubsectionUrl(selectedQR.id, qrBaseUrl)}
+                url={qrRedirectUrl(selectedQR.id)}
                 siteName={selectedQR.sites.name}
                 subsectionName={selectedQR.name}
                 logoUrl={companyLogo || undefined}

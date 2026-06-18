@@ -1,6 +1,6 @@
 import QRCode from 'qrcode';
 import { supabase } from '@/integrations/supabase/client';
-import { publicSubsectionUrl } from '@/lib/qrBaseUrl';
+import { qrRedirectUrl } from '@/lib/qrBaseUrl';
 
 interface GenerateQRCodeOptions {
   subsectionId: string;
@@ -16,18 +16,11 @@ export async function generateAndUploadQRCode({
   logoUrl
 }: GenerateQRCodeOptions): Promise<string | null> {
   try {
-    // Get QR base URL from settings - default to production domain
-    const { data: settings, error: settingsError } = await supabase
-      .from('settings')
-      .select('qr_base_url')
-      .single();
-
-    if (settingsError) console.error('Failed to read qr_base_url from settings:', settingsError);
-
-    // Resolve the canonical public origin (settings.qr_base_url, else the prod
-    // default). Never window.location.origin — a preview/staging origin would be
-    // baked permanently into the QR PNG. See src/lib/qrBaseUrl.ts.
-    const qrTargetUrl = publicSubsectionUrl(subsectionId, settings?.qr_base_url);
+    // Encode the STABLE qr-redirect endpoint — NOT the app domain — into the PNG.
+    // The PNG is a permanent/printable artifact; the redirect resolves the live
+    // domain at scan time, so a frontend domain change never orphans printed codes.
+    // See src/lib/qrBaseUrl.ts.
+    const qrTargetUrl = qrRedirectUrl(subsectionId);
     
     // Create canvas
     const canvas = document.createElement('canvas');
