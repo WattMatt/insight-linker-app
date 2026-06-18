@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Edit, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { ArrowLeft, Edit, Trash2, Loader2 } from "lucide-react";
 import { getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { Breadcrumbs } from "@/components/Breadcrumb";
 import { InteractiveFloorPlan } from "@/components/InteractiveFloorPlan";
@@ -198,7 +199,6 @@ const SubsectionDetail = () => {
             setUploadCategoryId={hook.setUploadCategoryId}
             uploadFile={hook.uploadFile}
             setUploadFile={hook.setUploadFile}
-            deleteDocumentId={hook.deleteDocumentId}
             setDeleteDocumentId={hook.setDeleteDocumentId}
             deletingDocumentId={hook.deletingDocumentId}
             createCategoryOpen={hook.createCategoryOpen}
@@ -213,7 +213,6 @@ const SubsectionDetail = () => {
             handleCreateCategory={hook.handleCreateCategory}
             handleDeleteCategory={hook.handleDeleteCategory}
             handleDocumentUpload={hook.handleDocumentUpload}
-            handleDeleteDocument={hook.handleDeleteDocument}
             handleDownloadDocument={hook.handleDownloadDocument}
           />
         </TabsContent>
@@ -245,6 +244,40 @@ const SubsectionDetail = () => {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Shared delete-document confirmation. Mounted at the page level (not inside a tab) so it
+          works from BOTH the Documents tab and the COC & Metering tab — inactive tabs unmount,
+          which is why the COC delete button previously did nothing. */}
+      <AlertDialog open={hook.deleteDocumentId !== null} onOpenChange={() => hook.setDeleteDocumentId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Document</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this document? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={hook.deletingDocumentId !== null}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const doc = hook.supabaseDocuments.find(d => d.id === hook.deleteDocumentId);
+                if (doc) hook.handleDeleteDocument(hook.deleteDocumentId!, doc.file_name);
+              }}
+              disabled={hook.deletingDocumentId !== null}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {hook.deletingDocumentId !== null ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* All Dialogs */}
       <SubsectionDialogs

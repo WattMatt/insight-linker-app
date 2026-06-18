@@ -17,7 +17,6 @@ interface DocumentsTabProps {
   setUploadCategoryId: (id: string | null) => void;
   uploadFile: File | null;
   setUploadFile: (file: File | null) => void;
-  deleteDocumentId: string | null;
   setDeleteDocumentId: (id: string | null) => void;
   deletingDocumentId: string | null;
   createCategoryOpen: boolean;
@@ -32,7 +31,6 @@ interface DocumentsTabProps {
   handleCreateCategory: (e: React.FormEvent) => void;
   handleDeleteCategory: (categoryId: string, categoryName: string) => void;
   handleDocumentUpload: (e: React.FormEvent) => void;
-  handleDeleteDocument: (documentId: string, fileName: string) => void;
   handleDownloadDocument: (url: string, fileName: string) => void;
 }
 
@@ -44,7 +42,6 @@ export function DocumentsTab({
   setUploadCategoryId,
   uploadFile,
   setUploadFile,
-  deleteDocumentId,
   setDeleteDocumentId,
   deletingDocumentId,
   createCategoryOpen,
@@ -59,7 +56,6 @@ export function DocumentsTab({
   handleCreateCategory,
   handleDeleteCategory,
   handleDocumentUpload,
-  handleDeleteDocument,
   handleDownloadDocument,
 }: DocumentsTabProps) {
   return (
@@ -197,37 +193,6 @@ export function DocumentsTab({
         </CardContent>
       </Card>
 
-      {/* Delete Document Dialog */}
-      <AlertDialog open={deleteDocumentId !== null} onOpenChange={() => setDeleteDocumentId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Document</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this document? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingDocumentId !== null}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                const doc = supabaseDocuments.find(d => d.id === deleteDocumentId);
-                if (doc) handleDeleteDocument(deleteDocumentId!, doc.file_name);
-              }}
-              disabled={deletingDocumentId !== null}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deletingDocumentId !== null ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                'Delete'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Create Category Dialog */}
       <Dialog open={createCategoryOpen} onOpenChange={setCreateCategoryOpen}>
