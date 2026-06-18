@@ -20,6 +20,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { mmToPt } from './pdfMakeConfig';
 import { loadImageSimple, loadImagesSimple, compressImageBlob } from './simpleImageLoader';
+import { scorePercentage } from './report/inspectionScore';
 import { savePDFToDocuments } from './pdfDocumentSaver';
 
 // Type definitions
@@ -256,7 +257,9 @@ function calculateStats(inspection: InspectionReportData): InspectionStats {
     passCount,
     failCount,
     pendingCount,
-    passPercentage: totalItems > 0 ? Math.round((passCount / totalItems) * 100) : 0,
+    // Pending / N-A / uncaptured items are excluded from the denominator (pass + fail only),
+    // so a subsection isn't negatively marked for items that don't apply to it.
+    passPercentage: scorePercentage(passCount, failCount),
     totalPhotos,
     totalSections: inspection.sections?.length || 0,
     sectionStats,
@@ -630,9 +633,8 @@ function createSectionBreakdownPage(
                   { text: 'Score', bold: true, fontSize: 8, color: REPORT_COLORS.textSecondary, alignment: 'center' },
                 ],
                 ...stats.sectionStats.map(section => {
-                  const score = section.totalItems > 0 
-                    ? Math.round((section.passCount / section.totalItems) * 100) 
-                    : 0;
+                  // Exclude pending/N-A from the per-section score too (pass + fail only).
+                  const score = scorePercentage(section.passCount, section.failCount);
                   const sectionScoreColor = score >= 80 ? REPORT_COLORS.success 
                     : score >= 60 ? REPORT_COLORS.warning 
                     : REPORT_COLORS.error;
