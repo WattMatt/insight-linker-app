@@ -46,7 +46,7 @@ interface SiteDocumentsProps {
     categories: SiteDocumentCategory[];
     subsectionDocuments?: SubsectionDocument[];
     subsections?: { id: string; name: string }[];
-    onDeleteDocument: (id: string, name: string) => void;
+    onDeleteDocument: (id: string, name: string, source: "site" | "subsection") => void;
     onPreview: (url: string, name: string) => void;
     onDownload: (url: string, name: string) => void;
     onUploadClick: (categoryId: string) => void;
@@ -286,7 +286,7 @@ function UnifiedDocumentsList({
     groupBy: "category" | "subsection";
     onPreview: (url: string, name: string) => void;
     onDownload: (url: string, name: string) => void;
-    onDeleteDocument: (id: string, name: string) => void;
+    onDeleteDocument: (id: string, name: string, source: "site" | "subsection") => void;
 }) {
     const sortedGroups = Object.entries(groupedDocs);
 
@@ -340,7 +340,7 @@ function UnifiedDocumentsList({
                                                 size="sm"
                                                 variant="ghost"
                                                 className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                                onClick={() => onDeleteDocument(doc.id, doc.file_name)}
+                                                onClick={() => onDeleteDocument(doc.id, doc.file_name, doc.source)}
                                             >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>

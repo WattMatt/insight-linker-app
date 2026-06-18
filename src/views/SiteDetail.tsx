@@ -491,16 +491,21 @@ const SiteDetail = () => {
     }
   };
 
-  const handleDeleteSiteDocument = async (id: string, name: string) => {
+  const handleDeleteSiteDocument = async (id: string, name: string, source: 'site' | 'subsection' = 'site') => {
     try {
-      const { data: doc } = await supabase.from('site_documents').select('file_url').eq('id', id).single();
+      // The site Documents tab unifies site_documents + subsection_documents, so route the delete
+      // to the table the row actually lives in. Otherwise a subsection-sourced doc matches no
+      // site_documents row and silently "deletes" nothing while still toasting success.
+      const table = source === 'subsection' ? 'subsection_documents' : 'site_documents';
+      const { data: doc } = await supabase.from(table).select('file_url').eq('id', id).single();
       if (doc?.file_url?.includes('supabase.co/storage')) {
         const path = doc.file_url.split('/documents/')[1]?.split('?')[0];
         if (path) await supabase.storage.from('documents').remove([path]);
       }
-      await supabase.from('site_documents').delete().eq('id', id);
+      const { error } = await supabase.from(table).delete().eq('id', id);
+      if (error) throw error;
       toast.success(`${name} deleted`);
-      fetchSiteDocuments();
+      if (source === 'subsection') fetchSubsectionDocuments(); else fetchSiteDocuments();
     } catch (error) {
       toast.error("Failed to delete document");
     }
