@@ -14,6 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      coc_file_pool: {
+        Row: {
+          id: string
+          site_id: string
+          file_name: string
+          file_url: string
+          file_size: number | null
+          detected_cert_no: string | null
+          detected_kind: string | null
+          status: string
+          assigned_subsection_id: string | null
+          assigned_document_id: string | null
+          uploaded_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          site_id: string
+          file_name: string
+          file_url: string
+          file_size?: number | null
+          detected_cert_no?: string | null
+          detected_kind?: string | null
+          status?: string
+          assigned_subsection_id?: string | null
+          assigned_document_id?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          site_id?: string
+          file_name?: string
+          file_url?: string
+          file_size?: number | null
+          detected_cert_no?: string | null
+          detected_kind?: string | null
+          status?: string
+          assigned_subsection_id?: string | null
+          assigned_document_id?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coc_file_pool_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coc_import_batches: {
         Row: {
           id: string
