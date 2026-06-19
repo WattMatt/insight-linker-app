@@ -38,6 +38,7 @@ export function CertificatesSubTab({ rows }: { rows: CocCertRow[] }) {
             <TableHead className="text-center">9(2)</TableHead>
             <TableHead>Issued</TableHead>
             <TableHead>Conf.</TableHead>
+            <TableHead>Attached</TableHead>
             <TableHead>Source file</TableHead>
           </TableRow>
         </TableHeader>
@@ -63,6 +64,12 @@ export function CertificatesSubTab({ rows }: { rows: CocCertRow[] }) {
                 <TableCell className="text-center text-xs uppercase">{r.clause_9_2 || "—"}</TableCell>
                 <TableCell className="whitespace-nowrap text-xs tabular-nums">{r.issued_date ?? "—"}</TableCell>
                 <TableCell><Confidence value={r.confidence} /></TableCell>
+                <TableCell className="whitespace-nowrap">
+                  <span className="flex gap-1">
+                    {r.coc_document_id ? <StatusPill tone="green" label="COC ✓" /> : <span className="text-xs text-muted-foreground/60">COC —</span>}
+                    {r.eval_document_id ? <StatusPill tone="green" label="Eval ✓" /> : <span className="text-xs text-muted-foreground/60">Eval —</span>}
+                  </span>
+                </TableCell>
                 <TableCell className="max-w-[18rem] truncate text-xs text-muted-foreground" title={r.source_file}>{r.source_file || "—"}</TableCell>
               </TableRow>
             );

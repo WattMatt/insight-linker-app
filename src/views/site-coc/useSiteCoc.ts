@@ -12,6 +12,7 @@ export interface CocCertRow {
   cert_type: string; doc_type: string; clause_9_2: string; supp_to_init: string;
   issued_date: string | null; location: string; confidence: string; source_file: string;
   verdict: string; reasons: string; rules: Record<string, string>; notes: string; match_status: string;
+  coc_document_id: string | null; eval_document_id: string | null;
 }
 export interface CocBatch {
   id: string; created_at: string; schedule_file_name: string | null;
