@@ -10,6 +10,7 @@ import { ScheduleSubTab } from "./ScheduleSubTab";
 import { CertificatesSubTab } from "./CertificatesSubTab";
 import { VerificationSubTab } from "./VerificationSubTab";
 import { ReportSubTab } from "./ReportSubTab";
+import { SiteCocLoadCard } from "./SiteCocLoadCard";
 
 export function SiteCocTab({ siteId, siteName }: { siteId: string | undefined; siteName: string }) {
   const { schedule, certificates, batch, loading, refetch } = useSiteCoc(siteId);
@@ -51,6 +52,8 @@ export function SiteCocTab({ siteId, siteName }: { siteId: string | undefined; s
           )}
         </CardContent>
       </Card>
+
+      <SiteCocLoadCard siteId={siteId} onDone={refetch} />
 
       <Tabs defaultValue="schedule">
         <TabsList>

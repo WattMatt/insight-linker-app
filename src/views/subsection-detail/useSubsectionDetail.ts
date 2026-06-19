@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { isSnagOpen } from "@/lib/subsectionStatus";
 import { isCocCertificateCategory } from "@/lib/cocHierarchy";
-import { extractCocNumber, extractEvalVerdict } from "@/lib/cocFilename";
+import { uploadEvaluationReport as libUploadEvaluationReport } from "@/lib/coc/uploadCocFiles";
 import { isInspectionCompleted } from "@/lib/siteHealth";
 import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
 import type {
@@ -794,67 +794,17 @@ export function useSubsectionDetail() {
   ): Promise<void> => {
     if (!subsectionId) return;
     try {
-      const maxSize = 50 * 1024 * 1024;
-      if (file.size > maxSize) {
-        toast.error(`File size exceeds maximum limit of 50MB. Selected file is ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
-        return;
-      }
-      const allowedTypes = [
-        'text/html',
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'image/jpeg', 'image/jpg', 'image/png',
-      ];
-      // Some browsers report empty type for .html; allow by extension as a fallback.
-      const okByExt = /\.(html?|pdf|docx?|jpe?g|png)$/i.test(file.name);
-      if (file.type && !allowedTypes.includes(file.type) && !okByExt) {
-        toast.error("Invalid file type. Upload HTML, PDF, DOC, DOCX, JPG, or PNG.");
-        return;
-      }
-
       setUploadingFile(true);
       toast.info("Uploading evaluation report...");
-
       const category = await ensureEvaluationCategory();
       if (!category) throw new Error("Could not resolve the evaluation reports category");
-
-      // Per-COC folder: certificate + eval reports grouped together.
-      const folderKey = (parentCoc.coc_number || parentCoc.id).replace(/[^a-zA-Z0-9.-]/g, '_');
-      const timestamp = Date.now();
-      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const path = `${subsectionId}/COC/${folderKey}/${timestamp}-${sanitizedFileName}`;
-
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(path, file);
-      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
-      if (!uploadData?.path) throw new Error("Upload succeeded but no path returned");
-
-      const { data: urlData } = supabase.storage.from('documents').getPublicUrl(uploadData.path);
-      if (!urlData?.publicUrl) throw new Error("Failed to generate public URL");
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
-
-      const { error: insertError } = await supabase
-        .from('subsection_documents')
-        .insert({
-          subsection_id: subsectionId,
-          category_id: category.id,
-          parent_document_id: parentCoc.id,
-          file_name: file.name,
-          file_url: urlData.publicUrl,
-          file_size: file.size,
-          uploaded_by: user.id,
-          coc_number: parentCoc.coc_number || extractCocNumber(file.name),
-          coc_status: extractEvalVerdict(file.name) ?? 'Pending',
-        });
-      if (insertError) {
-        await supabase.storage.from('documents').remove([uploadData.path]);
-        throw new Error(`Failed to save evaluation report: ${insertError.message}`);
-      }
-
+      await libUploadEvaluationReport({
+        subsectionId,
+        evalCategoryId: category.id,
+        parentCocId: parentCoc.id,
+        parentCocNumber: parentCoc.coc_number,
+        file,
+      });
       toast.success("Evaluation report uploaded!");
       fetchSupabaseDocuments();
     } catch (error: any) {

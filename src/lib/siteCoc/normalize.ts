@@ -3,7 +3,8 @@ export function normShop(s: string | null | undefined): string {
 }
 
 export function normCert(s: string | null | undefined): string {
-  return (s ?? "").toString().toUpperCase().replace(/\s+/g, "").trim();
+  // Strip spaces AND hyphens so "B 1612744", "B-1612744" and "B1612744" all match.
+  return (s ?? "").toString().toUpperCase().replace(/[\s-]+/g, "").trim();
 }
 
 export function normCertType(s: string | null | undefined): "Initial" | "Supplementary" | "Unclear" {
