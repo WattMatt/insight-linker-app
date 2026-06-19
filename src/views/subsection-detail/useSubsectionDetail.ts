@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { isSnagOpen } from "@/lib/subsectionStatus";
+import { isCocCertificateCategory } from "@/lib/cocHierarchy";
+import { extractCocNumber, extractEvalVerdict } from "@/lib/cocFilename";
 import { isInspectionCompleted } from "@/lib/siteHealth";
 import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
 import type {
@@ -99,7 +101,8 @@ export function useSubsectionDetail() {
           { name: '03 Line Diagram', order_index: 3 },
           { name: '04 Metering', order_index: 4 },
           { name: '05 Thermal Reports', order_index: 5 },
-          { name: '06 Other', order_index: 6 }
+          { name: '06 Other', order_index: 6 },
+          { name: '07 COC Evaluation Reports', order_index: 7 }
         ];
 
         const { data: newCategories, error: insertError } = await supabase
@@ -127,7 +130,7 @@ export function useSubsectionDetail() {
     try {
       const { data, error } = await supabase
         .from('subsection_documents')
-        .select('id, file_name, file_url, category_id, uploaded_at, coc_number, coc_issue_date, coc_expiry_date, coc_type, coc_status')
+        .select('id, file_name, file_url, category_id, uploaded_at, coc_number, coc_issue_date, coc_expiry_date, coc_type, coc_status, parent_document_id')
         .eq('subsection_id', subsectionId)
         .order('uploaded_at', { ascending: false });
 
@@ -586,12 +589,9 @@ export function useSubsectionDetail() {
   };
 
   const getSupabaseCocDocuments = () => {
-    // COC certificate categories only — exclude "COC Validation Reports" (old engine output).
+    // COC certificate categories only — excludes validation/evaluation reports.
     const cocCatIds = documentCategories
-      .filter(cat => {
-        const n = cat.name.toLowerCase();
-        return n.includes('coc') && !n.includes('validation') && !n.includes('report');
-      })
+      .filter(cat => isCocCertificateCategory(cat.name))
       .map(cat => cat.id);
     if (cocCatIds.length === 0) return [];
     return supabaseDocuments.filter(doc => cocCatIds.includes(doc.category_id));
@@ -601,6 +601,38 @@ export function useSubsectionDetail() {
     const meteringCategory = documentCategories.find(cat => cat.name.toLowerCase().includes('meter'));
     if (!meteringCategory) return [];
     return supabaseDocuments.filter(doc => doc.category_id === meteringCategory.id);
+  };
+
+  const EVAL_CATEGORY_NAME = '07 COC Evaluation Reports';
+
+  const getEvaluationCategory = () =>
+    documentCategories.find(cat => cat.name.toLowerCase() === EVAL_CATEGORY_NAME.toLowerCase());
+
+  // Find-or-create the eval category (existing subsections were seeded before it existed).
+  const ensureEvaluationCategory = async (): Promise<DocumentCategory | null> => {
+    const existing = getEvaluationCategory();
+    if (existing) return existing;
+    if (!subsectionId) return null;
+    const maxOrder = documentCategories.length > 0
+      ? Math.max(...documentCategories.map(cat => parseInt(cat.name.split(' ')[0]) || 0))
+      : 0;
+    const { data, error } = await supabase
+      .from('document_categories')
+      .insert({ subsection_id: subsectionId, name: EVAL_CATEGORY_NAME, order_index: maxOrder + 1 })
+      .select('id, name')
+      .single();
+    if (error || !data) {
+      if (process.env.NODE_ENV === 'development') console.error("Error creating eval category:", error);
+      return null;
+    }
+    await fetchDocumentCategories();
+    return data;
+  };
+
+  const getSupabaseEvaluationDocuments = () => {
+    const cat = getEvaluationCategory();
+    if (!cat) return [];
+    return supabaseDocuments.filter(doc => doc.category_id === cat.id);
   };
 
   // ─── Handlers: Document Categories ─────────────────────────────
@@ -753,6 +785,86 @@ export function useSubsectionDetail() {
     }
   };
 
+  // Upload an evaluation/verification report for a specific COC. Stored as a
+  // standalone document in the "07 COC Evaluation Reports" category, linked to
+  // its COC via parent_document_id, and placed in the COC's per-COC folder.
+  const handleUploadEvaluationReport = async (
+    parentCoc: { id: string; coc_number: string | null },
+    file: File,
+  ): Promise<void> => {
+    if (!subsectionId) return;
+    try {
+      const maxSize = 50 * 1024 * 1024;
+      if (file.size > maxSize) {
+        toast.error(`File size exceeds maximum limit of 50MB. Selected file is ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+        return;
+      }
+      const allowedTypes = [
+        'text/html',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'image/jpeg', 'image/jpg', 'image/png',
+      ];
+      // Some browsers report empty type for .html; allow by extension as a fallback.
+      const okByExt = /\.(html?|pdf|docx?|jpe?g|png)$/i.test(file.name);
+      if (file.type && !allowedTypes.includes(file.type) && !okByExt) {
+        toast.error("Invalid file type. Upload HTML, PDF, DOC, DOCX, JPG, or PNG.");
+        return;
+      }
+
+      setUploadingFile(true);
+      toast.info("Uploading evaluation report...");
+
+      const category = await ensureEvaluationCategory();
+      if (!category) throw new Error("Could not resolve the evaluation reports category");
+
+      // Per-COC folder: certificate + eval reports grouped together.
+      const folderKey = (parentCoc.coc_number || parentCoc.id).replace(/[^a-zA-Z0-9.-]/g, '_');
+      const timestamp = Date.now();
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const path = `${subsectionId}/COC/${folderKey}/${timestamp}-${sanitizedFileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(path, file);
+      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+      if (!uploadData?.path) throw new Error("Upload succeeded but no path returned");
+
+      const { data: urlData } = supabase.storage.from('documents').getPublicUrl(uploadData.path);
+      if (!urlData?.publicUrl) throw new Error("Failed to generate public URL");
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      const { error: insertError } = await supabase
+        .from('subsection_documents')
+        .insert({
+          subsection_id: subsectionId,
+          category_id: category.id,
+          parent_document_id: parentCoc.id,
+          file_name: file.name,
+          file_url: urlData.publicUrl,
+          file_size: file.size,
+          uploaded_by: user.id,
+          coc_number: parentCoc.coc_number || extractCocNumber(file.name),
+          coc_status: extractEvalVerdict(file.name) ?? 'Pending',
+        });
+      if (insertError) {
+        await supabase.storage.from('documents').remove([uploadData.path]);
+        throw new Error(`Failed to save evaluation report: ${insertError.message}`);
+      }
+
+      toast.success("Evaluation report uploaded!");
+      fetchSupabaseDocuments();
+    } catch (error: any) {
+      if (process.env.NODE_ENV === 'development') console.error("Error uploading evaluation report:", error);
+      toast.error(error?.message || "Failed to upload evaluation report", { duration: 5000 });
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
   const handleDeleteDocument = async (documentId: string, fileName: string) => {
     setDeletingDocumentId(documentId);
     try {
@@ -776,6 +888,25 @@ export function useSubsectionDetail() {
           if (process.env.NODE_ENV === 'development') console.error("Error deleting file from storage:", storageError);
           toast.warning("Document record removed, but its file may remain in storage.");
         }
+      }
+
+      // Remove storage blobs for any child evaluation reports (rows cascade via FK).
+      const { data: children } = await supabase
+        .from('subsection_documents')
+        .select('file_url')
+        .eq('parent_document_id', documentId);
+      const childPaths = (children || [])
+        .map(c => {
+          if (!c.file_url) return null;
+          try {
+            const u = new URL(c.file_url);
+            const parts = u.pathname.split('/');
+            return parts.slice(parts.indexOf('documents') + 1).join('/');
+          } catch { return null; }
+        })
+        .filter((p): p is string => !!p);
+      if (childPaths.length > 0) {
+        await supabase.storage.from('documents').remove(childPaths);
       }
 
       const { error: deleteError } = await supabase
@@ -1022,6 +1153,7 @@ export function useSubsectionDetail() {
 
     // COC / document getters
     getSupabaseCocDocuments,
+    getSupabaseEvaluationDocuments,
     getSupabaseMeteringDocuments,
 
     // Metering
@@ -1099,6 +1231,7 @@ export function useSubsectionDetail() {
     handleDeleteCategory,
     handleDocumentUpload,
     handleDeleteDocument,
+    handleUploadEvaluationReport,
     handleDownloadDocument,
     handleFixCategories,
     handleCreateInspection,

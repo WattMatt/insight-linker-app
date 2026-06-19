@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeCocType, normalizeCocDocStatus, cocDocFails, rollupStatus, groupCocDocuments, toCocDoc, CocDoc,
+  isCocCertificateCategory,
 } from './cocHierarchy';
 
 const doc = (over: Partial<CocDoc>): CocDoc => ({
@@ -91,5 +92,20 @@ describe('toCocDoc', () => {
     const d = toCocDoc({ id: '1', file_name: 'c.pdf', file_url: 'u', coc_number: 'COC-1',
       coc_issue_date: '2025-01-01', coc_expiry_date: null, coc_type: 'initial', coc_status: 'approved' });
     expect(d).toMatchObject({ id: '1', cocType: 'Initial', cocNumber: 'COC-1', cocStatus: 'Pass' });
+  });
+});
+
+describe('isCocCertificateCategory', () => {
+  it('accepts the COC certificate category', () => {
+    expect(isCocCertificateCategory('01 COC')).toBe(true);
+  });
+  it("rejects the evaluation-reports category (contains 'report')", () => {
+    expect(isCocCertificateCategory('07 COC Evaluation Reports')).toBe(false);
+  });
+  it('rejects the old validation-reports category', () => {
+    expect(isCocCertificateCategory('COC Validation Reports')).toBe(false);
+  });
+  it('rejects unrelated categories', () => {
+    expect(isCocCertificateCategory('04 Metering')).toBe(false);
   });
 });

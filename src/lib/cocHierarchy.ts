@@ -1,3 +1,14 @@
+/**
+ * True for COC *certificate* categories only. Mirrors the SQL roll-up filter
+ * (`name ILIKE '%coc%' AND NOT ILIKE '%validation%' AND NOT ILIKE '%report%'`),
+ * so evaluation reports (category "… Evaluation Reports") are excluded from both
+ * the COC list and the compliance roll-up.
+ */
+export function isCocCertificateCategory(name: string): boolean {
+  const n = (name ?? '').toLowerCase();
+  return n.includes('coc') && !n.includes('validation') && !n.includes('report');
+}
+
 export type CocType = 'Initial' | 'Supplementary' | 'Temporary';
 export type CocDocStatus = 'Pass' | 'Fail' | 'Pending' | 'Missing';
 

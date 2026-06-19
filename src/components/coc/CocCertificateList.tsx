@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Eye, Download, Trash2, Check, Loader2 } from "lucide-react";
+import { Eye, Download, Trash2, Check, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { toCocDoc, groupCocDocuments, cocDocFails, CocDoc, CocType } from "@/lib/cocHierarchy";
@@ -11,11 +11,14 @@ import type { SupabaseDocument } from "@/views/subsection-detail/types";
 
 interface Props {
   cocDocuments: SupabaseDocument[];
+  evaluationDocuments: SupabaseDocument[];
   deletingDocumentId: string | null;
+  uploadingFile: boolean;
   onSaved: () => void; // call fetchSupabaseDocuments + refetchSubsection
   setPreviewDocument: (doc: { file_name: string; file_url: string } | null) => void;
   handleDownloadDocument: (url: string, fileName: string) => void;
   setDeleteDocumentId: (id: string | null) => void;
+  onUploadEvaluationReport: (parentCoc: { id: string; coc_number: string | null }, file: File) => Promise<void>;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -99,6 +102,51 @@ function CocRow({ raw, isInitial, ...p }: { raw: SupabaseDocument; isInitial: bo
           </Select>
         </div>
       </div>
+      {/* Evaluation report (supporting documentation — does not gate compliance) */}
+      {(() => {
+        const evalDoc = p.evaluationDocuments.find(e => e.parent_document_id === raw.id);
+        if (evalDoc) {
+          return (
+            <div className="rounded-md border bg-background px-3 py-2 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-xs font-medium text-muted-foreground">Evaluation report</span>
+                <div className="flex items-center gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => p.setPreviewDocument({ file_name: evalDoc.file_name, file_url: evalDoc.file_url })} title="Preview evaluation report"><Eye className="h-4 w-4" /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => p.handleDownloadDocument(evalDoc.file_url, evalDoc.file_name)} title="Download evaluation report"><Download className="h-4 w-4" /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => p.setDeleteDocumentId(evalDoc.id)} disabled={p.deletingDocumentId === evalDoc.id}>
+                    {p.deletingDocumentId === evalDoc.id ? <Loader2 className="h-4 w-4 animate-spin text-destructive" /> : <Trash2 className="h-4 w-4 text-destructive" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-sm truncate">{evalDoc.file_name}</span>
+                <EvalVerdict raw={evalDoc} onSaved={p.onSaved} />
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="rounded-md border border-dashed bg-background px-3 py-2">
+            <label className="flex items-center justify-between gap-2 cursor-pointer">
+              <span className="text-xs text-muted-foreground">No evaluation report yet</span>
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                <Upload className="h-4 w-4" /> Upload evaluation report
+              </span>
+              <input
+                type="file"
+                className="hidden"
+                accept=".html,.htm,.pdf,.doc,.docx,.jpg,.jpeg,.png"
+                disabled={p.uploadingFile}
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (f) { await p.onUploadEvaluationReport({ id: raw.id, coc_number: number.trim() || d.cocNumber || null }, f); }
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+        );
+      })()}
       <div className="flex justify-end">
         {needsSave ? (
           <Button size="sm" onClick={save} disabled={saving}>
@@ -110,6 +158,43 @@ function CocRow({ raw, isInitial, ...p }: { raw: SupabaseDocument; isInitial: bo
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+function EvalVerdict({ raw, onSaved }: { raw: SupabaseDocument; onSaved: () => void }) {
+  const initial = ((): "Pass" | "Fail" | "Pending" => {
+    const s = (raw.coc_status ?? "").toLowerCase();
+    if (s === "pass" || s === "approved" || s === "valid") return "Pass";
+    if (s === "fail" || s === "failed" || s === "rejected") return "Fail";
+    return "Pending";
+  })();
+  const [status, setStatus] = useState<"Pass" | "Fail" | "Pending">(initial);
+  const [saving, setSaving] = useState(false);
+  const changed = status !== initial;
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase.from("subsection_documents").update({ coc_status: status }).eq("id", raw.id);
+    setSaving(false);
+    if (error) { toast.error(`Failed to save: ${error.message}`); return; }
+    toast.success("Evaluation verdict saved");
+    onSaved();
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <Select value={status} onValueChange={(v) => setStatus(v as "Pass" | "Fail" | "Pending")}>
+        <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="Pending">Pending</SelectItem>
+          <SelectItem value="Pass">Pass</SelectItem>
+          <SelectItem value="Fail">Fail</SelectItem>
+        </SelectContent>
+      </Select>
+      {changed ? (
+        <Button size="sm" onClick={save} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}</Button>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600"><Check className="h-4 w-4" /> Saved</span>
+      )}
     </div>
   );
 }

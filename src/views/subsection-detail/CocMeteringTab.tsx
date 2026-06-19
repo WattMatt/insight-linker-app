@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CocCertificateList } from "@/components/coc/CocCertificateList";
 import { useSearchParams } from "@/lib/navigation";
+import { extractCocNumber } from "@/lib/cocFilename";
 import type { SubsectionData, SupabaseDocument, DocumentCategory } from "./types";
 
 interface CocMeteringTabProps {
@@ -30,7 +31,9 @@ interface CocMeteringTabProps {
   setCtRatio: (v: string) => void;
   saving: boolean;
   getSupabaseCocDocuments: () => SupabaseDocument[];
+  getSupabaseEvaluationDocuments: () => SupabaseDocument[];
   getSupabaseMeteringDocuments: () => SupabaseDocument[];
+  onUploadEvaluationReport: (parentCoc: { id: string; coc_number: string | null }, file: File) => Promise<void>;
   handleDownloadDocument: (url: string, fileName: string) => void;
   handleSaveMeteringDetails: () => void;
   fetchSupabaseDocuments: () => void;
@@ -55,7 +58,9 @@ export function CocMeteringTab({
   setCtRatio,
   saving,
   getSupabaseCocDocuments,
+  getSupabaseEvaluationDocuments,
   getSupabaseMeteringDocuments,
+  onUploadEvaluationReport,
   handleDownloadDocument,
   handleSaveMeteringDetails,
   fetchSupabaseDocuments,
@@ -98,11 +103,14 @@ export function CocMeteringTab({
           {/* Per-document COC capture: Initial + supplementaries, each with a Pass/Fail */}
           <CocCertificateList
             cocDocuments={getSupabaseCocDocuments()}
+            evaluationDocuments={getSupabaseEvaluationDocuments()}
             deletingDocumentId={deletingDocumentId}
+            uploadingFile={uploadingFile}
             onSaved={() => { fetchSupabaseDocuments(); refetchSubsection(); }}
             setPreviewDocument={setPreviewDocument}
             handleDownloadDocument={handleDownloadDocument}
             setDeleteDocumentId={setDeleteDocumentId}
+            onUploadEvaluationReport={onUploadEvaluationReport}
           />
 
           {/* Upload New COC */}
@@ -149,7 +157,10 @@ export function CocMeteringTab({
 
                         const timestamp = Date.now();
                         const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-                        const fileName = `${subsectionId}/${cocCategory.name}/${timestamp}-${sanitizedFileName}`;
+                        // Per-COC folder (certificate + its evaluation reports grouped together).
+                        const cocNumber = extractCocNumber(file.name);
+                        const folderKey = (cocNumber || `${timestamp}`).replace(/[^a-zA-Z0-9.-]/g, '_');
+                        const fileName = `${subsectionId}/COC/${folderKey}/${timestamp}-${sanitizedFileName}`;
 
                         const { data: uploadData, error: uploadError } = await supabase.storage
                           .from('documents')
@@ -175,7 +186,9 @@ export function CocMeteringTab({
                             file_name: file.name,
                             file_url: urlData.publicUrl,
                             file_size: file.size,
-                            uploaded_by: user.id
+                            uploaded_by: user.id,
+                            coc_number: cocNumber,
+                            coc_status: 'Pending',
                           })
                           .select('id')
                           .single();
