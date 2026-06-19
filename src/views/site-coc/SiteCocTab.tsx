@@ -12,7 +12,7 @@ import { VerificationSubTab } from "./VerificationSubTab";
 import { ReportSubTab } from "./ReportSubTab";
 import { SiteCocLoadCard } from "./SiteCocLoadCard";
 
-export function SiteCocTab({ siteId, siteName }: { siteId: string | undefined; siteName: string }) {
+export function SiteCocTab({ siteId, siteName, clientName, siteAddress }: { siteId: string | undefined; siteName: string; clientName?: string | null; siteAddress?: string | null }) {
   const { schedule, certificates, batch, subsections, loading, refetch, resolveShop } = useSiteCoc(siteId);
   const { importing, runImport } = useSiteCocImport(siteId, refetch);
   const schedRef = useRef<HTMLInputElement>(null);
@@ -65,7 +65,7 @@ export function SiteCocTab({ siteId, siteName }: { siteId: string | undefined; s
         <TabsContent value="schedule"><Card><CardContent className="pt-4">{loading ? "Loading…" : <ScheduleSubTab rows={schedule} subsections={subsections} onResolve={resolveShop} />}</CardContent></Card></TabsContent>
         <TabsContent value="certificates"><Card><CardContent className="pt-4">{loading ? "Loading…" : <CertificatesSubTab rows={certificates} />}</CardContent></Card></TabsContent>
         <TabsContent value="verification"><Card><CardContent className="pt-4">{loading ? "Loading…" : <VerificationSubTab rows={certificates} />}</CardContent></Card></TabsContent>
-        <TabsContent value="report"><Card><CardContent className="pt-4"><ReportSubTab siteName={siteName} schedule={schedule} certificates={certificates} batch={batch} subsections={subsections} /></CardContent></Card></TabsContent>
+        <TabsContent value="report"><Card><CardContent className="pt-4"><ReportSubTab siteName={siteName} schedule={schedule} certificates={certificates} batch={batch} subsections={subsections} clientName={clientName} siteAddress={siteAddress} /></CardContent></Card></TabsContent>
       </Tabs>
     </div>
   );

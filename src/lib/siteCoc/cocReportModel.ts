@@ -13,7 +13,9 @@ export interface ReportTenant {
 }
 export interface CocReportModel {
   siteName: string; generatedAt: string; lastImport: string | null;
+  cover: { clientName: string | null; address: string | null };
   summary: { required: number; clear: number; noCoc: number; failed: number; compliantPct: number };
+  kpis: { cocCoveragePct: number; evalCoveragePct: number; verdict: { pass: number; fail: number; review: number; cv: number; pending: number }; outstanding: number };
   issues: { noCoc: { name: string }[]; failed: { name: string; certNo: string; failedRules: string[] }[] };
   tenants: ReportTenant[];
 }
@@ -21,7 +23,7 @@ export interface CocReportModel {
 interface SubRow { id: string; name: string; tenant_name: string | null; is_coc_required: boolean | null }
 interface CertRow { subsection_id: string | null; cert_no: string; cert_type: string; verdict: string; rules: Record<string, string> | null; issued_date: string | null; coc_document_id: string | null; eval_document_id: string | null }
 interface SchedRow { subsection_id: string | null; shop_no_raw: string; initial_cert_nos: string; supplementary_cert_nos: string }
-export interface BuildInput { siteName: string; generatedAt: string; lastImport: string | null; subsections: SubRow[]; certificates: CertRow[]; schedule: SchedRow[]; }
+export interface BuildInput { siteName: string; generatedAt: string; lastImport: string | null; clientName?: string | null; address?: string | null; subsections: SubRow[]; certificates: CertRow[]; schedule: SchedRow[]; }
 
 export function verdictKind(verdict: string, rules: Record<string, string> | null): VerdictKind {
   const v = (verdict || "").toUpperCase();
@@ -85,9 +87,21 @@ export function buildCocReportModel(input: BuildInput): CocReportModel {
   const clear = tenants.filter(t => !t.noCoc && !t.certs.some(c => c.verdictKind === "fail")).length;
   const issuesFailed = failed.flatMap(t => t.certs.filter(c => c.verdictKind === "fail").map(c => ({ name: t.name, certNo: c.certNo, failedRules: c.failedRules })));
 
+  const pct = (n: number) => required.length ? Math.round((n / required.length) * 100) : 0;
+  const verdict = { pass: 0, fail: 0, review: 0, cv: 0, pending: 0 };
+  for (const t of tenants) for (const c of t.certs) verdict[c.verdictKind] += 1;
+  const kpis = {
+    cocCoveragePct: pct(tenants.filter(t => t.coverage.hasCoc).length),
+    evalCoveragePct: pct(tenants.filter(t => t.coverage.hasEval).length),
+    verdict,
+    outstanding: tenants.reduce((n, t) => n + t.actions.length, 0),
+  };
+
   return {
     siteName: input.siteName, generatedAt: input.generatedAt, lastImport: input.lastImport,
+    cover: { clientName: input.clientName ?? null, address: input.address ?? null },
     summary: { required: required.length, clear, noCoc: noCoc.length, failed: failed.length, compliantPct: required.length ? Math.round((clear / required.length) * 100) : 0 },
+    kpis,
     issues: { noCoc: noCoc.map(t => ({ name: t.name })), failed: issuesFailed },
     tenants,
   };

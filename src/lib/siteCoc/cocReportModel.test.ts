@@ -47,3 +47,17 @@ describe("buildCocReportModel", () => {
     expect(m.tenants.find(t => t.name === "STORE")).toBeUndefined();
   });
 });
+
+describe("buildCocReportModel KPIs + cover", () => {
+  const m = buildCocReportModel({ siteName: "S", generatedAt: "d", lastImport: null, clientName: "Acme", address: "1 St", subsections: subs, certificates: certs, schedule });
+  it("cover carries client + address", () => {
+    expect(m.cover).toEqual({ clientName: "Acme", address: "1 St" });
+  });
+  it("kpis compute coverage, verdict, outstanding", () => {
+    expect(m.kpis.cocCoveragePct).toBe(50);   // ACK has COC; TELKOM none → 1 of 2
+    expect(m.kpis.evalCoveragePct).toBe(50);   // ACK has eval e1
+    expect(m.kpis.verdict.fail).toBe(1);
+    expect(m.kpis.verdict.pass).toBe(1);
+    expect(m.kpis.outstanding).toBe(2);        // TELKOM no-COC + ACK fail
+  });
+});
