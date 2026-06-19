@@ -65,7 +65,7 @@ export function SiteCocTab({ siteId, siteName }: { siteId: string | undefined; s
         <TabsContent value="schedule"><Card><CardContent className="pt-4">{loading ? "Loading…" : <ScheduleSubTab rows={schedule} subsections={subsections} onResolve={resolveShop} />}</CardContent></Card></TabsContent>
         <TabsContent value="certificates"><Card><CardContent className="pt-4">{loading ? "Loading…" : <CertificatesSubTab rows={certificates} />}</CardContent></Card></TabsContent>
         <TabsContent value="verification"><Card><CardContent className="pt-4">{loading ? "Loading…" : <VerificationSubTab rows={certificates} />}</CardContent></Card></TabsContent>
-        <TabsContent value="report"><Card><CardContent className="pt-4"><ReportSubTab siteName={siteName} schedule={schedule} certificates={certificates} batch={batch} /></CardContent></Card></TabsContent>
+        <TabsContent value="report"><Card><CardContent className="pt-4"><ReportSubTab siteName={siteName} schedule={schedule} certificates={certificates} batch={batch} subsections={subsections} /></CardContent></Card></TabsContent>
       </Tabs>
     </div>
   );
