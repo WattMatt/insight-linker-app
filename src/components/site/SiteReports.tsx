@@ -46,7 +46,8 @@ const REPORT_CATEGORIES = [
     'Compliance Reports',
     'Floor Plan Reports',
     'Asset Verification Reports',
-    'COC Validation Reports'
+    'COC Validation Reports',
+    'Site COC Reports'
 ];
 
 export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false }) => {
