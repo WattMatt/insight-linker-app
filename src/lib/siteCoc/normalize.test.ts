@@ -7,6 +7,10 @@ describe("normShop", () => {
     expect(normShop("  shop   002 ")).toBe("SHOP 002");
   });
   it("handles null", () => expect(normShop(null)).toBe(""));
+  it("normalises & to AND so 'FISH & CHIPS' == 'FISH AND CHIPS'", () => {
+    expect(normShop("FISH & CHIPS")).toBe("FISH AND CHIPS");
+    expect(normShop("A&B")).toBe("A AND B");
+  });
 });
 
 describe("normCert", () => {
