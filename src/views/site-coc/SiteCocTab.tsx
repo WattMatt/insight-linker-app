@@ -53,7 +53,7 @@ export function SiteCocTab({ siteId, siteName }: { siteId: string | undefined; s
         </CardContent>
       </Card>
 
-      <SiteCocLoadCard siteId={siteId} onDone={refetch} />
+      <SiteCocLoadCard siteId={siteId} subsections={subsections} onDone={refetch} />
 
       <Tabs defaultValue="schedule">
         <TabsList>
