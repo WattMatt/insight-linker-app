@@ -33,7 +33,7 @@ export interface ParsedCertificate {
   notes: string;
 }
 
-export interface SubsectionLite { id: string; name: string; }
+export interface SubsectionLite { id: string; name: string; tenant_name?: string | null; }
 
 export interface ImportSummary {
   shops_imported: number;

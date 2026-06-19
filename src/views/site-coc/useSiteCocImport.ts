@@ -34,7 +34,7 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
       const merged = mergeCertificates(detail, verification);
 
       const { data: subs, error: subsErr } = await supabase
-        .from("subsections").select("id, name").eq("site_id", siteId);
+        .from("subsections").select("id, name, tenant_name").eq("site_id", siteId);
       if (subsErr) throw subsErr;
       const subsLite: SubsectionLite[] = (subs ?? []) as SubsectionLite[];
 
@@ -46,7 +46,7 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
       if (batchErr || !batch) throw new Error(`Could not start import batch: ${batchErr?.message}`);
 
       const schedRows = assembleScheduleRows(schedule, subsLite, siteId, batch.id);
-      const certRows = assembleCertificateRows(merged, subsLite, siteId, batch.id);
+      const certRows = assembleCertificateRows(merged, schedRows, siteId, batch.id);
       const summary = summarize(schedRows, certRows);
 
       // Replace the site's set: delete prior rows (not this batch's), then insert the new batch.
