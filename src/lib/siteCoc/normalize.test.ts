@@ -10,8 +10,10 @@ describe("normShop", () => {
 });
 
 describe("normCert", () => {
-  it("uppercases and strips spaces", () => {
+  it("uppercases and strips spaces and hyphens", () => {
     expect(normCert("B 1612744")).toBe("B1612744");
+    expect(normCert("B-1612744")).toBe("B1612744");
+    expect(normCert("b1612744")).toBe("B1612744");
   });
 });
 
