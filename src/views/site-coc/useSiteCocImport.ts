@@ -3,7 +3,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { parseDbSchedule, parseCertificateDetail, parseVerification, mergeCertificates } from "@/lib/siteCoc/parseWorkbooks";
 import { assembleScheduleRows, assembleCertificateRows, summarize } from "@/lib/siteCoc/ingest";
-import { normCert } from "@/lib/siteCoc/normalize";
+import { applyPriorMatches } from "@/lib/siteCoc/reimport";
+import { normCert, normShop } from "@/lib/siteCoc/normalize";
 import type { SubsectionLite } from "@/lib/siteCoc/types";
 
 async function sheetGrid(file: File, sheetName: string): Promise<unknown[][] | null> {
@@ -51,7 +52,18 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
         .select("id").single();
       if (batchErr || !batch) throw new Error(`Could not start import batch: ${batchErr?.message}`);
 
-      const schedRows = assembleScheduleRows(schedule, subsLite, siteId, batch.id);
+      // Snapshot prior resolutions (manual + auto) BEFORE anything is deleted, so a re-import does
+      // not throw away matching work. Carry them onto rows the new auto-matcher leaves unmatched.
+      const { data: priorRows } = await supabase
+        .from("coc_db_schedule").select("shop_no_raw, subsection_id").eq("site_id", siteId);
+      const priorMap = new Map<string, string>();
+      for (const p of priorRows ?? []) {
+        if (p.subsection_id) priorMap.set(normShop(p.shop_no_raw), p.subsection_id);
+      }
+      const validSubIds = new Set(subsLite.map(s => s.id));
+
+      const autoRows = assembleScheduleRows(schedule, subsLite, siteId, batch.id);
+      const schedRows = applyPriorMatches(autoRows, priorMap, validSubIds);
       const certRows = assembleCertificateRows(merged, schedRows, siteId, batch.id);
       const summary = summarize(schedRows, certRows);
 

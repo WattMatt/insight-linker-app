@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { normShop } from "@/lib/siteCoc/normalize";
+import { matchSubsection } from "@/lib/siteCoc/ingest";
 
 export interface CocScheduleRow {
   id: string; subsection_id: string | null; shop_no_raw: string; trading_name: string;
@@ -47,13 +49,37 @@ export function useSiteCoc(siteId: string | undefined) {
 
   useEffect(() => { refetch(); }, [refetch]);
 
-  /** Manually map an unmatched schedule shop to a subsection: stamps the schedule row + its certificates. */
+  /**
+   * Stamp one shop→subsection match: the schedule row (by id) and its certificates (by id, matched
+   * against the loaded set via normalised shop — not a raw shop_no_raw equality). Does NOT refetch,
+   * so callers can batch. */
+  const stampMatch = useCallback(async (scheduleRowId: string, shopNoRaw: string, subsectionId: string) => {
+    await supabase.from("coc_db_schedule").update({ subsection_id: subsectionId, match_status: "matched" }).eq("id", scheduleRowId);
+    const target = normShop(shopNoRaw);
+    const certIds = certificates.filter(c => normShop(c.shop_no_raw) === target).map(c => c.id);
+    if (certIds.length) {
+      await supabase.from("coc_certificates").update({ subsection_id: subsectionId, match_status: "matched" }).in("id", certIds);
+    }
+  }, [certificates]);
+
+  /** Manually map an unmatched schedule shop to a subsection. */
   const resolveShop = useCallback(async (scheduleRowId: string, shopNoRaw: string, subsectionId: string) => {
     if (!siteId) return;
-    await supabase.from("coc_db_schedule").update({ subsection_id: subsectionId, match_status: "matched" }).eq("id", scheduleRowId);
-    await supabase.from("coc_certificates").update({ subsection_id: subsectionId, match_status: "matched" }).eq("site_id", siteId).eq("shop_no_raw", shopNoRaw);
+    await stampMatch(scheduleRowId, shopNoRaw, subsectionId);
     await refetch();
-  }, [siteId, refetch]);
+  }, [siteId, stampMatch, refetch]);
 
-  return { schedule, certificates, batch, subsections, loading, refetch, resolveShop };
+  /** Non-destructive: run the auto-matcher over currently-unmatched rows and stamp the hits. Returns the count. */
+  const rerunAutoMatch = useCallback(async (): Promise<number> => {
+    if (!siteId) return 0;
+    const plan = schedule
+      .filter(r => !r.subsection_id)
+      .map(r => ({ row: r, sub: matchSubsection({ shop_no_raw: r.shop_no_raw, trading_name: r.trading_name }, subsections) }))
+      .filter((p): p is { row: CocScheduleRow; sub: string } => !!p.sub);
+    for (const p of plan) await stampMatch(p.row.id, p.row.shop_no_raw, p.sub);
+    if (plan.length) await refetch();
+    return plan.length;
+  }, [siteId, schedule, subsections, stampMatch, refetch]);
+
+  return { schedule, certificates, batch, subsections, loading, refetch, resolveShop, rerunAutoMatch };
 }
