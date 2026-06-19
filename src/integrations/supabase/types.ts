@@ -163,6 +163,8 @@ export type Database = {
           verdict: string | null
           reasons: string | null
           rules: Json
+          coc_document_id: string | null
+          eval_document_id: string | null
           notes: string | null
           match_status: string
           created_at: string
@@ -187,6 +189,8 @@ export type Database = {
           verdict?: string | null
           reasons?: string | null
           rules?: Json
+          coc_document_id?: string | null
+          eval_document_id?: string | null
           notes?: string | null
           match_status?: string
           created_at?: string
@@ -211,6 +215,8 @@ export type Database = {
           verdict?: string | null
           reasons?: string | null
           rules?: Json
+          coc_document_id?: string | null
+          eval_document_id?: string | null
           notes?: string | null
           match_status?: string
           created_at?: string
