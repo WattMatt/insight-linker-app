@@ -2139,6 +2139,7 @@ export type Database = {
           file_size: number | null
           file_url: string
           id: string
+          parent_document_id: string | null
           subsection_id: string
           uploaded_at: string
           uploaded_by: string | null
@@ -2154,6 +2155,7 @@ export type Database = {
           file_size?: number | null
           file_url: string
           id?: string
+          parent_document_id?: string | null
           subsection_id: string
           uploaded_at?: string
           uploaded_by?: string | null
@@ -2169,6 +2171,7 @@ export type Database = {
           file_size?: number | null
           file_url?: string
           id?: string
+          parent_document_id?: string | null
           subsection_id?: string
           uploaded_at?: string
           uploaded_by?: string | null
@@ -2179,6 +2182,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "document_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subsection_documents_parent_document_id_fkey"
+            columns: ["parent_document_id"]
+            isOneToOne: false
+            referencedRelation: "subsection_documents"
             referencedColumns: ["id"]
           },
           {
