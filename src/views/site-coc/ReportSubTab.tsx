@@ -8,6 +8,7 @@ import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSave
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { buildCocReportModel } from "@/lib/siteCoc/cocReportModel";
 import { buildSiteCocReportDocDef } from "@/lib/siteCoc/siteCocReport";
+import { mergeGuidelineAfterCover } from "@/lib/siteCoc/mergeReportGuideline";
 import type { CocScheduleRow, CocCertRow, CocBatch, SubsectionOption } from "./useSiteCoc";
 
 interface SavedReport { id: string; file_name: string; file_url: string; created_at: string; }
@@ -40,7 +41,20 @@ export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, 
   const generate = async () => {
     setGenerating(true);
     try {
-      const blob = await generatePdfBlob(buildSiteCocReportDocDef(buildModel()));
+      const reportBlob = await generatePdfBlob(buildSiteCocReportDocDef(buildModel()));
+      let blob = reportBlob;
+      try {
+        const [reportBytes, guideRes] = await Promise.all([
+          reportBlob.arrayBuffer(),
+          fetch("/reference/coc-verification-guideline.pdf"),
+        ]);
+        if (guideRes.ok) {
+          const merged = await mergeGuidelineAfterCover(reportBytes, await guideRes.arrayBuffer());
+          blob = new Blob([merged], { type: "application/pdf" });
+        }
+      } catch (e) {
+        if (process.env.NODE_ENV === "development") console.error("Guideline merge skipped:", e);
+      }
       const url = URL.createObjectURL(blob);
       setPreview({ url, name: `${siteName} - Site COC Report - ${new Date().toISOString().slice(0, 10)}.pdf`, blob, isObjectUrl: true });
     } catch (e: any) {
@@ -66,7 +80,7 @@ export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">Generate the inclusive site COC report, then preview, download, or save it to the site's documents.</p>
+        <p className="text-sm text-muted-foreground">Generate the inclusive site COC report (with the SANS 10142-1 verification guideline) — then preview, download, or save it to the site's documents.</p>
         <Button onClick={generate} disabled={generating || empty}>
           {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
           Generate report
