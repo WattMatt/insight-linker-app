@@ -236,7 +236,9 @@ const SubsectionDetail = () => {
             setCtRatio={hook.setCtRatio}
             saving={hook.saving}
             getSupabaseCocDocuments={hook.getSupabaseCocDocuments}
+            getSupabaseEvaluationDocuments={hook.getSupabaseEvaluationDocuments}
             getSupabaseMeteringDocuments={hook.getSupabaseMeteringDocuments}
+            onUploadEvaluationReport={hook.handleUploadEvaluationReport}
             handleDownloadDocument={hook.handleDownloadDocument}
             handleSaveMeteringDetails={hook.handleSaveMeteringDetails}
             fetchSupabaseDocuments={hook.fetchSupabaseDocuments}
