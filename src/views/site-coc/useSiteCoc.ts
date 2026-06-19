@@ -20,7 +20,7 @@ export interface CocBatch {
   matched_count: number; unmatched_count: number;
 }
 
-export interface SubsectionOption { id: string; name: string; tenant_name: string | null; }
+export interface SubsectionOption { id: string; name: string; tenant_name: string | null; is_coc_required: boolean | null; }
 
 export function useSiteCoc(siteId: string | undefined) {
   const [schedule, setSchedule] = useState<CocScheduleRow[]>([]);
@@ -36,7 +36,7 @@ export function useSiteCoc(siteId: string | undefined) {
       supabase.from("coc_db_schedule").select("*").eq("site_id", siteId).order("shop_no_raw"),
       supabase.from("coc_certificates").select("*").eq("site_id", siteId).order("shop_no_raw"),
       supabase.from("coc_import_batches").select("*").eq("site_id", siteId).order("created_at", { ascending: false }).limit(1),
-      supabase.from("subsections").select("id, name, tenant_name").eq("site_id", siteId).is("deleted_at", null).order("name"),
+      supabase.from("subsections").select("id, name, tenant_name, is_coc_required").eq("site_id", siteId).is("deleted_at", null).order("name"),
     ]);
     setSchedule((s.data ?? []) as unknown as CocScheduleRow[]);
     setCertificates((c.data ?? []) as unknown as CocCertRow[]);
