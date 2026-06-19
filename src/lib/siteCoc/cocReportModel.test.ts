@@ -10,6 +10,10 @@ describe("verdictKind", () => {
     expect(verdictKind("", { C1: "CV" })).toBe("cv");
     expect(verdictKind("", {})).toBe("pending");
   });
+  it("classifies an unknown non-empty verdict as review, not pass (safe default)", () => {
+    expect(verdictKind("MISSING", {})).toBe("review");
+    expect(verdictKind("INCOMPLETE", {})).toBe("review");
+  });
 });
 
 const subs = [

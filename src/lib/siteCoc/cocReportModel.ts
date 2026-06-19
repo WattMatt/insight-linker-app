@@ -33,7 +33,8 @@ export function verdictKind(verdict: string, rules: Record<string, string> | nul
   if (v.startsWith("REVIEW")) return "review";
   if (v.startsWith("CV") || vals.includes("CV")) return "cv";
   if (!v.trim()) return "pending";
-  return "pass";
+  // Unknown, non-empty verdict text → treat as "review" (needs a human), never silently "pass".
+  return "review";
 }
 
 const failedRulesOf = (rules: Record<string, string> | null) =>
