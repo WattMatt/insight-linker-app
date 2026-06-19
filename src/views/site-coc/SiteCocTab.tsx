@@ -2,8 +2,9 @@ import { useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Loader2 } from "lucide-react";
+import { Upload, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { liveMatchCounts } from "@/lib/siteCoc/coverage";
 import { useSiteCoc } from "./useSiteCoc";
 import { useSiteCocImport } from "./useSiteCocImport";
 import { ScheduleSubTab } from "./ScheduleSubTab";
@@ -13,12 +14,15 @@ import { ReportSubTab } from "./ReportSubTab";
 import { SiteCocLoadCard } from "./SiteCocLoadCard";
 
 export function SiteCocTab({ siteId, siteName, clientName, siteAddress }: { siteId: string | undefined; siteName: string; clientName?: string | null; siteAddress?: string | null }) {
-  const { schedule, certificates, batch, subsections, loading, refetch, resolveShop } = useSiteCoc(siteId);
+  const { schedule, certificates, batch, subsections, loading, refetch, resolveShop, rerunAutoMatch } = useSiteCoc(siteId);
   const { importing, runImport } = useSiteCocImport(siteId, refetch);
   const schedRef = useRef<HTMLInputElement>(null);
   const verifRef = useRef<HTMLInputElement>(null);
   const [schedFile, setSchedFile] = useState<File | null>(null);
   const [verifFile, setVerifFile] = useState<File | null>(null);
+  const [rerunning, setRerunning] = useState(false);
+
+  const counts = liveMatchCounts(schedule);
 
   const go = async () => {
     if (!schedFile || !verifFile) { toast.error("Select both the DB Schedule and Verification workbooks."); return; }
@@ -26,6 +30,14 @@ export function SiteCocTab({ siteId, siteName, clientName, siteAddress }: { site
     setSchedFile(null); setVerifFile(null);
     if (schedRef.current) schedRef.current.value = "";
     if (verifRef.current) verifRef.current.value = "";
+  };
+
+  const onRerun = async () => {
+    setRerunning(true);
+    const n = await rerunAutoMatch();
+    setRerunning(false);
+    if (n) toast.success(`Matched ${n} more shop${n === 1 ? "" : "s"}.`);
+    else toast.info("No new auto-matches found — the rest need manual assignment.");
   };
 
   return (
@@ -41,13 +53,19 @@ export function SiteCocTab({ siteId, siteName, clientName, siteAddress }: { site
               <input ref={verifRef} type="file" accept=".xlsx" className="mt-1 block w-full text-sm" onChange={e => setVerifFile(e.target.files?.[0] ?? null)} />
             </label>
           </div>
-          <Button onClick={go} disabled={importing || !schedFile || !verifFile}>
-            {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-            {importing ? "Importing..." : "Import (replaces this site's COC data)"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={go} disabled={importing || !schedFile || !verifFile}>
+              {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+              {importing ? "Importing..." : "Import (replaces this site's COC data)"}
+            </Button>
+            <Button variant="outline" onClick={onRerun} disabled={rerunning || counts.unmatched === 0}>
+              {rerunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              Re-run auto-match
+            </Button>
+          </div>
           {batch && (
             <p className="text-xs text-muted-foreground">
-              Last import: {new Date(batch.created_at).toLocaleString()} · {batch.certs_imported} certs · {batch.shops_imported} shops · {batch.unmatched_count} unmatched
+              Last import: {new Date(batch.created_at).toLocaleString()} · {batch.certs_imported} certs · {batch.shops_imported} shops · {counts.matched} matched · {counts.unmatched} unmatched
             </p>
           )}
         </CardContent>

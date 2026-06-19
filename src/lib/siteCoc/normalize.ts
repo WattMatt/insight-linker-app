@@ -1,5 +1,6 @@
 export function normShop(s: string | null | undefined): string {
-  return (s ?? "").toString().toUpperCase().replace(/[\s\-_]+/g, " ").trim();
+  // "&" -> "AND" (both sides) so "FISH & CHIPS" matches subsection "FISH AND CHIPS".
+  return (s ?? "").toString().toUpperCase().replace(/&/g, " AND ").replace(/[\s\-_]+/g, " ").trim();
 }
 
 export function normCert(s: string | null | undefined): string {

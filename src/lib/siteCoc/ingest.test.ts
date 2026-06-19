@@ -33,6 +33,33 @@ describe("matchSubsection", () => {
   it("returns null when nothing matches", () => {
     expect(matchSubsection({ shop_no_raw: "SHOP 999", trading_name: "UNKNOWN STORE" }, subs)).toBeNull();
   });
+
+  // --- robustness: longest-match-wins, &<->AND, word-boundary guard ---
+  const subs2: SubsectionLite[] = [
+    { id: "shoprite", name: "SHOPRITE", tenant_name: "SHOPRITE" },
+    { id: "shopriteLiq", name: "SHOPRITE LIQUOR", tenant_name: "SHOPRITE LIQUOR" },
+    { id: "fish", name: "FISH AND CHIPS", tenant_name: "FISH AND CHIPS" },
+    { id: "pep", name: "PEP", tenant_name: "PEP" },
+  ];
+  it("longest matched key wins over a shorter sibling (SHOPRITE LIQUOR SHOP)", () => {
+    expect(matchSubsection({ shop_no_raw: "SHOP 002", trading_name: "SHOPRITE LIQUOR SHOP" }, subs2)).toBe("shopriteLiq");
+  });
+  it("still resolves the plain SHOPRITE exactly (not the liquor sibling)", () => {
+    expect(matchSubsection({ shop_no_raw: "SHOP 050", trading_name: "SHOPRITE" }, subs2)).toBe("shoprite");
+  });
+  it("normalises & to AND when matching (FISH & CHIPS)", () => {
+    expect(matchSubsection({ shop_no_raw: "SHOP 013A", trading_name: "FISH & CHIPS CITY KAALFONTEIN" }, subs2)).toBe("fish");
+  });
+  it("does not partial-word match (PEPPER STEAK must not hit PEP)", () => {
+    expect(matchSubsection({ shop_no_raw: "SHOP 200", trading_name: "PEPPER STEAK HOUSE" }, subs2)).toBeNull();
+  });
+  it("ambiguous tie at equal key length stays null", () => {
+    const tie: SubsectionLite[] = [
+      { id: "a", name: "ALPHA", tenant_name: "ALPHA" },
+      { id: "b", name: "OMEGA", tenant_name: "OMEGA" },
+    ];
+    expect(matchSubsection({ shop_no_raw: "X", trading_name: "ALPHA OMEGA STORE" }, tie)).toBeNull();
+  });
 });
 
 const schedRow = (over: Partial<ParsedScheduleRow>): ParsedScheduleRow => ({

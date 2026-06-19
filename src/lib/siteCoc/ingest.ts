@@ -9,12 +9,21 @@ function keysFor(...vals: (string | null | undefined)[]): string[] {
 
 const distinctIds = (subs: SubsectionLite[]) => Array.from(new Set(subs.map(s => s.id)));
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** True when `key` appears as a whole-word run inside `haystack` (both already normalised). */
+function wordRun(haystack: string, key: string): boolean {
+  return new RegExp(`(?:^|\\s)${escapeRegExp(key)}(?:$|\\s)`).test(haystack);
+}
+
 /**
  * Match a schedule shop to a subsection. Subsections may be named by shop code OR trading name,
  * so try both the row's Shop No and Trading Name against the subsection name AND tenant_name:
  *   1. exact (normalised) on any key pair;
- *   2. fall back to a "contains" match on the trading name vs name/tenant_name.
- * Returns the subsection id, or null when there is no unique match (ambiguous → manual resolve).
+ *   2. fall back to a whole-word "subsection key appears in the trading name" match, taking the
+ *      MOST SPECIFIC (longest matched key) subsection — so "SHOPRITE LIQUOR" beats "SHOPRITE".
+ * The word-boundary guard stops a short key (e.g. "PEP") matching inside an unrelated word
+ * ("PEPPER"). Returns the subsection id, or null when there is no unique match (manual resolve).
  */
 export function matchSubsection(row: { shop_no_raw: string; trading_name: string }, subs: SubsectionLite[]): string | null {
   const schedKeys = keysFor(row.shop_no_raw, row.trading_name);
@@ -27,13 +36,19 @@ export function matchSubsection(row: { shop_no_raw: string; trading_name: string
 
   // Contains fallback: trading name only (Shop No would falsely contains-match e.g. "ATM" subsections).
   const trade = normShop(row.trading_name);
-  if (trade.length >= 3) {
-    const contains = subs.filter(s =>
-      keysFor(s.name, s.tenant_name).some(k => k.length >= 3 && (k.includes(trade) || trade.includes(k))));
-    const ids = distinctIds(contains);
-    if (ids.length === 1) return ids[0];
+  if (trade.length < 3) return null;
+  const hits: { id: string; len: number }[] = [];
+  for (const s of subs) {
+    let best = 0;
+    for (const k of keysFor(s.name, s.tenant_name)) {
+      if (k.length >= 3 && wordRun(trade, k)) best = Math.max(best, k.length);
+    }
+    if (best) hits.push({ id: s.id, len: best });
   }
-  return null;
+  if (!hits.length) return null;
+  const maxLen = Math.max(...hits.map(h => h.len));
+  const top = Array.from(new Set(hits.filter(h => h.len === maxLen).map(h => h.id)));
+  return top.length === 1 ? top[0] : null;
 }
 
 export interface ScheduleInsertRow extends ParsedScheduleRow {

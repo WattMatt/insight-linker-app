@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { assignedSubsectionIds, unassignedCocRequired } from "./coverage";
+import { assignedSubsectionIds, unassignedCocRequired, liveMatchCounts } from "./coverage";
+
+describe("liveMatchCounts", () => {
+  it("counts matched (has subsection) vs unmatched from the current rows", () => {
+    expect(liveMatchCounts([{ subsection_id: "a" }, { subsection_id: null }, { subsection_id: "b" }]))
+      .toEqual({ matched: 2, unmatched: 1 });
+  });
+  it("handles an empty schedule", () => {
+    expect(liveMatchCounts([])).toEqual({ matched: 0, unmatched: 0 });
+  });
+});
 
 describe("assignedSubsectionIds", () => {
   it("collects non-null subsection ids", () => {
