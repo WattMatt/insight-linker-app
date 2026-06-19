@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { isSnagOpen } from "@/lib/subsectionStatus";
+import { isCocCertificateCategory } from "@/lib/cocHierarchy";
 import { isInspectionCompleted } from "@/lib/siteHealth";
 import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
 import type {
@@ -586,12 +587,9 @@ export function useSubsectionDetail() {
   };
 
   const getSupabaseCocDocuments = () => {
-    // COC certificate categories only — exclude "COC Validation Reports" (old engine output).
+    // COC certificate categories only — excludes validation/evaluation reports.
     const cocCatIds = documentCategories
-      .filter(cat => {
-        const n = cat.name.toLowerCase();
-        return n.includes('coc') && !n.includes('validation') && !n.includes('report');
-      })
+      .filter(cat => isCocCertificateCategory(cat.name))
       .map(cat => cat.id);
     if (cocCatIds.length === 0) return [];
     return supabaseDocuments.filter(doc => cocCatIds.includes(doc.category_id));
