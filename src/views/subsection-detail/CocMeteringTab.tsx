@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CocCertificateList } from "@/components/coc/CocCertificateList";
 import { useSearchParams } from "@/lib/navigation";
-import { extractCocNumber } from "@/lib/cocFilename";
+import { uploadCocCertificate } from "@/lib/coc/uploadCocFiles";
 import type { SubsectionData, SupabaseDocument, DocumentCategory } from "./types";
 
 interface CocMeteringTabProps {
@@ -136,71 +136,10 @@ export function CocMeteringTab({
 
                       try {
                         if (!file) { toast.error("No file selected"); return; }
-                        const maxSize = 50 * 1024 * 1024;
-                        if (file.size > maxSize) {
-                          toast.error(`File size exceeds maximum limit of 50MB. Selected file is ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
-                          return;
-                        }
-                        const allowedTypes = [
-                          'application/pdf',
-                          'application/msword',
-                          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                          'image/jpeg', 'image/jpg', 'image/png'
-                        ];
-                        if (!allowedTypes.includes(file.type)) {
-                          toast.error(`Invalid file type. Please upload PDF, DOC, DOCX, JPG, or PNG files only.`);
-                          return;
-                        }
-
                         setUploadingFile(true);
                         toast.info("Uploading COC document...");
-
-                        const timestamp = Date.now();
-                        const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-                        // Per-COC folder (certificate + its evaluation reports grouped together).
-                        const cocNumber = extractCocNumber(file.name);
-                        const folderKey = (cocNumber || `${timestamp}`).replace(/[^a-zA-Z0-9.-]/g, '_');
-                        const fileName = `${subsectionId}/COC/${folderKey}/${timestamp}-${sanitizedFileName}`;
-
-                        const { data: uploadData, error: uploadError } = await supabase.storage
-                          .from('documents')
-                          .upload(fileName, file);
-
-                        if (uploadError) {
-                          if (process.env.NODE_ENV === 'development') console.error("Storage upload error:", uploadError);
-                          throw new Error(`Upload failed: ${uploadError.message}`);
-                        }
-                        if (!uploadData?.path) throw new Error("Upload succeeded but no path returned");
-
-                        const { data: urlData } = supabase.storage.from('documents').getPublicUrl(uploadData.path);
-                        if (!urlData?.publicUrl) throw new Error("Failed to generate public URL for uploaded file");
-
-                        const { data: { user } } = await supabase.auth.getUser();
-                        if (!user) throw new Error("User not authenticated");
-
-                        const { error: insertError, data: newDoc } = await supabase
-                          .from('subsection_documents')
-                          .insert({
-                            subsection_id: subsectionId,
-                            category_id: cocCategory.id,
-                            file_name: file.name,
-                            file_url: urlData.publicUrl,
-                            file_size: file.size,
-                            uploaded_by: user.id,
-                            coc_number: cocNumber,
-                            coc_status: 'Pending',
-                          })
-                          .select('id')
-                          .single();
-
-                        if (insertError) {
-                          if (process.env.NODE_ENV === 'development') console.error("Database insert error:", insertError);
-                          throw new Error(`Failed to save document record: ${insertError.message}`);
-                        }
-                        if (!newDoc) throw new Error("Document saved but no record returned");
-
+                        await uploadCocCertificate({ subsectionId: subsectionId!, cocCategoryId: cocCategory.id, file });
                         toast.success("COC document uploaded successfully!");
-
                         setUploadCategoryId(null);
                         setUploadFile(null);
                         fetchSupabaseDocuments();
