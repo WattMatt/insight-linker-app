@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { parseDbSchedule, parseCertificateDetail, parseVerification, mergeCertificates } from "@/lib/siteCoc/parseWorkbooks";
 import { assembleScheduleRows, assembleCertificateRows, summarize } from "@/lib/siteCoc/ingest";
+import { normCert } from "@/lib/siteCoc/normalize";
 import type { SubsectionLite } from "@/lib/siteCoc/types";
 
 async function sheetGrid(file: File, sheetName: string): Promise<unknown[][] | null> {
@@ -33,6 +34,11 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
       const verification = verifGrid ? parseVerification(verifGrid) : [];
       const merged = mergeCertificates(detail, verification);
 
+      // Validate BEFORE anything destructive — a workbook that parses to nothing must not wipe the site.
+      if (schedule.length === 0 && merged.length === 0) {
+        throw new Error("No rows could be parsed from the workbooks — check the sheet names and format.");
+      }
+
       const { data: subs, error: subsErr } = await supabase
         .from("subsections").select("id, name, tenant_name").eq("site_id", siteId);
       if (subsErr) throw subsErr;
@@ -49,17 +55,51 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
       const certRows = assembleCertificateRows(merged, schedRows, siteId, batch.id);
       const summary = summarize(schedRows, certRows);
 
-      // Replace the site's set: delete prior rows (not this batch's), then insert the new batch.
-      await supabase.from("coc_db_schedule").delete().eq("site_id", siteId).neq("import_batch_id", batch.id);
-      await supabase.from("coc_certificates").delete().eq("site_id", siteId).neq("import_batch_id", batch.id);
-
+      // Insert the NEW set first; if this fails, the previous import is still intact (nothing deleted yet).
       if (schedRows.length) {
         const { error } = await supabase.from("coc_db_schedule").insert(schedRows);
         if (error) throw error;
       }
+      let newCerts: { id: string; subsection_id: string | null; cert_no_norm: string }[] = [];
       if (certRows.length) {
-        const { error } = await supabase.from("coc_certificates").insert(certRows);
+        const { data, error } = await supabase.from("coc_certificates").insert(certRows).select("id, subsection_id, cert_no_norm");
         if (error) throw error;
+        newCerts = (data ?? []) as typeof newCerts;
+      }
+
+      // Now remove the previous set. `.or` covers legacy NULL-batch rows that `.neq` alone would skip.
+      const notThisBatch = `import_batch_id.is.null,import_batch_id.neq.${batch.id}`;
+      await supabase.from("coc_db_schedule").delete().eq("site_id", siteId).or(notThisBatch);
+      await supabase.from("coc_certificates").delete().eq("site_id", siteId).or(notThisBatch);
+
+      // Re-link surviving uploaded documents to the new cert rows (re-import would otherwise drop the
+      // coc_document_id / eval_document_id attachments). Match by subsection + normalised cert number.
+      const matchedSubIds = Array.from(new Set(newCerts.filter(c => c.subsection_id).map(c => c.subsection_id))) as string[];
+      if (matchedSubIds.length) {
+        const { data: docs } = await supabase
+          .from("subsection_documents")
+          .select("id, subsection_id, coc_number, parent_document_id")
+          .in("subsection_id", matchedSubIds);
+        const cocByKey = new Map<string, string>();
+        const evalByKey = new Map<string, string>();
+        for (const d of docs ?? []) {
+          if (!d.subsection_id || !d.coc_number) continue;
+          const key = `${d.subsection_id}|${normCert(d.coc_number)}`;
+          if (d.parent_document_id) { if (!evalByKey.has(key)) evalByKey.set(key, d.id); }
+          else if (!cocByKey.has(key)) cocByKey.set(key, d.id);
+        }
+        for (const c of newCerts) {
+          if (!c.subsection_id || !c.cert_no_norm) continue;
+          const key = `${c.subsection_id}|${c.cert_no_norm}`;
+          const cocDoc = cocByKey.get(key);
+          const evalDoc = evalByKey.get(key);
+          if (cocDoc || evalDoc) {
+            await supabase.from("coc_certificates").update({
+              ...(cocDoc ? { coc_document_id: cocDoc } : {}),
+              ...(evalDoc ? { eval_document_id: evalDoc } : {}),
+            }).eq("id", c.id);
+          }
+        }
       }
 
       // Sync is_coc_required for matched shops (Y -> true, N/A/N -> false; blank left alone).
