@@ -5,7 +5,7 @@ import type { CocReportModel, ReportCert, ReportTenant, VerdictKind } from "./co
 const FILL = { pass: "#E1F5EE", fail: "#FCEBEB", review: "#FAEEDA", cv: "#FAEEDA", pending: "#F1EFE8", na: "#F1EFE8" };
 const TEXT: Record<VerdictKind, string> = { pass: "#0F6E56", fail: "#A32D2D", review: "#854F0B", cv: "#854F0B", pending: "#5F5E5A" };
 const verdictLabel: Record<VerdictKind, string> = { pass: "Pass", fail: "Fail", review: "Review", cv: "CV", pending: "Pending" };
-const glyph = (v: string) => { const t = (v || "").toUpperCase(); return t === "PASS" ? "✓" : t === "FAIL" ? "✗" : t === "CV" ? "CV" : t === "N/A" ? "–" : t ? t : "·"; };
+const glyph = (v: string) => { const t = (v || "").toUpperCase(); return t === "PASS" ? "P" : t === "FAIL" ? "F" : t === "CV" ? "CV" : t === "N/A" ? "N/A" : t ? t : "·"; };
 const ruleFill = (v: string) => { const t = (v || "").toUpperCase(); return t === "FAIL" ? FILL.fail : t === "CV" ? FILL.cv : t === "N/A" ? FILL.na : FILL.pass; };
 
 function sansGrid(c: ReportCert): Content {
@@ -52,20 +52,70 @@ function tenantSection(t: ReportTenant, first: boolean): Content[] {
   return out;
 }
 
+function miniBar(pct: number, color: string): Content {
+  const w = 120, p = Math.max(0, Math.min(100, pct));
+  return { canvas: [
+    { type: "rect", x: 0, y: 0, w, h: 5, r: 2, color: "#ECECEC" },
+    { type: "rect", x: 0, y: 0, w: (w * p) / 100, h: 5, r: 2, color },
+  ], margin: [0, 3, 0, 0] };
+}
+function verdictBar(v: { pass: number; fail: number; review: number; cv: number; pending: number }): Content {
+  const total = Math.max(1, v.pass + v.fail + v.review + v.cv + v.pending), W = 340;
+  const rects: { type: "rect"; x: number; y: number; w: number; h: number; color: string }[] = [];
+  let x = 0;
+  const push = (n: number, c: string) => { if (n) { rects.push({ type: "rect", x, y: 0, w: (W * n) / total, h: 12, color: c }); x += (W * n) / total; } };
+  push(v.pass, "#1D9E75"); push(v.review + v.cv, "#EF9F27"); push(v.pending, "#B4B2A9"); push(v.fail, "#E24B4A");
+  return { canvas: rects, margin: [0, 4, 0, 2] };
+}
+function kpiCell(label: string, value: string, sub: string, bar?: Content): Content {
+  const stack: Content[] = [
+    { text: label, fontSize: 8, color: "#5F5E5A" },
+    { text: value, fontSize: 16, bold: true },
+    { text: sub, fontSize: 7, color: "#5F5E5A" },
+  ];
+  if (bar) stack.push(bar);
+  return { stack, margin: [0, 0, 8, 0] } as Content;
+}
+
 export function buildSiteCocReportDocDef(model: CocReportModel): TDocumentDefinitions {
-  const s = model.summary;
-  const dashboard: Content[] = [
-    { text: `${model.siteName} — Site COC report`, fontSize: 16, bold: true },
-    { text: `Generated ${model.generatedAt}${model.lastImport ? ` · imported ${model.lastImport}` : ""}`, fontSize: 9, color: "#5F5E5A", margin: [0, 0, 0, 8] },
-    {
-      columns: [
-        { text: [{ text: `${s.required}\n`, fontSize: 16, bold: true }, { text: "COC required", fontSize: 8, color: "#5F5E5A" }] },
-        { text: [{ text: `${s.clear}\n`, fontSize: 16, bold: true, color: TEXT.pass }, { text: "Clear (Pass)", fontSize: 8, color: "#5F5E5A" }] },
-        { text: [{ text: `${s.noCoc}\n`, fontSize: 16, bold: true, color: TEXT.fail }, { text: "No COC on file", fontSize: 8, color: "#5F5E5A" }] },
-        { text: [{ text: `${s.failed}\n`, fontSize: 16, bold: true, color: TEXT.fail }, { text: "Failed", fontSize: 8, color: "#5F5E5A" }] },
-        { text: [{ text: `${s.compliantPct}%\n`, fontSize: 16, bold: true }, { text: "Compliant", fontSize: 8, color: "#5F5E5A" }] },
-      ], margin: [0, 0, 0, 10],
-    },
+  const s = model.summary, k = model.kpis, cov = model.cover;
+
+  const cover: Content[] = [
+    { text: "WATSON MATTHEUS", fontSize: 13, bold: true, color: "#185FA5", characterSpacing: 2 },
+    { text: "CONSULTING ELECTRICAL ENGINEERS", fontSize: 9, color: "#5F5E5A", margin: [0, 0, 0, 60] },
+    { text: "Certificate of Compliance", fontSize: 30, bold: true },
+    { text: "Status report", fontSize: 18, color: "#5F5E5A", margin: [0, 0, 0, 24] },
+    { text: model.siteName, fontSize: 18, bold: true },
+    { text: cov.address || "", fontSize: 10, color: "#5F5E5A", margin: [0, 0, 0, 20] },
+    { table: { widths: ["auto", "*"], body: [
+      [{ text: "Prepared for", color: "#5F5E5A" }, { text: cov.clientName || "—" }],
+      [{ text: "Prepared by", color: "#5F5E5A" }, { text: "Watson Mattheus Consulting Electrical Engineers" }],
+      [{ text: "Generated", color: "#5F5E5A" }, { text: `${model.generatedAt}${model.lastImport ? ` · data as of ${model.lastImport}` : ""}` }],
+    ] }, layout: "noBorders", fontSize: 10, margin: [0, 0, 0, 26] },
+    { text: `${s.compliantPct}% compliant`, fontSize: 26, bold: true },
+    { text: `${s.noCoc} shops with no COC · ${s.failed} failed`, fontSize: 12, color: TEXT.fail, pageBreak: "after" },
+  ];
+
+  const narrative = `${model.siteName} has ${s.required} COC-required shops. ${s.clear} are clear (Pass), ${s.noCoc} have no COC on file, and ${s.failed} ${s.failed === 1 ? "has a failed certificate" : "have failed certificates"}. Overall compliance is ${s.compliantPct}%, with ${k.outstanding} outstanding ${k.outstanding === 1 ? "action" : "actions"}. COC documents are on record for ${k.cocCoveragePct}% of required shops and evaluation reports for ${k.evalCoveragePct}%.`;
+
+  const summary: Content[] = [
+    { text: "Executive summary", fontSize: 16, bold: true, margin: [0, 0, 0, 4] },
+    { text: narrative, fontSize: 11, margin: [0, 0, 0, 12] },
+    { columns: [
+      kpiCell("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, miniBar(s.compliantPct, "#1D9E75")),
+      kpiCell("COC coverage", `${k.cocCoveragePct}%`, "shops with a COC", miniBar(k.cocCoveragePct, "#185FA5")),
+      kpiCell("Eval coverage", `${k.evalCoveragePct}%`, "shops with an eval", miniBar(k.evalCoveragePct, "#185FA5")),
+      kpiCell("Outstanding", `${k.outstanding}`, "no-COC + failed"),
+    ], margin: [0, 0, 0, 12] },
+    { text: "Certificate verdict breakdown", fontSize: 9, color: "#5F5E5A" },
+    verdictBar(k.verdict),
+    { text: `Pass ${k.verdict.pass} · Review/CV ${k.verdict.review + k.verdict.cv} · Pending ${k.verdict.pending} · Fail ${k.verdict.fail}`, fontSize: 8, color: "#5F5E5A", margin: [0, 0, 0, 12] },
+    { columns: [
+      { text: [{ text: `${s.required}\n`, fontSize: 16, bold: true }, { text: "COC required", fontSize: 8, color: "#5F5E5A" }] },
+      { text: [{ text: `${s.clear}\n`, fontSize: 16, bold: true, color: TEXT.pass }, { text: "Clear (Pass)", fontSize: 8, color: "#5F5E5A" }] },
+      { text: [{ text: `${s.noCoc}\n`, fontSize: 16, bold: true, color: TEXT.fail }, { text: "No COC on file", fontSize: 8, color: "#5F5E5A" }] },
+      { text: [{ text: `${s.failed}\n`, fontSize: 16, bold: true, color: TEXT.fail }, { text: "Failed", fontSize: 8, color: "#5F5E5A" }] },
+    ], margin: [0, 0, 0, 12] },
     { text: "Issues & exceptions", fontSize: 12, bold: true, margin: [0, 0, 0, 4] },
     { text: `No COC on file (${model.issues.noCoc.length})`, fontSize: 9, color: TEXT.fail },
     { text: model.issues.noCoc.map(i => i.name).join(" · ") || "—", fontSize: 9, margin: [0, 0, 0, 6] },
@@ -82,7 +132,7 @@ export function buildSiteCocReportDocDef(model: CocReportModel): TDocumentDefini
 
   return {
     pageOrientation: "landscape",
-    content: [...dashboard, ...tenantsBlock],
+    content: [...cover, ...summary, ...tenantsBlock],
     defaultStyle: { fontSize: 9 },
   };
 }

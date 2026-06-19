@@ -744,7 +744,7 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="site-coc" className="space-y-6">
-          <SiteCocTab siteId={siteId} siteName={site.name} />
+          <SiteCocTab siteId={siteId} siteName={site.name} clientName={site.clients?.name ?? null} siteAddress={site.address ?? null} />
         </TabsContent>
 
         <TabsContent value="qr-analytics">
