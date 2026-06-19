@@ -20,27 +20,40 @@ export interface CocBatch {
   matched_count: number; unmatched_count: number;
 }
 
+export interface SubsectionOption { id: string; name: string; tenant_name: string | null; }
+
 export function useSiteCoc(siteId: string | undefined) {
   const [schedule, setSchedule] = useState<CocScheduleRow[]>([]);
   const [certificates, setCertificates] = useState<CocCertRow[]>([]);
   const [batch, setBatch] = useState<CocBatch | null>(null);
+  const [subsections, setSubsections] = useState<SubsectionOption[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refetch = useCallback(async () => {
     if (!siteId) return;
     setLoading(true);
-    const [s, c, b] = await Promise.all([
+    const [s, c, b, subs] = await Promise.all([
       supabase.from("coc_db_schedule").select("*").eq("site_id", siteId).order("shop_no_raw"),
       supabase.from("coc_certificates").select("*").eq("site_id", siteId).order("shop_no_raw"),
       supabase.from("coc_import_batches").select("*").eq("site_id", siteId).order("created_at", { ascending: false }).limit(1),
+      supabase.from("subsections").select("id, name, tenant_name").eq("site_id", siteId).is("deleted_at", null).order("name"),
     ]);
     setSchedule((s.data ?? []) as unknown as CocScheduleRow[]);
     setCertificates((c.data ?? []) as unknown as CocCertRow[]);
     setBatch(((b.data ?? [])[0] ?? null) as unknown as CocBatch | null);
+    setSubsections((subs.data ?? []) as unknown as SubsectionOption[]);
     setLoading(false);
   }, [siteId]);
 
   useEffect(() => { refetch(); }, [refetch]);
 
-  return { schedule, certificates, batch, loading, refetch };
+  /** Manually map an unmatched schedule shop to a subsection: stamps the schedule row + its certificates. */
+  const resolveShop = useCallback(async (scheduleRowId: string, shopNoRaw: string, subsectionId: string) => {
+    if (!siteId) return;
+    await supabase.from("coc_db_schedule").update({ subsection_id: subsectionId, match_status: "matched" }).eq("id", scheduleRowId);
+    await supabase.from("coc_certificates").update({ subsection_id: subsectionId, match_status: "matched" }).eq("site_id", siteId).eq("shop_no_raw", shopNoRaw);
+    await refetch();
+  }, [siteId, refetch]);
+
+  return { schedule, certificates, batch, subsections, loading, refetch, resolveShop };
 }
