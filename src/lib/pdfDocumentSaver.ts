@@ -200,6 +200,7 @@ export function getReportCategoryName(reportType: string): string {
     "floor-plan": "Floor Plan Reports",
     "inspection": "Inspection Reports",
     "coc-validation": "COC Validation Reports",
+    "site-coc": "Site COC Reports",
     "site-drawing": "Site Drawing Reports",
     "fortress-checklist": "Marking Checklists",
   };

@@ -28,7 +28,13 @@ vi.mock('@/integrations/supabase/client', () => ({
   },
 }));
 
-import { savePDFToDocuments } from './pdfDocumentSaver';
+import { savePDFToDocuments, getReportCategoryName } from './pdfDocumentSaver';
+
+describe('getReportCategoryName', () => {
+  it('maps site-coc to "Site COC Reports"', () => {
+    expect(getReportCategoryName('site-coc')).toBe('Site COC Reports');
+  });
+});
 
 const opts = () => ({
   blob: new Blob(['pdf'], { type: 'application/pdf' }),
