@@ -26,6 +26,7 @@ import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist"
 import { AssetVerification } from "@/components/site/AssetVerification";
 
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
+import { SiteCocTab } from "@/views/site-coc/SiteCocTab";
 import { calculateCocComplianceStats } from "@/lib/complianceCalculations";
 import { computeSiteDeliverables, categoryMatches, THERMAL_CATEGORY_PATTERNS } from "@/lib/siteDeliverables";
 
@@ -663,6 +664,10 @@ const SiteDetail = () => {
             <Layers className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Subsections</span>
           </TabsTrigger>
+          <TabsTrigger value="site-coc" className="gap-2 shrink-0">
+            <Shield className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Site COC</span>
+          </TabsTrigger>
           <TabsTrigger value="qr-analytics" className="gap-2 shrink-0">
             <QrCode className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">QR Codes</span>
@@ -736,6 +741,10 @@ const SiteDetail = () => {
             <Button onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/new`)} className="gap-2"><Plus className="h-4 w-4" />Add</Button>
           </div>
           <SubsectionList subsections={subsections} clientId={clientId!} siteId={siteId!} onDelete={handleDeleteSubsection} snags={snags} />
+        </TabsContent>
+
+        <TabsContent value="site-coc" className="space-y-6">
+          <SiteCocTab siteId={siteId} siteName={site.name} />
         </TabsContent>
 
         <TabsContent value="qr-analytics">

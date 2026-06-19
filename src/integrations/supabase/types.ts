@@ -14,6 +14,232 @@ export type Database = {
   }
   public: {
     Tables: {
+      coc_import_batches: {
+        Row: {
+          id: string
+          site_id: string
+          uploaded_by: string | null
+          schedule_file_name: string | null
+          verification_file_name: string | null
+          certs_imported: number | null
+          shops_imported: number | null
+          matched_count: number | null
+          unmatched_count: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          site_id: string
+          uploaded_by?: string | null
+          schedule_file_name?: string | null
+          verification_file_name?: string | null
+          certs_imported?: number | null
+          shops_imported?: number | null
+          matched_count?: number | null
+          unmatched_count?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          site_id?: string
+          uploaded_by?: string | null
+          schedule_file_name?: string | null
+          verification_file_name?: string | null
+          certs_imported?: number | null
+          shops_imported?: number | null
+          matched_count?: number | null
+          unmatched_count?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coc_import_batches_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coc_db_schedule: {
+        Row: {
+          id: string
+          site_id: string
+          subsection_id: string | null
+          import_batch_id: string | null
+          shop_no_raw: string | null
+          trading_name: string | null
+          coc_required: string | null
+          initial_cert_nos: string | null
+          supplementary_cert_nos: string | null
+          unclear: string | null
+          supp_to_initial_ref: string | null
+          files_count: number | null
+          status: string | null
+          notes: string | null
+          match_status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          site_id: string
+          subsection_id?: string | null
+          import_batch_id?: string | null
+          shop_no_raw?: string | null
+          trading_name?: string | null
+          coc_required?: string | null
+          initial_cert_nos?: string | null
+          supplementary_cert_nos?: string | null
+          unclear?: string | null
+          supp_to_initial_ref?: string | null
+          files_count?: number | null
+          status?: string | null
+          notes?: string | null
+          match_status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          site_id?: string
+          subsection_id?: string | null
+          import_batch_id?: string | null
+          shop_no_raw?: string | null
+          trading_name?: string | null
+          coc_required?: string | null
+          initial_cert_nos?: string | null
+          supplementary_cert_nos?: string | null
+          unclear?: string | null
+          supp_to_initial_ref?: string | null
+          files_count?: number | null
+          status?: string | null
+          notes?: string | null
+          match_status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coc_db_schedule_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coc_db_schedule_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coc_db_schedule_import_batch_id_fkey"
+            columns: ["import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "coc_import_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coc_certificates: {
+        Row: {
+          id: string
+          site_id: string
+          subsection_id: string | null
+          import_batch_id: string | null
+          shop_no_raw: string | null
+          cert_no: string | null
+          cert_no_norm: string | null
+          cert_type: string | null
+          doc_type: string | null
+          clause_9_2: string | null
+          supp_to_init: string | null
+          issued_date: string | null
+          location: string | null
+          confidence: string | null
+          source_file: string | null
+          verdict: string | null
+          reasons: string | null
+          rules: Json
+          notes: string | null
+          match_status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          site_id: string
+          subsection_id?: string | null
+          import_batch_id?: string | null
+          shop_no_raw?: string | null
+          cert_no?: string | null
+          cert_no_norm?: string | null
+          cert_type?: string | null
+          doc_type?: string | null
+          clause_9_2?: string | null
+          supp_to_init?: string | null
+          issued_date?: string | null
+          location?: string | null
+          confidence?: string | null
+          source_file?: string | null
+          verdict?: string | null
+          reasons?: string | null
+          rules?: Json
+          notes?: string | null
+          match_status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          site_id?: string
+          subsection_id?: string | null
+          import_batch_id?: string | null
+          shop_no_raw?: string | null
+          cert_no?: string | null
+          cert_no_norm?: string | null
+          cert_type?: string | null
+          doc_type?: string | null
+          clause_9_2?: string | null
+          supp_to_init?: string | null
+          issued_date?: string | null
+          location?: string | null
+          confidence?: string | null
+          source_file?: string | null
+          verdict?: string | null
+          reasons?: string | null
+          rules?: Json
+          notes?: string | null
+          match_status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coc_certificates_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coc_certificates_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coc_certificates_import_batch_id_fkey"
+            columns: ["import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "coc_import_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       access_link_visitors: {
         Row: {
           access_link_id: string | null
