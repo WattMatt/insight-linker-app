@@ -43,6 +43,7 @@ export interface SupabaseDocument {
   coc_type?: string | null;
   coc_status?: string | null;
   coc_expiry_date?: string | null;
+  parent_document_id?: string | null;
 }
 
 export interface DocumentCategory {

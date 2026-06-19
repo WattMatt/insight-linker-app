@@ -128,7 +128,7 @@ export function useSubsectionDetail() {
     try {
       const { data, error } = await supabase
         .from('subsection_documents')
-        .select('id, file_name, file_url, category_id, uploaded_at, coc_number, coc_issue_date, coc_expiry_date, coc_type, coc_status')
+        .select('id, file_name, file_url, category_id, uploaded_at, coc_number, coc_issue_date, coc_expiry_date, coc_type, coc_status, parent_document_id')
         .eq('subsection_id', subsectionId)
         .order('uploaded_at', { ascending: false });
 
