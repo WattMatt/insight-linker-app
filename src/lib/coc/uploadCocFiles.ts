@@ -34,15 +34,26 @@ export async function uploadCocCertificate(opts: { subsectionId: string; cocCate
   const { data: up, error: upErr } = await supabase.storage.from("documents").upload(path, file);
   if (upErr || !up?.path) throw new Error(`Upload failed: ${upErr?.message ?? "no path"}`);
   const { data: urlData } = supabase.storage.from("documents").getPublicUrl(up.path);
+  try {
+    const { id } = await insertCocCertificateDoc({ subsectionId, cocCategoryId, fileName: file.name, fileUrl: urlData.publicUrl, fileSize: file.size, cocNumber });
+    return { id, cocNumber };
+  } catch (e) {
+    await supabase.storage.from("documents").remove([up.path]);
+    throw e;
+  }
+}
+
+/** Insert a COC certificate document row from an already-stored file (no upload). */
+export async function insertCocCertificateDoc(opts: { subsectionId: string; cocCategoryId: string; fileName: string; fileUrl: string; fileSize: number | null; cocNumber: string | null }): Promise<{ id: string }> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
-  const { data: row, error: insErr } = await supabase.from("subsection_documents").insert({
-    subsection_id: subsectionId, category_id: cocCategoryId, file_name: file.name,
-    file_url: urlData.publicUrl, file_size: file.size, uploaded_by: user.id,
-    coc_number: cocNumber, coc_status: "Pending",
+  const { data: row, error } = await supabase.from("subsection_documents").insert({
+    subsection_id: opts.subsectionId, category_id: opts.cocCategoryId, file_name: opts.fileName,
+    file_url: opts.fileUrl, file_size: opts.fileSize, uploaded_by: user.id,
+    coc_number: opts.cocNumber, coc_status: "Pending",
   }).select("id").single();
-  if (insErr || !row) { await supabase.storage.from("documents").remove([up.path]); throw new Error(`Save failed: ${insErr?.message}`); }
-  return { id: row.id, cocNumber };
+  if (error || !row) throw new Error(`Save failed: ${error?.message}`);
+  return { id: row.id };
 }
 
 /** Upload an evaluation report paired to a COC (same per-COC folder, verdict from filename prefix). */
@@ -55,14 +66,28 @@ export async function uploadEvaluationReport(opts: { subsectionId: string; evalC
   const { data: up, error: upErr } = await supabase.storage.from("documents").upload(path, file);
   if (upErr || !up?.path) throw new Error(`Upload failed: ${upErr?.message ?? "no path"}`);
   const { data: urlData } = supabase.storage.from("documents").getPublicUrl(up.path);
+  try {
+    return await insertEvaluationReportDoc({
+      subsectionId, evalCategoryId, parentCocId,
+      fileName: file.name, fileUrl: urlData.publicUrl, fileSize: file.size,
+      cocNumber: parentCocNumber || extractCocNumber(file.name),
+      verdict: extractEvalVerdict(file.name),
+    });
+  } catch (e) {
+    await supabase.storage.from("documents").remove([up.path]);
+    throw e;
+  }
+}
+
+/** Insert an evaluation-report document row from an already-stored file (no upload). */
+export async function insertEvaluationReportDoc(opts: { subsectionId: string; evalCategoryId: string; parentCocId: string | null; fileName: string; fileUrl: string; fileSize: number | null; cocNumber: string | null; verdict: string | null }): Promise<{ id: string }> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
-  const { data: row, error: insErr } = await supabase.from("subsection_documents").insert({
-    subsection_id: subsectionId, category_id: evalCategoryId, parent_document_id: parentCocId,
-    file_name: file.name, file_url: urlData.publicUrl, file_size: file.size, uploaded_by: user.id,
-    coc_number: parentCocNumber || extractCocNumber(file.name),
-    coc_status: extractEvalVerdict(file.name) ?? "Pending",
+  const { data: row, error } = await supabase.from("subsection_documents").insert({
+    subsection_id: opts.subsectionId, category_id: opts.evalCategoryId, parent_document_id: opts.parentCocId,
+    file_name: opts.fileName, file_url: opts.fileUrl, file_size: opts.fileSize, uploaded_by: user.id,
+    coc_number: opts.cocNumber, coc_status: opts.verdict ?? "Pending",
   }).select("id").single();
-  if (insErr || !row) { await supabase.storage.from("documents").remove([up.path]); throw new Error(`Save failed: ${insErr?.message}`); }
+  if (error || !row) throw new Error(`Save failed: ${error?.message}`);
   return { id: row.id };
 }
