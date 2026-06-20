@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { FileText, Loader2, Eye } from "lucide-react";
+import { FileText, Loader2, Eye, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,6 +22,7 @@ export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, 
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState<{ url: string; name: string; blob?: Blob; isObjectUrl?: boolean } | null>(null);
   const [saved, setSaved] = useState<SavedReport[]>([]);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const empty = !subsections.some(s => s.is_coc_required);
 
   const fetchSaved = useCallback(async () => {
@@ -67,6 +68,27 @@ export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, 
     else toast.error(res.error || "Could not save the report");
   };
 
+  // Delete a saved report: remove the storage object (best-effort) then the site_documents row.
+  // Mirrors SiteReports.handleDeleteReport.
+  const handleDelete = async (r: SavedReport) => {
+    if (!window.confirm(`Delete "${r.file_name}"? This cannot be undone.`)) return;
+    setDeleting(r.id);
+    try {
+      if (r.file_url?.includes("supabase.co/storage")) {
+        const path = r.file_url.split("/documents/")[1]?.split("?")[0];
+        if (path) await supabase.storage.from("documents").remove([path]);
+      }
+      const { error } = await supabase.from("site_documents").delete().eq("id", r.id);
+      if (error) throw error;
+      toast.success("Report deleted");
+      setSaved(prev => prev.filter(x => x.id !== r.id));
+      if (preview && !preview.isObjectUrl && preview.url === r.file_url) closePreview();
+    } catch (e: any) {
+      if (process.env.NODE_ENV === "development") console.error("Delete report failed:", e);
+      toast.error("Could not delete the report");
+    } finally { setDeleting(null); }
+  };
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -88,9 +110,14 @@ export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, 
                   <div className="text-sm truncate">{r.file_name}</div>
                   <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => setPreview({ url: r.file_url, name: r.file_name })} title="Preview / download">
-                  <Eye className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button size="sm" variant="ghost" onClick={() => setPreview({ url: r.file_url, name: r.file_name })} title="Preview / download">
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleDelete(r)} disabled={deleting === r.id} title="Delete report">
+                    {deleting === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
