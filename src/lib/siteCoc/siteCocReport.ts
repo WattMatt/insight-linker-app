@@ -87,12 +87,12 @@ function fileRegisterContent(rows: FileRegisterRow[]): Content {
   return { table: { headerRows: 1, widths: ["*", 42, 64, 56, 40, 22, 48, 30, "*"], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
 }
 
-function miniBar(pct: number, color: string, w = 78): Content {
+function miniBar(pct: number, color: string, w = 96): Content {
   const p = Math.max(0, Math.min(100, pct));
   return { canvas: [
-    { type: "rect", x: 0, y: 0, w, h: 5, r: 2, color: "#ECECEC" },
-    { type: "rect", x: 0, y: 0, w: (w * p) / 100, h: 5, r: 2, color },
-  ], margin: [0, 3, 0, 0] };
+    { type: "rect", x: 0, y: 0, w, h: 6, r: 3, color: "#FFFFFF" },
+    { type: "rect", x: 0, y: 0, w: (w * p) / 100, h: 6, r: 3, color },
+  ], margin: [0, 4, 0, 0] };
 }
 function verdictBar(v: { pass: number; fail: number; review: number; cv: number; pending: number }, W = 340): Content {
   const total = Math.max(1, v.pass + v.fail + v.review + v.cv + v.pending);
@@ -160,58 +160,59 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
 
   const narrative = `${model.siteName} has ${s.required} COC-required shops. ${s.clear} are clear (Pass), ${s.noCoc} have no COC on file, and ${s.failed} ${s.failed === 1 ? "has a failed certificate" : "have failed certificates"}. Overall compliance is ${s.compliantPct}%, with ${k.outstanding} outstanding ${k.outstanding === 1 ? "action" : "actions"}. COC documents are on record for ${k.cocCoveragePct}% of required shops and evaluation reports for ${k.evalCoveragePct}%.`;
 
-  // Card grid (border + white bg via cardLayout, no padding); each card is a 2-col nested table:
-  // a thin status-accent bar + the content. Explicit widths (not "*") because pdf.js mis-distributes
-  // star columns that contain canvas cells.
-  const cardLayout = {
-    hLineWidth: () => 0.7, vLineWidth: () => 0.7,
-    hLineColor: () => "#E2E2DD", vLineColor: () => "#E2E2DD",
-    paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0,
+  // Tinted KPI cards: each card cell is filled with a soft status tint; 4pt WHITE table borders act
+  // as the gaps between cards. Explicit widths (never "*") so pdf.js doesn't mis-distribute.
+  const TINT: Record<Tone, { bg: string; label: string; value: string }> = {
+    green: { bg: "#E1F5EE", label: "#0F6E56", value: "#085041" },
+    amber: { bg: "#FAEEDA", label: "#854F0B", value: "#633806" },
+    red: { bg: "#FCEBEB", label: "#A32D2D", value: "#791F1F" },
+    slate: { bg: "#F1EFE8", label: "#5F5E5A", value: "#44413E" },
   };
-  const innerLayout = { defaultBorder: false, paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0 };
-  const ACCENT_GRAY = "#B4B2A9";
-  const cardCell = (accent: string, stack: any[]): any => ({
-    fillColor: "#FFFFFF",
-    table: { widths: [3, 134], heights: [54], body: [[{ text: "", fillColor: accent }, { stack, margin: [8, 7, 6, 6] }]] },
-    layout: innerLayout,
+  const toneKey = (pct: number): Tone => (pct >= 80 ? "green" : pct >= 50 ? "amber" : "red");
+  const gapLayout = {
+    hLineWidth: () => 4, vLineWidth: () => 4, hLineColor: () => "#FFFFFF", vLineColor: () => "#FFFFFF",
+    paddingLeft: () => 12, paddingRight: () => 12, paddingTop: () => 11, paddingBottom: () => 11,
+  };
+  const card = (label: string, value: string, sub: string, t: Tone, bar?: Content): any => ({
+    fillColor: TINT[t].bg,
+    stack: [
+      { text: label, fontSize: 9, color: TINT[t].label },
+      { text: value, fontSize: 21, bold: true, color: TINT[t].value, margin: [0, 4, 0, 0] },
+      ...(bar ? [bar] : []),
+      { text: sub, fontSize: 7.5, color: TINT[t].label, margin: [0, bar ? 5 : 7, 0, 0] },
+    ],
   });
-  const card = (label: string, value: string, sub: string, opts: { color?: string; bar?: Content; accent: string }): any =>
-    cardCell(opts.accent, [
-      { text: label, fontSize: 8, color: "#5F5E5A" },
-      { text: value, fontSize: 15, bold: true, color: opts.color ?? "#1A1A1A", margin: [0, 2, 0, 0] },
-      ...(opts.bar ? [opts.bar] : []),
-      { text: sub, fontSize: 6.5, color: "#888780", margin: [0, opts.bar ? 3 : 7, 0, 0] },
-    ]);
-  const verdictCard = (): any => cardCell(k.verdict.fail ? "#E24B4A" : ACCENT_GRAY, [
-    { text: "Verdict mix", fontSize: 8, color: "#5F5E5A" },
-    { text: "", fontSize: 3 },
-    verdictBar(k.verdict, 110),
-    { text: `P ${k.verdict.pass} · R/CV ${k.verdict.review + k.verdict.cv} · ${k.verdict.pending}pd · F ${k.verdict.fail}`, fontSize: 6, color: "#5F5E5A", margin: [0, 5, 0, 0] },
-  ]);
-  const snagAccent = sk ? (sk.snagsHighRisk ? "#E24B4A" : sk.snagsOpen ? "#EF9F27" : "#1D9E75") : ACCENT_GRAY;
+  const verdictCard = (): any => ({
+    fillColor: TINT.slate.bg,
+    stack: [
+      { text: "Verdict mix", fontSize: 9, color: TINT.slate.label },
+      verdictBar(k.verdict, 112),
+      { text: `P ${k.verdict.pass} · R/CV ${k.verdict.review + k.verdict.cv} · ${k.verdict.pending}pd · F ${k.verdict.fail}`, fontSize: 7, color: TINT.slate.label, margin: [0, 6, 0, 0] },
+    ],
+  });
   const mPct = sk && sk.meteringTotal ? Math.round((sk.meteringDone / sk.meteringTotal) * 100) : 100;
   const cocRow: any[] = [
-    card("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, { color: tone(s.compliantPct), accent: tone(s.compliantPct), bar: miniBar(s.compliantPct, tone(s.compliantPct)) }),
-    card("COC coverage", `${k.cocCoveragePct}%`, "have a COC", { color: tone(k.cocCoveragePct), accent: tone(k.cocCoveragePct), bar: miniBar(k.cocCoveragePct, tone(k.cocCoveragePct)) }),
-    card("Eval coverage", `${k.evalCoveragePct}%`, "have an eval", { color: tone(k.evalCoveragePct), accent: tone(k.evalCoveragePct), bar: miniBar(k.evalCoveragePct, tone(k.evalCoveragePct)) }),
+    card("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, toneKey(s.compliantPct), miniBar(s.compliantPct, tone(s.compliantPct))),
+    card("COC coverage", `${k.cocCoveragePct}%`, "have a COC", toneKey(k.cocCoveragePct), miniBar(k.cocCoveragePct, tone(k.cocCoveragePct))),
+    card("Eval coverage", `${k.evalCoveragePct}%`, "have an eval", toneKey(k.evalCoveragePct), miniBar(k.evalCoveragePct, tone(k.evalCoveragePct))),
     verdictCard(),
     sk
-      ? card("COC expiry", `${sk.expiry.expired} / ${sk.expiry.within30} / ${sk.expiry.within90}`, "expired · ≤30d · ≤90d", { accent: sk.expiry.expired ? "#E24B4A" : ACCENT_GRAY })
-      : card("Outstanding", `${k.outstanding}`, "no-COC + failed", { accent: k.outstanding ? "#EF9F27" : ACCENT_GRAY }),
+      ? card("COC expiry", `${sk.expiry.expired} / ${sk.expiry.within30} / ${sk.expiry.within90}`, "expired · ≤30d · ≤90d", "slate")
+      : card("Outstanding", `${k.outstanding}`, "no-COC + failed", k.outstanding ? "amber" : "slate"),
   ];
-  const kpiTable = (cards: any[]): Content => ({ table: { widths: [138, 138, 138, 138, 138], body: [cards] }, layout: cardLayout, margin: [0, 0, 0, 10] });
-  const glabel = (t: string): Content => ({ text: t, fontSize: 9, bold: true, color: "#185FA5", margin: [0, 2, 0, 5] });
+  const kpiTable = (cards: any[]): Content => ({ table: { widths: [138, 138, 138, 138, 138], heights: [78], body: [cards] }, layout: gapLayout, margin: [0, 0, 0, 4] });
+  const glabel = (t: string): Content => ({ text: t, fontSize: 9, bold: true, color: "#185FA5", margin: [0, 6, 0, 6] });
 
   const kpiBlock: Content[] = sk ? [
     glabel("COC documentation"),
     kpiTable(cocRow),
     glabel("Site readiness & quality"),
     kpiTable([
-      card("Open snags", `${sk.snagsOpen}`, `${sk.snagsHighRisk} high-risk`, { color: sk.snagsHighRisk ? TEXT.fail : "#1A1A1A", accent: snagAccent }),
-      card("Oldest snag", sk.oldestOpenDays != null ? `${sk.oldestOpenDays}d` : "—", "open ageing", { accent: ACCENT_GRAY }),
-      card("Inspection pass", `${sk.inspectionPassPct}%`, `${sk.inspectionPass}/${sk.inspectionPass + sk.inspectionFail} items`, { color: tone(sk.inspectionPassPct), accent: tone(sk.inspectionPassPct), bar: miniBar(sk.inspectionPassPct, tone(sk.inspectionPassPct)) }),
-      card("Site readiness", `${sk.readinessPct}%`, "deliverables", { color: tone(sk.readinessPct), accent: tone(sk.readinessPct), bar: miniBar(sk.readinessPct, tone(sk.readinessPct)) }),
-      card("Metering", sk.meteringTotal ? `${sk.meteringDone}/${sk.meteringTotal}` : "—", "subsections", { color: tone(mPct), accent: tone(mPct), bar: miniBar(mPct, tone(mPct)) }),
+      card("Open snags", `${sk.snagsOpen}`, `${sk.snagsHighRisk} high-risk`, sk.snagsHighRisk ? "red" : sk.snagsOpen ? "amber" : "green"),
+      card("Oldest snag", sk.oldestOpenDays != null ? `${sk.oldestOpenDays}d` : "—", "open ageing", "slate"),
+      card("Inspection pass", `${sk.inspectionPassPct}%`, `${sk.inspectionPass}/${sk.inspectionPass + sk.inspectionFail} items`, toneKey(sk.inspectionPassPct), miniBar(sk.inspectionPassPct, tone(sk.inspectionPassPct))),
+      card("Site readiness", `${sk.readinessPct}%`, "deliverables", toneKey(sk.readinessPct), miniBar(sk.readinessPct, tone(sk.readinessPct))),
+      card("Metering", sk.meteringTotal ? `${sk.meteringDone}/${sk.meteringTotal}` : "—", "subsections", toneKey(mPct), miniBar(mPct, tone(mPct))),
     ]),
   ] : [kpiTable(cocRow)];
 
