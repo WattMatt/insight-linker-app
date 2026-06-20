@@ -29,6 +29,7 @@ import { SchematicDiagram } from "@/components/site/SchematicDiagram";
 import { SiteCocTab } from "@/views/site-coc/SiteCocTab";
 import { calculateCocComplianceStats } from "@/lib/complianceCalculations";
 import { computeSiteDeliverables, categoryMatches, THERMAL_CATEGORY_PATTERNS } from "@/lib/siteDeliverables";
+import { buildSiteKpiBlock } from "@/lib/siteCoc/reportKpis";
 
 interface SiteDocument {
   category: string;
@@ -420,7 +421,7 @@ const SiteDetail = () => {
       
       const { data: snagsRes, error: snagsError } = await supabase
         .from("snags")
-        .select("id, subsection_id, status, title, risk_level")
+        .select("id, subsection_id, status, title, risk_level, created_at, rectified_at")
         .in("subsection_id", subsectionIds);
 
       if (snagsError) throw snagsError;
@@ -622,6 +623,14 @@ const SiteDetail = () => {
       .map((d: any) => d.subsection_id),
   });
 
+  const siteKpis = buildSiteKpiBlock({
+    deliverablesSummary,
+    snags,
+    subsections,
+    inspections,
+    today: new Date().toISOString().slice(0, 10),
+  });
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl animate-fade-in space-y-8">
       <Breadcrumbs items={[{ label: "Clients", href: "/clients", icon: "client" }, { label: site.clients?.name || "Client", href: `/clients/${clientId}`, icon: "client" }, { label: site.name, icon: "site" }]} />
@@ -744,7 +753,7 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="site-coc" className="space-y-6">
-          <SiteCocTab siteId={siteId} siteName={site.name} clientName={site.clients?.name ?? null} siteAddress={site.address ?? null} />
+          <SiteCocTab siteId={siteId} siteName={site.name} clientName={site.clients?.name ?? null} siteAddress={site.address ?? null} siteKpis={siteKpis} />
         </TabsContent>
 
         <TabsContent value="qr-analytics">
