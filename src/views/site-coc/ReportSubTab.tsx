@@ -7,6 +7,7 @@ import { generatePdfBlob } from "@/lib/pdfMakeConfig";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { buildCocReportModel } from "@/lib/siteCoc/cocReportModel";
+import type { SiteKpiBlock } from "@/lib/siteCoc/reportKpis";
 import { buildSiteCocReportDocDef } from "@/lib/siteCoc/siteCocReport";
 import { mergeGuidelineAfterCover } from "@/lib/siteCoc/mergeReportGuideline";
 import type { CocScheduleRow, CocCertRow, CocBatch, SubsectionOption } from "./useSiteCoc";
@@ -14,8 +15,8 @@ import type { CocScheduleRow, CocCertRow, CocBatch, SubsectionOption } from "./u
 interface SavedReport { id: string; file_name: string; file_url: string; created_at: string; }
 const CATEGORY = getReportCategoryName("site-coc");
 
-export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, subsections, clientName, siteAddress }: {
-  siteId: string | undefined; siteName: string; schedule: CocScheduleRow[]; certificates: CocCertRow[]; batch: CocBatch | null; subsections: SubsectionOption[]; clientName?: string | null; siteAddress?: string | null;
+export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, subsections, clientName, siteAddress, siteKpis }: {
+  siteId: string | undefined; siteName: string; schedule: CocScheduleRow[]; certificates: CocCertRow[]; batch: CocBatch | null; subsections: SubsectionOption[]; clientName?: string | null; siteAddress?: string | null; siteKpis?: SiteKpiBlock;
 }) {
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -36,6 +37,7 @@ export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, 
     subsections: subsections.map(s => ({ id: s.id, name: s.name, tenant_name: s.tenant_name, is_coc_required: s.is_coc_required })),
     certificates: certificates.map(c => ({ subsection_id: c.subsection_id, cert_no: c.cert_no, cert_type: c.cert_type, verdict: c.verdict, rules: c.rules, issued_date: c.issued_date, coc_document_id: c.coc_document_id, eval_document_id: c.eval_document_id })),
     schedule: schedule.map(r => ({ subsection_id: r.subsection_id, shop_no_raw: r.shop_no_raw, initial_cert_nos: r.initial_cert_nos, supplementary_cert_nos: r.supplementary_cert_nos })),
+    siteKpis,
   });
 
   const generate = async () => {
