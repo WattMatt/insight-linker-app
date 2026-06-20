@@ -87,8 +87,8 @@ function fileRegisterContent(rows: FileRegisterRow[]): Content {
   return { table: { headerRows: 1, widths: ["*", 42, 64, 56, 40, 22, 48, 30, "*"], body: [head, ...body] }, layout: "lightHorizontalLines", margin: [0, 0, 0, 8] };
 }
 
-function miniBar(pct: number, color: string): Content {
-  const w = 120, p = Math.max(0, Math.min(100, pct));
+function miniBar(pct: number, color: string, w = 108): Content {
+  const p = Math.max(0, Math.min(100, pct));
   return { canvas: [
     { type: "rect", x: 0, y: 0, w, h: 5, r: 2, color: "#ECECEC" },
     { type: "rect", x: 0, y: 0, w: (w * p) / 100, h: 5, r: 2, color },
@@ -102,77 +102,95 @@ function verdictBar(v: { pass: number; fail: number; review: number; cv: number;
   push(v.pass, "#1D9E75"); push(v.review + v.cv, "#EF9F27"); push(v.pending, "#B4B2A9"); push(v.fail, "#E24B4A");
   return { canvas: rects, margin: [0, 4, 0, 2] };
 }
-function kpiCell(label: string, value: string, sub: string, bar?: Content): Content {
-  const stack: Content[] = [
-    { text: label, fontSize: 8, color: "#5F5E5A" },
-    { text: value, fontSize: 16, bold: true },
-    { text: sub, fontSize: 7, color: "#5F5E5A" },
-  ];
-  if (bar) stack.push(bar);
-  return { stack, margin: [0, 0, 8, 0] } as Content;
-}
+export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: string | null): TDocumentDefinitions {
+  const s = model.summary, k = model.kpis, cov = model.cover, sk = model.siteKpis;
+  const tone = (pct: number) => (pct >= 80 ? "#1D9E75" : pct >= 50 ? "#EF9F27" : "#E24B4A");
 
-export function buildSiteCocReportDocDef(model: CocReportModel): TDocumentDefinitions {
-  const s = model.summary, k = model.kpis, cov = model.cover;
+  const brand: Content = logoDataUrl
+    ? { image: logoDataUrl, fit: [200, 66] }
+    : { stack: [
+        { text: "WATSON MATTHEUS", fontSize: 13, bold: true, color: "#185FA5", characterSpacing: 2 },
+        { text: "CONSULTING ELECTRICAL ENGINEERS", fontSize: 9, color: "#5F5E5A" },
+      ] };
 
   const cover: Content[] = [
-    { text: "WATSON MATTHEUS", fontSize: 13, bold: true, color: "#185FA5", characterSpacing: 2 },
-    { text: "CONSULTING ELECTRICAL ENGINEERS", fontSize: 9, color: "#5F5E5A", margin: [0, 0, 0, 60] },
-    { text: "Certificate of Compliance", fontSize: 30, bold: true },
-    { text: "Status report", fontSize: 18, color: "#5F5E5A", margin: [0, 0, 0, 24] },
-    { text: model.siteName, fontSize: 18, bold: true },
-    { text: cov.address || "", fontSize: 10, color: "#5F5E5A", margin: [0, 0, 0, 20] },
+    brand,
+    { canvas: [{ type: "rect", x: 0, y: 0, w: 760, h: 3, color: "#185FA5" }], margin: [0, 10, 0, 50] },
+    { text: "Certificate of Compliance", fontSize: 32, bold: true, color: "#0C447C" },
+    { text: "Status report", fontSize: 18, color: "#5F5E5A", margin: [0, 2, 0, 40] },
+    { text: model.siteName, fontSize: 20, bold: true },
+    { text: cov.address || "", fontSize: 11, color: "#5F5E5A", margin: [0, 2, 0, 32] },
     { table: { widths: ["auto", "*"], body: [
-      [{ text: "Prepared for", color: "#5F5E5A" }, { text: cov.clientName || "—" }],
+      [{ text: "Prepared for", color: "#5F5E5A" }, { text: cov.clientName || "—", bold: true }],
       [{ text: "Prepared by", color: "#5F5E5A" }, { text: "Watson Mattheus Consulting Electrical Engineers" }],
       [{ text: "Generated", color: "#5F5E5A" }, { text: `${model.generatedAt}${model.lastImport ? ` · data as of ${model.lastImport}` : ""}` }],
-    ] }, layout: "noBorders", fontSize: 10, margin: [0, 0, 0, 26] },
-    { text: `${s.compliantPct}% compliant`, fontSize: 26, bold: true },
-    { text: `${s.noCoc} shops with no COC · ${s.failed} failed`, fontSize: 12, color: TEXT.fail, pageBreak: "after" },
+    ] }, layout: "noBorders", fontSize: 10.5, margin: [0, 0, 0, 46] },
+    { columns: [
+      { width: "auto", stack: [
+        { text: `${s.compliantPct}%`, fontSize: 44, bold: true, color: tone(s.compliantPct) },
+        { text: "compliant", fontSize: 12, color: "#5F5E5A", margin: [2, 0, 0, 0] },
+      ] },
+      { width: "*", text: `${s.required} COC-required shops\n${s.clear} clear · ${s.noCoc} no COC · ${s.failed} failed`, fontSize: 12, color: "#5F5E5A", margin: [26, 14, 0, 0] },
+    ] },
   ];
 
   const narrative = `${model.siteName} has ${s.required} COC-required shops. ${s.clear} are clear (Pass), ${s.noCoc} have no COC on file, and ${s.failed} ${s.failed === 1 ? "has a failed certificate" : "have failed certificates"}. Overall compliance is ${s.compliantPct}%, with ${k.outstanding} outstanding ${k.outstanding === 1 ? "action" : "actions"}. COC documents are on record for ${k.cocCoveragePct}% of required shops and evaluation reports for ${k.evalCoveragePct}%.`;
 
-  const tone = (pct: number) => (pct >= 80 ? "#1D9E75" : pct >= 50 ? "#EF9F27" : "#E24B4A");
-  const verdictCell = (): Content => ({ stack: [
-    { text: "Verdict mix", fontSize: 8, color: "#5F5E5A" },
-    verdictBar(k.verdict, 120),
-    { text: `P${k.verdict.pass} · R/CV${k.verdict.review + k.verdict.cv} · ${k.verdict.pending}pend · F${k.verdict.fail}`, fontSize: 7, color: "#5F5E5A", margin: [0, 2, 0, 0] },
-  ], margin: [0, 0, 8, 0] } as Content);
-
-  const sk = model.siteKpis;
-  const kpiSection: Content[] = sk ? [
-    { columns: [
-      kpiCell("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, miniBar(s.compliantPct, tone(s.compliantPct))),
-      kpiCell("COC coverage", `${k.cocCoveragePct}%`, "have a COC", miniBar(k.cocCoveragePct, tone(k.cocCoveragePct))),
-      kpiCell("Eval coverage", `${k.evalCoveragePct}%`, "have an eval", miniBar(k.evalCoveragePct, tone(k.evalCoveragePct))),
-      verdictCell(),
-      kpiCell("COC expiry", `${sk.expiry.expired}/${sk.expiry.within30}/${sk.expiry.within90}`, "exp · ≤30d · ≤90d"),
-    ], columnGap: 10, margin: [0, 0, 0, 10] },
-    { columns: [
-      kpiCell("Open snags", `${sk.snagsOpen}`, `${sk.snagsHighRisk} high-risk`),
-      kpiCell("Oldest snag", sk.oldestOpenDays != null ? `${sk.oldestOpenDays}d` : "—", "open ageing"),
-      kpiCell("Inspection pass", `${sk.inspectionPassPct}%`, `${sk.inspectionPass}/${sk.inspectionPass + sk.inspectionFail} items`, miniBar(sk.inspectionPassPct, tone(sk.inspectionPassPct))),
-      kpiCell("Site readiness", `${sk.readinessPct}%`, "deliverables", miniBar(sk.readinessPct, tone(sk.readinessPct))),
-      kpiCell("Metering", `${sk.meteringDone}/${sk.meteringTotal}`, "subsections", miniBar(sk.meteringTotal ? Math.round((sk.meteringDone / sk.meteringTotal) * 100) : 100, tone(sk.meteringTotal ? Math.round((sk.meteringDone / sk.meteringTotal) * 100) : 100))),
-    ], columnGap: 10, margin: [0, 0, 0, 12] },
+  const cardLayout = {
+    hLineWidth: () => 0.7, vLineWidth: () => 0.7,
+    hLineColor: () => "#E2E2DD", vLineColor: () => "#E2E2DD",
+    paddingLeft: () => 9, paddingRight: () => 9, paddingTop: () => 8, paddingBottom: () => 9,
+  };
+  const card = (label: string, value: string, sub: string, opts?: { color?: string; bar?: Content }): any => ({
+    fillColor: "#FFFFFF",
+    stack: [
+      { text: label, fontSize: 8, color: "#5F5E5A" },
+      { text: value, fontSize: 17, bold: true, color: opts?.color ?? "#1A1A1A", margin: [0, 2, 0, 0] },
+      ...(opts?.bar ? [opts.bar] : []),
+      { text: sub, fontSize: 7, color: "#888780", margin: [0, 2, 0, 0] },
+    ],
+  });
+  const verdictCard = (): any => ({
+    fillColor: "#FFFFFF",
+    stack: [
+      { text: "Verdict mix", fontSize: 8, color: "#5F5E5A" },
+      { text: "", fontSize: 5 },
+      verdictBar(k.verdict, 110),
+      { text: `P ${k.verdict.pass} · R/CV ${k.verdict.review + k.verdict.cv} · ${k.verdict.pending} pend · F ${k.verdict.fail}`, fontSize: 6.5, color: "#5F5E5A", margin: [0, 5, 0, 0] },
+    ],
+  });
+  const mPct = sk && sk.meteringTotal ? Math.round((sk.meteringDone / sk.meteringTotal) * 100) : 100;
+  const kpiRows: any[][] = sk ? [
+    [
+      card("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, { color: tone(s.compliantPct), bar: miniBar(s.compliantPct, tone(s.compliantPct)) }),
+      card("COC coverage", `${k.cocCoveragePct}%`, "have a COC", { color: tone(k.cocCoveragePct), bar: miniBar(k.cocCoveragePct, tone(k.cocCoveragePct)) }),
+      card("Eval coverage", `${k.evalCoveragePct}%`, "have an eval", { color: tone(k.evalCoveragePct), bar: miniBar(k.evalCoveragePct, tone(k.evalCoveragePct)) }),
+      verdictCard(),
+      card("COC expiry", `${sk.expiry.expired} / ${sk.expiry.within30} / ${sk.expiry.within90}`, "expired · ≤30d · ≤90d"),
+    ],
+    [
+      card("Open snags", `${sk.snagsOpen}`, `${sk.snagsHighRisk} high-risk`, { color: sk.snagsHighRisk ? TEXT.fail : "#1A1A1A" }),
+      card("Oldest snag", sk.oldestOpenDays != null ? `${sk.oldestOpenDays}d` : "—", "open ageing"),
+      card("Inspection pass", `${sk.inspectionPassPct}%`, `${sk.inspectionPass}/${sk.inspectionPass + sk.inspectionFail} items`, { color: tone(sk.inspectionPassPct), bar: miniBar(sk.inspectionPassPct, tone(sk.inspectionPassPct)) }),
+      card("Site readiness", `${sk.readinessPct}%`, "deliverables", { color: tone(sk.readinessPct), bar: miniBar(sk.readinessPct, tone(sk.readinessPct)) }),
+      card("Metering", sk.meteringTotal ? `${sk.meteringDone}/${sk.meteringTotal}` : "—", "subsections", { color: tone(mPct), bar: miniBar(mPct, tone(mPct)) }),
+    ],
   ] : [
-    { columns: [
-      kpiCell("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, miniBar(s.compliantPct, "#1D9E75")),
-      kpiCell("COC coverage", `${k.cocCoveragePct}%`, "shops with a COC", miniBar(k.cocCoveragePct, "#185FA5")),
-      kpiCell("Eval coverage", `${k.evalCoveragePct}%`, "shops with an eval", miniBar(k.evalCoveragePct, "#185FA5")),
-      kpiCell("Outstanding", `${k.outstanding}`, "no-COC + failed"),
-    ], margin: [0, 0, 0, 12] },
-    { text: "Certificate verdict breakdown", fontSize: 9, color: "#5F5E5A" },
-    verdictBar(k.verdict),
-    { text: `Pass ${k.verdict.pass} · Review/CV ${k.verdict.review + k.verdict.cv} · Pending ${k.verdict.pending} · Fail ${k.verdict.fail}`, fontSize: 8, color: "#5F5E5A", margin: [0, 0, 0, 12] },
+    [
+      card("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, { color: tone(s.compliantPct), bar: miniBar(s.compliantPct, tone(s.compliantPct)) }),
+      card("COC coverage", `${k.cocCoveragePct}%`, "have a COC", { color: tone(k.cocCoveragePct), bar: miniBar(k.cocCoveragePct, tone(k.cocCoveragePct)) }),
+      card("Eval coverage", `${k.evalCoveragePct}%`, "have an eval", { color: tone(k.evalCoveragePct), bar: miniBar(k.evalCoveragePct, tone(k.evalCoveragePct)) }),
+      verdictCard(),
+      card("Outstanding", `${k.outstanding}`, "no-COC + failed"),
+    ],
   ];
+  const kpiGrid: Content = { table: { widths: ["*", "*", "*", "*", "*"], body: kpiRows }, layout: cardLayout, margin: [0, 0, 0, 14] };
 
   const summary: Content[] = [
-    { text: "Executive summary", fontSize: 16, bold: true, margin: [0, 0, 0, 4] },
-    { text: narrative, fontSize: 11, margin: [0, 0, 0, 12] },
-    ...kpiSection,
-    { text: "Issues & exceptions", fontSize: 12, bold: true, margin: [0, 0, 0, 4] },
+    { text: "Executive summary", fontSize: 18, bold: true, pageBreak: "before", margin: [0, 0, 0, 6] },
+    { text: narrative, fontSize: 11, margin: [0, 0, 0, 14] },
+    kpiGrid,
+    { text: "Issues & exceptions", fontSize: 12, bold: true, margin: [0, 4, 0, 4] },
     { text: `No COC on file (${model.issues.noCoc.length})`, fontSize: 9, color: TEXT.fail },
     { text: model.issues.noCoc.map(i => i.name).join(" · ") || "—", fontSize: 9, margin: [0, 0, 0, 6] },
     { text: `Failed verdict / SANS rules (${model.issues.failed.length})`, fontSize: 9, color: TEXT.fail },

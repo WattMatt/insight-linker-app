@@ -753,7 +753,7 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="site-coc" className="space-y-6">
-          <SiteCocTab siteId={siteId} siteName={site.name} clientName={site.clients?.name ?? null} siteAddress={site.address ?? null} siteKpis={siteKpis} />
+          <SiteCocTab siteId={siteId} siteName={site.name} clientName={site.clients?.name ?? null} siteAddress={site.address ?? null} siteKpis={siteKpis} companyLogo={companyLogo} />
         </TabsContent>
 
         <TabsContent value="qr-analytics">
