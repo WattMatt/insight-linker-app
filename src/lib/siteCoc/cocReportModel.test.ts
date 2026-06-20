@@ -52,6 +52,31 @@ describe("buildCocReportModel", () => {
   });
 });
 
+describe("buildCocReportModel data tables", () => {
+  const schedule2 = [{
+    subsection_id: "a", shop_no_raw: "SHOP 1", initial_cert_nos: "B1", supplementary_cert_nos: "B2",
+    trading_name: "ACKERMANS", coc_required: "Y", files_count: 2, status: "MISSING — no electrical CoC", notes: "1 non-CoC doc",
+  }];
+  const certs2 = [{
+    subsection_id: "a", cert_no: "B2", cert_type: "Supplementary", verdict: "FAIL — test value out of limit",
+    rules: { A1: "PASS", C8: "FAIL" }, issued_date: "2024-02-02", coc_document_id: "d2", eval_document_id: null,
+    shop_no_raw: "SHOP 1", doc_type: "electrical_coc", clause_9_2: "b", confidence: "high", source_file: "COCs/B2.pdf", notes: "reg person X",
+  }];
+  const m = buildCocReportModel({ siteName: "S", generatedAt: "d", lastImport: null, subsections: subs, certificates: certs2, schedule: schedule2 });
+
+  it("schedule table carries raw status + columns for colouring", () => {
+    expect(m.scheduleTable[0]).toMatchObject({ shopNo: "SHOP 1", trading: "ACKERMANS", req: "Y", files: 2, status: "MISSING — no electrical CoC", notes: "1 non-CoC doc" });
+  });
+  it("verification rows carry per-rule values + verdict", () => {
+    expect(m.verificationRows[0]).toMatchObject({ shop: "SHOP 1", certNo: "B2", type: "Supplementary" });
+    expect(m.verificationRows[0].rules.C8).toBe("FAIL");
+    expect(m.verificationRows[0].rules.A1).toBe("PASS");
+  });
+  it("file register carries file name, matched shop, doc type", () => {
+    expect(m.fileRegister[0]).toMatchObject({ file: "COCs/B2.pdf", matched: "SHOP 1", docType: "electrical_coc", certNo: "B2", clause92: "b", conf: "high" });
+  });
+});
+
 describe("buildCocReportModel KPIs + cover", () => {
   const m = buildCocReportModel({ siteName: "S", generatedAt: "d", lastImport: null, clientName: "Acme", address: "1 St", subsections: subs, certificates: certs, schedule });
   it("cover carries client + address", () => {
