@@ -97,7 +97,9 @@ export async function generateSubsectionQRCode(
         dark: '#000000',
         light: '#FFFFFF',
       },
-      errorCorrectionLevel: 'M',
+      // 'H' (30% recovery) keeps the code scannable under the centered logo overlay,
+      // matching qrCodeGenerator / LabeledQRCode.
+      errorCorrectionLevel: 'H',
     });
     
     // If we have a logo, embed it in the center
@@ -125,41 +127,55 @@ async function embedLogoInQR(qrDataUrl: string, logoUrl: string): Promise<string
     qrImg.onload = () => {
       canvas.width = qrImg.width;
       canvas.height = qrImg.height;
-      
-      if (ctx) {
-        // Draw QR code
-        ctx.drawImage(qrImg, 0, 0);
-        
-        // Draw white circle background for logo
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const logoSize = CARD_LAYOUT.qrCodeLogoSize * 2;
-        
-        ctx.fillStyle = '#FFFFFF';
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, logoSize / 2 + 4, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Try to load and draw logo
-        const logoImg = new Image();
-        logoImg.crossOrigin = 'anonymous';
-        logoImg.onload = () => {
-          ctx.drawImage(
-            logoImg,
-            centerX - logoSize / 2,
-            centerY - logoSize / 2,
-            logoSize,
-            logoSize
-          );
-          resolve(canvas.toDataURL('image/png'));
-        };
-        logoImg.onerror = () => {
-          resolve(canvas.toDataURL('image/png'));
-        };
-        logoImg.src = logoUrl;
-      } else {
+
+      if (!ctx) {
         resolve(qrDataUrl);
+        return;
       }
+
+      // Draw QR code
+      ctx.drawImage(qrImg, 0, 0);
+
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const maxLogoSize = CARD_LAYOUT.qrCodeLogoSize * 2;
+
+      // Draw the logo aspect-ratio-preserved with a white rectangular backing, matching
+      // qrCodeGenerator / LabeledQRCode so a wide WM logo is never squashed into a square.
+      const logoImg = new Image();
+      logoImg.crossOrigin = 'anonymous';
+      logoImg.onload = () => {
+        let logoWidth = logoImg.width;
+        let logoHeight = logoImg.height;
+        if (logoWidth > logoHeight) {
+          if (logoWidth > maxLogoSize) {
+            logoHeight = (logoHeight * maxLogoSize) / logoWidth;
+            logoWidth = maxLogoSize;
+          }
+        } else {
+          if (logoHeight > maxLogoSize) {
+            logoWidth = (logoWidth * maxLogoSize) / logoHeight;
+            logoHeight = maxLogoSize;
+          }
+        }
+        const logoX = centerX - logoWidth / 2;
+        const logoY = centerY - logoHeight / 2;
+        const logoPadding = Math.min(logoWidth, logoHeight) * 0.15;
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(
+          logoX - logoPadding,
+          logoY - logoPadding,
+          logoWidth + logoPadding * 2,
+          logoHeight + logoPadding * 2,
+        );
+        ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      logoImg.onerror = () => {
+        resolve(canvas.toDataURL('image/png'));
+      };
+      logoImg.src = logoUrl;
     };
     
     qrImg.onerror = () => {

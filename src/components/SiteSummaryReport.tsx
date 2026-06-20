@@ -7,7 +7,6 @@ import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { qrRedirectUrl } from "@/lib/qrBaseUrl";
-import QRCode from "qrcode";
 import {
   generateReport,
   createSectionHeader,
@@ -130,24 +129,6 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
       return false;
     }
     return true;
-  };
-
-  // Helper function to generate QR code as base64 data URL
-  const generateQRCodeBase64 = async (subsectionId: string): Promise<string | null> => {
-    try {
-      const qrTargetUrl = qrRedirectUrl(subsectionId);
-
-      const dataUrl = await QRCode.toDataURL(qrTargetUrl, {
-        width: 150,
-        margin: 1,
-        errorCorrectionLevel: 'M'
-      });
-      
-      return dataUrl;
-    } catch (error) {
-      console.error('Failed to generate QR code:', error);
-      return null;
-    }
   };
 
   // Fetch template configuration using the gateway - SINGLE SOURCE OF TRUTH
@@ -320,6 +301,11 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
       subsectionDocuments: subsectionDocsRes.data?.length || 0,
     });
 
+    // Company branding (Watson Mattheus logo) loaded up-front so the subsection-card
+    // QR codes can embed the centered company logo — consistent with every other QR
+    // surface (QR tab, site QR tab, inspection detail, stored PNG).
+    const companyBranding = await loadCompanyBranding();
+
     // Process each section in order, only if enabled
     for (const section of sortedSections) {
       const spec = findSectionSpec(section.id);
@@ -444,7 +430,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
           const subsectionGrid = await renderSubsectionGrid(
             subsectionCardData,
             accentColor,
-            null // Logo will be embedded later by pdfEngine
+            companyBranding.logoDataUrl // centered WM company logo inside each card's QR
           );
           content.push(subsectionGrid);
           break;
@@ -673,10 +659,8 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
       }
     }
 
-    // Load branding - prefer client logo from site, fallback to company branding
-    const companyBranding = await loadCompanyBranding();
-    
-    // Use client logo from the already-fetched site data if available
+    // Report-header branding — prefer the client logo from site data, fall back to the
+    // company logo (companyBranding already loaded above for the subsection-card QR logos).
     let logoDataUrl = companyBranding.logoDataUrl;
     if (site?.client_logo_url) {
       const clientLogo = await imageUrlToBase64(site.client_logo_url);
