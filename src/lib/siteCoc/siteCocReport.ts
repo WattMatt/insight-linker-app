@@ -87,20 +87,24 @@ function fileRegisterContent(rows: FileRegisterRow[]): Content {
   return { table: { headerRows: 1, widths: ["*", 42, 64, 56, 40, 22, 48, 30, "*"], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
 }
 
-function miniBar(pct: number, color: string, w = 90, track = "#FFFFFF"): Content {
+// Bars are built as 2-cell (or N-cell) TABLES, never canvases. pdf.js — the in-app viewer —
+// mis-positions canvas elements inside table cells (it pushes them to the bottom and stretches the
+// row), so the cover gauge and these KPI bars all use the reliable table primitive instead.
+const barLayout = { defaultBorder: false, paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0 };
+function miniBar(pct: number, color: string, w = 108, track = "#ECECEC"): Content {
   const p = Math.max(0, Math.min(100, pct));
-  return { canvas: [
-    { type: "rect", x: 0, y: 0, w, h: 6, r: 3, color: track },
-    { type: "rect", x: 0, y: 0, w: (w * p) / 100, h: 6, r: 3, color },
-  ], margin: [0, 4, 0, 0] };
+  const fw = Math.max(1, Math.round((w * p) / 100)), rest = Math.max(1, w - fw);
+  return { table: { widths: [fw, rest], heights: [5], body: [[{ text: "", fillColor: color }, { text: "", fillColor: track }]] }, layout: barLayout, margin: [0, 5, 0, 0] };
 }
-function verdictBar(v: { pass: number; fail: number; review: number; cv: number; pending: number }, W = 340): Content {
+function verdictBar(v: { pass: number; fail: number; review: number; cv: number; pending: number }, W = 104): Content {
   const total = Math.max(1, v.pass + v.fail + v.review + v.cv + v.pending);
-  const rects: { type: "rect"; x: number; y: number; w: number; h: number; color: string }[] = [];
-  let x = 0;
-  const push = (n: number, c: string) => { if (n) { rects.push({ type: "rect", x, y: 0, w: (W * n) / total, h: 12, color: c }); x += (W * n) / total; } };
-  push(v.pass, "#1D9E75"); push(v.review + v.cv, "#EF9F27"); push(v.pending, "#B4B2A9"); push(v.fail, "#E24B4A");
-  return { canvas: rects, margin: [0, 4, 0, 2] };
+  const segs = [
+    { n: v.pass, c: "#1D9E75" }, { n: v.review + v.cv, c: "#EF9F27" },
+    { n: v.pending, c: "#B4B2A9" }, { n: v.fail, c: "#E24B4A" },
+  ].filter(s => s.n > 0);
+  const widths = segs.length ? segs.map(s => Math.max(2, Math.round((W * s.n) / total))) : [W];
+  const cells = segs.length ? segs.map(s => ({ text: "", fillColor: s.c })) : [{ text: "", fillColor: "#ECECEC" }];
+  return { table: { widths, heights: [10], body: [cells] }, layout: barLayout, margin: [0, 5, 0, 3] };
 }
 
 // Cover gauge bar built as a 2-cell table (NOT a canvas): a standalone canvas block gets bumped to
@@ -175,9 +179,12 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
     paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0,
   };
   const innerLayout = { defaultBorder: false, paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0 };
+  // No fixed height: a fixed height makes pdf.js stretch the row and float content to top/bottom.
+  // Letting the cell size to its content keeps cards compact; the outer table equalizes all five
+  // cards in a row to the tallest, so the row stays visually even.
   const cardCell = (t: Tone, stack: any[]): any => ({
     fillColor: TINT[t].bg,
-    table: { widths: [4, 130], heights: [66], body: [[{ text: "", fillColor: TINT[t].accent }, { stack, margin: [9, 9, 8, 9] }]] },
+    table: { widths: [4, 130], body: [[{ text: "", fillColor: TINT[t].accent }, { stack, margin: [9, 9, 8, 9] }]] },
     layout: innerLayout,
   });
   const card = (label: string, value: string, sub: string, t: Tone, barPct?: number): any =>
