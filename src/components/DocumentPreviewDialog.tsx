@@ -59,6 +59,7 @@ export function DocumentPreviewDialog({
   complianceChecks,
 }: DocumentPreviewDialogProps) {
   const [scale, setScale] = useState(1);
+  const [fitWidth, setFitWidth] = useState(0);
   const [rotation, setRotation] = useState(0);
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -79,6 +80,17 @@ export function DocumentPreviewDialog({
   const isPdf = fileName.toLowerCase().endsWith('.pdf');
   const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(fileName);
   const isDocx = fileName.toLowerCase().endsWith('.docx');
+
+  // Fit PDF pages to the container width (landscape pages would otherwise overflow + clip at 100%).
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => setFitWidth(Math.max(240, el.clientWidth - 40));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isPdf, pdfLoading, open]);
 
   // For Supabase storage PDFs, download via SDK to avoid CORS/encoding issues
   useEffect(() => {
@@ -380,10 +392,10 @@ export function DocumentPreviewDialog({
         >
           <Page
             pageNumber={currentPage}
-            scale={scale}
             rotate={rotation}
             renderTextLayer={true}
             renderAnnotationLayer={true}
+            {...(fitWidth ? { width: fitWidth * scale } : { scale })}
           />
         </Document>
       );
