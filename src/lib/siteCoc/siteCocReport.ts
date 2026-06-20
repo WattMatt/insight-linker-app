@@ -187,7 +187,7 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
   const kpiGrid: Content = { table: { widths: ["*", "*", "*", "*", "*"], body: kpiRows }, layout: cardLayout, margin: [0, 0, 0, 14] };
 
   const summary: Content[] = [
-    { text: "Executive summary", fontSize: 18, bold: true, pageBreak: "before", margin: [0, 0, 0, 6] },
+    { text: "Executive summary", fontSize: 18, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
     { text: narrative, fontSize: 11, margin: [0, 0, 0, 14] },
     kpiGrid,
     { text: "Issues & exceptions", fontSize: 12, bold: true, margin: [0, 4, 0, 4] },
@@ -200,12 +200,12 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
   ];
 
   const tablesBlock: Content[] = [
-    { text: "DB / COC Schedule", fontSize: 14, bold: true, pageBreak: "before", margin: [0, 0, 0, 6] },
+    { text: "DB / COC Schedule", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
     scheduleTableContent(model.scheduleTable),
-    { text: "COC Verification vs SANS 10142-1", fontSize: 14, bold: true, pageBreak: "before", margin: [0, 0, 0, 2] },
+    { text: "COC Verification vs SANS 10142-1", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 2] },
     { text: "P Pass · F Fail · CV Cannot verify · N/A not applicable · · not captured", fontSize: 7, color: "#5F5E5A", margin: [0, 0, 0, 4] },
     verificationContent(model.verificationRows),
-    { text: "File register", fontSize: 14, bold: true, pageBreak: "before", margin: [0, 0, 0, 6] },
+    { text: "File register", fontSize: 14, bold: true, margin: [0, 8, 0, 6] },
     fileRegisterContent(model.fileRegister),
   ];
 
@@ -213,5 +213,9 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
     pageOrientation: "landscape",
     content: [...cover, ...summary, ...tablesBlock],
     defaultStyle: { fontSize: 9 },
+    // Start each section on a fresh page, but only when content already sits on the current page —
+    // this avoids pdfmake inserting a blank page when the previous table happened to fill the page.
+    pageBreakBefore: (current: any, opts: any) =>
+      current.headlineLevel === 1 && opts.getPreviousNodesOnPage().length > 0,
   };
 }
