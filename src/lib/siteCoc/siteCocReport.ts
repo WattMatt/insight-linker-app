@@ -184,7 +184,10 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
       card("Outstanding", `${k.outstanding}`, "no-COC + failed"),
     ],
   ];
-  const kpiGrid: Content = { table: { widths: ["*", "*", "*", "*", "*"], body: kpiRows }, layout: cardLayout, margin: [0, 0, 0, 14] };
+  // Explicit equal widths (not "*") — pdf.js (the in-app preview renderer) mis-distributes star
+  // columns that contain canvas cells, blowing the first column to full width. Fixed widths render
+  // identically in pdfmake, pdf.js and pdfium. 5×138 + padding fits the ~762pt landscape content area.
+  const kpiGrid: Content = { table: { widths: [138, 138, 138, 138, 138], body: kpiRows }, layout: cardLayout, margin: [0, 0, 0, 14] };
 
   const summary: Content[] = [
     { text: "Executive summary", fontSize: 18, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
