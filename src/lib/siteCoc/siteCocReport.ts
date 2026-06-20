@@ -87,10 +87,10 @@ function fileRegisterContent(rows: FileRegisterRow[]): Content {
   return { table: { headerRows: 1, widths: ["*", 42, 64, 56, 40, 22, 48, 30, "*"], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
 }
 
-function miniBar(pct: number, color: string, w = 96): Content {
+function miniBar(pct: number, color: string, w = 90, track = "#FFFFFF"): Content {
   const p = Math.max(0, Math.min(100, pct));
   return { canvas: [
-    { type: "rect", x: 0, y: 0, w, h: 6, r: 3, color: "#FFFFFF" },
+    { type: "rect", x: 0, y: 0, w, h: 6, r: 3, color: track },
     { type: "rect", x: 0, y: 0, w: (w * p) / 100, h: 6, r: 3, color },
   ], margin: [0, 4, 0, 0] };
 }
@@ -160,47 +160,49 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
 
   const narrative = `${model.siteName} has ${s.required} COC-required shops. ${s.clear} are clear (Pass), ${s.noCoc} have no COC on file, and ${s.failed} ${s.failed === 1 ? "has a failed certificate" : "have failed certificates"}. Overall compliance is ${s.compliantPct}%, with ${k.outstanding} outstanding ${k.outstanding === 1 ? "action" : "actions"}. COC documents are on record for ${k.cocCoveragePct}% of required shops and evaluation reports for ${k.evalCoveragePct}%.`;
 
-  // Tinted KPI cards: each card cell is filled with a soft status tint; 4pt WHITE table borders act
-  // as the gaps between cards. Explicit widths (never "*") so pdf.js doesn't mis-distribute.
-  const TINT: Record<Tone, { bg: string; label: string; value: string }> = {
-    green: { bg: "#E1F5EE", label: "#0F6E56", value: "#085041" },
-    amber: { bg: "#FAEEDA", label: "#854F0B", value: "#633806" },
-    red: { bg: "#FCEBEB", label: "#A32D2D", value: "#791F1F" },
-    slate: { bg: "#F1EFE8", label: "#5F5E5A", value: "#44413E" },
+  // Tinted KPI cards. Each card is a NESTED table (accent bar + tinted content) with a fixed height
+  // on the NESTED table — this is the structure pd.js renders reliably. Putting heights on the OUTER
+  // row + white-gap borders stretched the row in pd.js, so the outer table has no fixed height.
+  const TINT: Record<Tone, { bg: string; accent: string; label: string; value: string; track: string }> = {
+    green: { bg: "#E1F5EE", accent: "#1D9E75", label: "#0F6E56", value: "#085041", track: "#C3E7DA" },
+    amber: { bg: "#FAEEDA", accent: "#EF9F27", label: "#854F0B", value: "#633806", track: "#F0DCB4" },
+    red: { bg: "#FCEBEB", accent: "#E24B4A", label: "#A32D2D", value: "#791F1F", track: "#F4D2D2" },
+    slate: { bg: "#F1EFE8", accent: "#B4B2A9", label: "#5F5E5A", value: "#44413E", track: "#DEDBCF" },
   };
   const toneKey = (pct: number): Tone => (pct >= 80 ? "green" : pct >= 50 ? "amber" : "red");
-  const gapLayout = {
-    hLineWidth: () => 4, vLineWidth: () => 4, hLineColor: () => "#FFFFFF", vLineColor: () => "#FFFFFF",
-    paddingLeft: () => 12, paddingRight: () => 12, paddingTop: () => 11, paddingBottom: () => 11,
+  const cardLayout = {
+    hLineWidth: () => 3, vLineWidth: () => 3, hLineColor: () => "#FFFFFF", vLineColor: () => "#FFFFFF",
+    paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0,
   };
-  const card = (label: string, value: string, sub: string, t: Tone, bar?: Content): any => ({
+  const innerLayout = { defaultBorder: false, paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0 };
+  const cardCell = (t: Tone, stack: any[]): any => ({
     fillColor: TINT[t].bg,
-    stack: [
+    table: { widths: [4, 130], heights: [66], body: [[{ text: "", fillColor: TINT[t].accent }, { stack, margin: [9, 9, 8, 9] }]] },
+    layout: innerLayout,
+  });
+  const card = (label: string, value: string, sub: string, t: Tone, barPct?: number): any =>
+    cardCell(t, [
       { text: label, fontSize: 9, color: TINT[t].label },
-      { text: value, fontSize: 21, bold: true, color: TINT[t].value, margin: [0, 4, 0, 0] },
-      ...(bar ? [bar] : []),
-      { text: sub, fontSize: 7.5, color: TINT[t].label, margin: [0, bar ? 5 : 7, 0, 0] },
-    ],
-  });
-  const verdictCard = (): any => ({
-    fillColor: TINT.slate.bg,
-    stack: [
-      { text: "Verdict mix", fontSize: 9, color: TINT.slate.label },
-      verdictBar(k.verdict, 112),
-      { text: `P ${k.verdict.pass} · R/CV ${k.verdict.review + k.verdict.cv} · ${k.verdict.pending}pd · F ${k.verdict.fail}`, fontSize: 7, color: TINT.slate.label, margin: [0, 6, 0, 0] },
-    ],
-  });
+      { text: value, fontSize: 19, bold: true, color: TINT[t].value, margin: [0, 3, 0, 0] },
+      ...(barPct != null ? [miniBar(barPct, TINT[t].accent, 108, TINT[t].track)] : []),
+      { text: sub, fontSize: 7, color: TINT[t].label, margin: [0, barPct != null ? 4 : 6, 0, 0] },
+    ]);
+  const verdictCard = (): any => cardCell("slate", [
+    { text: "Verdict mix", fontSize: 9, color: TINT.slate.label },
+    verdictBar(k.verdict, 104),
+    { text: `P ${k.verdict.pass} · R/CV ${k.verdict.review + k.verdict.cv} · ${k.verdict.pending}pd · F ${k.verdict.fail}`, fontSize: 7, color: TINT.slate.label, margin: [0, 6, 0, 0] },
+  ]);
   const mPct = sk && sk.meteringTotal ? Math.round((sk.meteringDone / sk.meteringTotal) * 100) : 100;
   const cocRow: any[] = [
-    card("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, toneKey(s.compliantPct), miniBar(s.compliantPct, tone(s.compliantPct))),
-    card("COC coverage", `${k.cocCoveragePct}%`, "have a COC", toneKey(k.cocCoveragePct), miniBar(k.cocCoveragePct, tone(k.cocCoveragePct))),
-    card("Eval coverage", `${k.evalCoveragePct}%`, "have an eval", toneKey(k.evalCoveragePct), miniBar(k.evalCoveragePct, tone(k.evalCoveragePct))),
+    card("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, toneKey(s.compliantPct), s.compliantPct),
+    card("COC coverage", `${k.cocCoveragePct}%`, "have a COC", toneKey(k.cocCoveragePct), k.cocCoveragePct),
+    card("Eval coverage", `${k.evalCoveragePct}%`, "have an eval", toneKey(k.evalCoveragePct), k.evalCoveragePct),
     verdictCard(),
     sk
       ? card("COC expiry", `${sk.expiry.expired} / ${sk.expiry.within30} / ${sk.expiry.within90}`, "expired · ≤30d · ≤90d", "slate")
       : card("Outstanding", `${k.outstanding}`, "no-COC + failed", k.outstanding ? "amber" : "slate"),
   ];
-  const kpiTable = (cards: any[]): Content => ({ table: { widths: [138, 138, 138, 138, 138], heights: [78], body: [cards] }, layout: gapLayout, margin: [0, 0, 0, 4] });
+  const kpiTable = (cards: any[]): Content => ({ table: { widths: [138, 138, 138, 138, 138], body: [cards] }, layout: cardLayout, margin: [0, 0, 0, 6] });
   const glabel = (t: string): Content => ({ text: t, fontSize: 9, bold: true, color: "#185FA5", margin: [0, 6, 0, 6] });
 
   const kpiBlock: Content[] = sk ? [
@@ -210,9 +212,9 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
     kpiTable([
       card("Open snags", `${sk.snagsOpen}`, `${sk.snagsHighRisk} high-risk`, sk.snagsHighRisk ? "red" : sk.snagsOpen ? "amber" : "green"),
       card("Oldest snag", sk.oldestOpenDays != null ? `${sk.oldestOpenDays}d` : "—", "open ageing", "slate"),
-      card("Inspection pass", `${sk.inspectionPassPct}%`, `${sk.inspectionPass}/${sk.inspectionPass + sk.inspectionFail} items`, toneKey(sk.inspectionPassPct), miniBar(sk.inspectionPassPct, tone(sk.inspectionPassPct))),
-      card("Site readiness", `${sk.readinessPct}%`, "deliverables", toneKey(sk.readinessPct), miniBar(sk.readinessPct, tone(sk.readinessPct))),
-      card("Metering", sk.meteringTotal ? `${sk.meteringDone}/${sk.meteringTotal}` : "—", "subsections", toneKey(mPct), miniBar(mPct, tone(mPct))),
+      card("Inspection pass", `${sk.inspectionPassPct}%`, `${sk.inspectionPass}/${sk.inspectionPass + sk.inspectionFail} items`, toneKey(sk.inspectionPassPct), sk.inspectionPassPct),
+      card("Site readiness", `${sk.readinessPct}%`, "deliverables", toneKey(sk.readinessPct), sk.readinessPct),
+      card("Metering", sk.meteringTotal ? `${sk.meteringDone}/${sk.meteringTotal}` : "—", "subsections", toneKey(mPct), mPct),
     ]),
   ] : [kpiTable(cocRow)];
 
