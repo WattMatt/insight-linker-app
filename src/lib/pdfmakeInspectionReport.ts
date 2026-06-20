@@ -20,7 +20,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { mmToPt } from './pdfMakeConfig';
 import { loadImageSimple, loadImagesSimple, compressImageBlob } from './simpleImageLoader';
-import { scorePercentage } from './report/inspectionScore';
+import { scorePercentage, isPassStatus, isFailStatus } from './report/inspectionScore';
 import { savePDFToDocuments } from './pdfDocumentSaver';
 
 // Type definitions
@@ -163,15 +163,6 @@ function getStatusColor(status: string): string {
   return REPORT_COLORS.textMuted;
 }
 
-function isPassStatus(status: string): boolean {
-  const statusLower = status.toLowerCase();
-  return ['pass', 'passed', 'yes', 'compliant', 'ok', 'good', 'complete', 'completed'].includes(statusLower);
-}
-
-function isFailStatus(status: string): boolean {
-  const statusLower = status.toLowerCase();
-  return ['fail', 'failed', 'no', 'non-compliant', 'bad', 'critical'].includes(statusLower);
-}
 
 // ============================================================================
 // STATISTICS CALCULATION
