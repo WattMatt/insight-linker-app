@@ -13,6 +13,15 @@ export interface ReportTenant {
   coverage: { hasCoc: boolean; hasEval: boolean; verdictKind: VerdictKind };
   certs: ReportCert[]; actions: string[]; noCoc: boolean;
 }
+export interface ScheduleTableRow {
+  shopNo: string; trading: string; req: string; initial: string; supplementary: string;
+  files: number | null; status: string; notes: string;
+}
+export interface VerificationRow { shop: string; certNo: string; type: string; verdict: string; rules: Record<string, string>; }
+export interface FileRegisterRow {
+  file: string; matched: string; docType: string; certNo: string; type: string;
+  clause92: string; issued: string | null; conf: string; notes: string;
+}
 export interface CocReportModel {
   siteName: string; generatedAt: string; lastImport: string | null;
   cover: { clientName: string | null; address: string | null };
@@ -21,11 +30,22 @@ export interface CocReportModel {
   issues: { noCoc: { name: string }[]; failed: { name: string; certNo: string; failedRules: string[] }[] };
   tenants: ReportTenant[];
   siteKpis?: SiteKpiBlock;
+  scheduleTable: ScheduleTableRow[];
+  verificationRows: VerificationRow[];
+  fileRegister: FileRegisterRow[];
 }
 
 interface SubRow { id: string; name: string; tenant_name: string | null; is_coc_required: boolean | null }
-interface CertRow { subsection_id: string | null; cert_no: string; cert_type: string; verdict: string; rules: Record<string, string> | null; issued_date: string | null; coc_document_id: string | null; eval_document_id: string | null }
-interface SchedRow { subsection_id: string | null; shop_no_raw: string; initial_cert_nos: string; supplementary_cert_nos: string }
+interface CertRow {
+  subsection_id: string | null; cert_no: string; cert_type: string; verdict: string;
+  rules: Record<string, string> | null; issued_date: string | null;
+  coc_document_id: string | null; eval_document_id: string | null;
+  shop_no_raw?: string; doc_type?: string; clause_9_2?: string; confidence?: string; source_file?: string; notes?: string;
+}
+interface SchedRow {
+  subsection_id: string | null; shop_no_raw: string; initial_cert_nos: string; supplementary_cert_nos: string;
+  trading_name?: string; coc_required?: string; files_count?: number | null; status?: string; notes?: string;
+}
 export interface BuildInput { siteName: string; generatedAt: string; lastImport: string | null; clientName?: string | null; address?: string | null; subsections: SubRow[]; certificates: CertRow[]; schedule: SchedRow[]; siteKpis?: SiteKpiBlock; }
 
 export function verdictKind(verdict: string, rules: Record<string, string> | null): VerdictKind {
@@ -101,6 +121,26 @@ export function buildCocReportModel(input: BuildInput): CocReportModel {
     outstanding: tenants.reduce((n, t) => n + t.actions.length, 0),
   };
 
+  const scheduleTable: ScheduleTableRow[] = input.schedule
+    .map(r => ({
+      shopNo: r.shop_no_raw, trading: r.trading_name ?? "", req: r.coc_required ?? "",
+      initial: r.initial_cert_nos ?? "", supplementary: r.supplementary_cert_nos ?? "",
+      files: r.files_count ?? null, status: r.status ?? "", notes: r.notes ?? "",
+    }))
+    .sort((a, b) => a.shopNo.localeCompare(b.shopNo));
+
+  const verificationRows: VerificationRow[] = input.certificates
+    .map(c => ({ shop: c.shop_no_raw ?? "", certNo: c.cert_no, type: c.cert_type, verdict: c.verdict, rules: c.rules ?? {} }))
+    .sort((a, b) => a.shop.localeCompare(b.shop) || a.certNo.localeCompare(b.certNo));
+
+  const fileRegister: FileRegisterRow[] = input.certificates
+    .map(c => ({
+      file: c.source_file ?? "", matched: c.shop_no_raw ?? "", docType: c.doc_type ?? "",
+      certNo: c.cert_no, type: c.cert_type, clause92: c.clause_9_2 ?? "", issued: c.issued_date,
+      conf: c.confidence ?? "", notes: c.notes ?? "",
+    }))
+    .sort((a, b) => a.file.localeCompare(b.file));
+
   return {
     siteName: input.siteName, generatedAt: input.generatedAt, lastImport: input.lastImport,
     cover: { clientName: input.clientName ?? null, address: input.address ?? null },
@@ -109,5 +149,6 @@ export function buildCocReportModel(input: BuildInput): CocReportModel {
     issues: { noCoc: noCoc.map(t => ({ name: t.name })), failed: issuesFailed },
     tenants,
     siteKpis: input.siteKpis,
+    scheduleTable, verificationRows, fileRegister,
   };
 }

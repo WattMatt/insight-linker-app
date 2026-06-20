@@ -1,55 +1,90 @@
 import type { TDocumentDefinitions, Content } from "pdfmake/interfaces";
 import { COC_SANS_RULES } from "./sansRules";
-import type { CocReportModel, ReportCert, ReportTenant, VerdictKind } from "./cocReportModel";
+import type { CocReportModel, VerdictKind, ScheduleTableRow, VerificationRow, FileRegisterRow } from "./cocReportModel";
+import { scheduleStatusTone, verdictTone, type Tone } from "./statusDisplay";
 
 const FILL = { pass: "#E1F5EE", fail: "#FCEBEB", review: "#FAEEDA", cv: "#FAEEDA", pending: "#F1EFE8", na: "#F1EFE8" };
 const TEXT: Record<VerdictKind, string> = { pass: "#0F6E56", fail: "#A32D2D", review: "#854F0B", cv: "#854F0B", pending: "#5F5E5A" };
-const verdictLabel: Record<VerdictKind, string> = { pass: "Pass", fail: "Fail", review: "Review", cv: "CV", pending: "Pending" };
+const TONE: Record<Tone, { fill: string; text: string }> = {
+  green: { fill: "#E1F5EE", text: "#0F6E56" },
+  red: { fill: "#FCEBEB", text: "#A32D2D" },
+  amber: { fill: "#FAEEDA", text: "#854F0B" },
+  slate: { fill: "#FFFFFF", text: "#5F5E5A" },
+};
+const shortVerdict = (v: string) => (v || "—").split("—")[0].trim() || "—";
 const glyph = (v: string) => { const t = (v || "").toUpperCase(); return t === "PASS" ? "P" : t === "FAIL" ? "F" : t === "CV" ? "CV" : t === "N/A" ? "N/A" : t ? t : "·"; };
 const ruleFill = (v: string) => { const t = (v || "").toUpperCase(); return t === "FAIL" ? FILL.fail : t === "CV" ? FILL.cv : t === "N/A" ? FILL.na : FILL.pass; };
 
-function sansGrid(c: ReportCert): Content {
-  const codes = COC_SANS_RULES.map(r => ({ text: r.code, fontSize: 6, alignment: "center" as const, fillColor: "#F1EFE8" }));
-  const marks = COC_SANS_RULES.map(r => { const v = c.rules?.[r.code] ?? ""; return { text: glyph(v), fontSize: 6, alignment: "center" as const, fillColor: ruleFill(v) }; });
-  return { table: { widths: Array(COC_SANS_RULES.length).fill("*"), body: [codes, marks] }, layout: "noBorders", margin: [0, 2, 0, 4] };
+const hcell = (t: string) => ({ text: t, bold: true, fontSize: 7, color: "#FFFFFF", fillColor: "#0C447C" });
+
+function scheduleTableContent(rows: ScheduleTableRow[]): Content {
+  const head = ["Shop No", "Trading name", "Req", "Initial COC(s)", "Supplementary COC(s)", "Files", "Status", "Notes"].map(hcell);
+  const body = rows.map(r => {
+    const t = TONE[scheduleStatusTone(r.status)];
+    return [
+      { text: r.shopNo || "—", fontSize: 7 },
+      { text: r.trading || "—", fontSize: 7 },
+      { text: r.req || "—", fontSize: 7, alignment: "center" as const },
+      { text: r.initial || "—", fontSize: 7 },
+      { text: r.supplementary || "—", fontSize: 7 },
+      { text: r.files != null ? String(r.files) : "—", fontSize: 7, alignment: "center" as const },
+      { text: r.status || "—", fontSize: 7, fillColor: t.fill, color: t.text },
+      { text: r.notes || "", fontSize: 6, color: "#5F5E5A" },
+    ];
+  });
+  if (!rows.length) body.push([{ text: "No schedule imported.", fontSize: 7, colSpan: 8 } as any, {}, {}, {}, {}, {}, {}, {}]);
+  return { table: { headerRows: 1, widths: [42, 110, 18, 92, 100, 22, 86, "*"], body: [head, ...body] }, layout: "lightHorizontalLines", margin: [0, 0, 0, 8] };
 }
 
-function tenantSection(t: ReportTenant, first: boolean): Content[] {
-  const out: Content[] = [];
-  out.push({
-    columns: [
-      { text: [{ text: t.name, bold: true }, { text: t.shopNo ? `   ${t.shopNo}` : "", fontSize: 8, color: "#5F5E5A" }] },
-      { text: t.noCoc ? "No COC on file" : verdictLabel[t.coverage.verdictKind], alignment: "right", color: t.noCoc ? TEXT.fail : TEXT[t.coverage.verdictKind] },
-    ],
-    margin: [0, first ? 0 : 8, 0, 2],
-    pageBreak: first ? undefined : "before",
+function verificationContent(rows: VerificationRow[]): Content {
+  const A = COC_SANS_RULES.filter(r => r.group === "A");
+  const B = COC_SANS_RULES.filter(r => r.group === "B");
+  const C = COC_SANS_RULES.filter(r => r.group === "C");
+  const all = [...A, ...B, ...C];
+  const blanks = (n: number) => Array.from({ length: n }, () => ({ text: "" }));
+  const meta = (t: string) => ({ text: t, bold: true, fontSize: 7, color: "#FFFFFF", fillColor: "#0C447C", rowSpan: 2 });
+  const band = (t: string, span: number) => ({ text: t, bold: true, fontSize: 7, color: "#FFFFFF", fillColor: "#185FA5", colSpan: span, alignment: "center" as const });
+  const head1 = [
+    meta("Shop"), meta("Cert no"), meta("Type"), meta("Verdict"),
+    band("Admin", A.length), ...blanks(A.length - 1),
+    band("Install", B.length), ...blanks(B.length - 1),
+    band("Tests", C.length), ...blanks(C.length - 1),
+  ];
+  const head2 = [
+    ...blanks(4),
+    ...all.map(r => ({ text: r.code, bold: true, fontSize: 5, alignment: "center" as const, fillColor: "#E6F1FB" })),
+  ];
+  const body = rows.map(r => {
+    const vt = TONE[verdictTone(r.verdict)];
+    return [
+      { text: r.shop || "—", fontSize: 6 },
+      { text: r.certNo || "—", fontSize: 6 },
+      { text: (r.type || "").slice(0, 1), fontSize: 6, alignment: "center" as const },
+      { text: shortVerdict(r.verdict), fontSize: 6, fillColor: vt.fill, color: vt.text },
+      ...all.map(rule => { const v = r.rules?.[rule.code] ?? ""; return { text: glyph(v), fontSize: 6, alignment: "center" as const, fillColor: ruleFill(v) }; }),
+    ];
   });
-  out.push({ text: `Coverage: COC ${t.coverage.hasCoc ? "yes" : "—"} · Evaluation ${t.coverage.hasEval ? "yes" : "—"}`, fontSize: 8, color: "#5F5E5A", margin: [0, 0, 0, 2] });
-  out.push({ text: `Register expects — Initial: ${t.registerInitial || "—"}   Supplementary: ${t.registerSupp || "—"}`, fontSize: 8, color: "#5F5E5A", margin: [0, 0, 0, 4] });
+  return { table: { headerRows: 2, widths: [42, 58, 14, 58, ...Array(all.length).fill("*")], body: [head1, head2, ...body] }, layout: "lightHorizontalLines", margin: [0, 0, 0, 8] };
+}
 
-  if (t.certs.length) {
-    out.push({
-      table: {
-        headerRows: 1, widths: ["auto", "auto", "auto", "auto", "auto"], body: [
-          [{ text: "Cert no", bold: true }, { text: "Type", bold: true }, { text: "Verdict", bold: true }, { text: "Issued", bold: true }, { text: "Files", bold: true }],
-          ...t.certs.map(c => [
-            { text: c.certNo }, { text: c.type },
-            { text: verdictLabel[c.verdictKind], color: TEXT[c.verdictKind] },
-            { text: c.issuedDate ?? "—" },
-            { text: `${c.hasCoc ? "COC" : ""}${c.hasCoc && c.hasEval ? " + " : ""}${c.hasEval ? "Eval" : ""}` || "—" },
-          ]),
-        ],
-      }, layout: "lightHorizontalLines", fontSize: 9, margin: [0, 0, 0, 4],
-    });
-    for (const c of t.certs) out.push(sansGrid(c));
-  }
-  if (t.actions.length) {
-    out.push({ text: "Outstanding actions", bold: true, fontSize: 9, margin: [0, 2, 0, 2] });
-    out.push({ ul: t.actions, fontSize: 9, color: "#A32D2D" });
-  } else {
-    out.push({ text: "No outstanding items.", fontSize: 9, color: "#0F6E56" });
-  }
-  return out;
+function fileRegisterContent(rows: FileRegisterRow[]): Content {
+  const head = ["File", "Matched", "Doc type", "Cert no", "Type", "9(2)", "Issued", "Conf", "Notes"].map(hcell);
+  const confColor = (c: string) => { const v = (c || "").toLowerCase(); return v === "high" ? "#0F6E56" : v === "med" ? "#854F0B" : v === "low" ? "#A32D2D" : "#5F5E5A"; };
+  const body = rows.map(r => {
+    const isCoc = r.docType === "electrical_coc";
+    return [
+      { text: r.file || "—", fontSize: 6 },
+      { text: r.matched || "—", fontSize: 6 },
+      { text: r.docType || "—", fontSize: 6, fillColor: isCoc ? TONE.green.fill : "#F1EFE8", color: isCoc ? TONE.green.text : "#5F5E5A" },
+      { text: r.certNo || "—", fontSize: 6 },
+      { text: r.type || "—", fontSize: 6 },
+      { text: (r.clause92 || "").toUpperCase() || "—", fontSize: 6, alignment: "center" as const },
+      { text: r.issued ?? "—", fontSize: 6 },
+      { text: r.conf || "—", fontSize: 6, color: confColor(r.conf) },
+      { text: r.notes || "", fontSize: 5, color: "#5F5E5A" },
+    ];
+  });
+  return { table: { headerRows: 1, widths: ["*", 42, 64, 56, 40, 22, 48, 30, "*"], body: [head, ...body] }, layout: "lightHorizontalLines", margin: [0, 0, 0, 8] };
 }
 
 function miniBar(pct: number, color: string): Content {
@@ -146,14 +181,19 @@ export function buildSiteCocReportDocDef(model: CocReportModel): TDocumentDefini
       : { text: "—", fontSize: 9 },
   ];
 
-  const tenantsBlock: Content[] = [
-    { text: "Tenant detail", fontSize: 12, bold: true, pageBreak: "before", margin: [0, 0, 0, 6] },
-    ...model.tenants.flatMap((t, i) => tenantSection(t, i === 0)),
+  const tablesBlock: Content[] = [
+    { text: "DB / COC Schedule", fontSize: 14, bold: true, pageBreak: "before", margin: [0, 0, 0, 6] },
+    scheduleTableContent(model.scheduleTable),
+    { text: "COC Verification vs SANS 10142-1", fontSize: 14, bold: true, pageBreak: "before", margin: [0, 0, 0, 2] },
+    { text: "P Pass · F Fail · CV Cannot verify · N/A not applicable · · not captured", fontSize: 7, color: "#5F5E5A", margin: [0, 0, 0, 4] },
+    verificationContent(model.verificationRows),
+    { text: "File register", fontSize: 14, bold: true, pageBreak: "before", margin: [0, 0, 0, 6] },
+    fileRegisterContent(model.fileRegister),
   ];
 
   return {
     pageOrientation: "landscape",
-    content: [...cover, ...summary, ...tenantsBlock],
+    content: [...cover, ...summary, ...tablesBlock],
     defaultStyle: { fontSize: 9 },
   };
 }
