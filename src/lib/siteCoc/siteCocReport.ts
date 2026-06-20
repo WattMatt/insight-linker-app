@@ -87,7 +87,7 @@ function fileRegisterContent(rows: FileRegisterRow[]): Content {
   return { table: { headerRows: 1, widths: ["*", 42, 64, 56, 40, 22, 48, 30, "*"], body: [head, ...body] }, layout: "lightHorizontalLines", margin: [0, 0, 0, 8] };
 }
 
-function miniBar(pct: number, color: string, w = 108): Content {
+function miniBar(pct: number, color: string, w = 78): Content {
   const p = Math.max(0, Math.min(100, pct));
   return { canvas: [
     { type: "rect", x: 0, y: 0, w, h: 5, r: 2, color: "#ECECEC" },
@@ -107,7 +107,7 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
   const tone = (pct: number) => (pct >= 80 ? "#1D9E75" : pct >= 50 ? "#EF9F27" : "#E24B4A");
 
   const brand: Content = logoDataUrl
-    ? { image: logoDataUrl, fit: [200, 66] }
+    ? { image: logoDataUrl, fit: [180, 52] }
     : { stack: [
         { text: "WATSON MATTHEUS", fontSize: 13, bold: true, color: "#185FA5", characterSpacing: 2 },
         { text: "CONSULTING ELECTRICAL ENGINEERS", fontSize: 9, color: "#5F5E5A" },
@@ -115,22 +115,22 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
 
   const cover: Content[] = [
     brand,
-    { canvas: [{ type: "rect", x: 0, y: 0, w: 760, h: 3, color: "#185FA5" }], margin: [0, 10, 0, 50] },
-    { text: "Certificate of Compliance", fontSize: 32, bold: true, color: "#0C447C" },
-    { text: "Status report", fontSize: 18, color: "#5F5E5A", margin: [0, 2, 0, 40] },
-    { text: model.siteName, fontSize: 20, bold: true },
-    { text: cov.address || "", fontSize: 11, color: "#5F5E5A", margin: [0, 2, 0, 32] },
+    { canvas: [{ type: "rect", x: 0, y: 0, w: 760, h: 3, color: "#185FA5" }], margin: [0, 8, 0, 26] },
+    { text: "Certificate of Compliance", fontSize: 28, bold: true, color: "#0C447C" },
+    { text: "Status report", fontSize: 16, color: "#5F5E5A", margin: [0, 2, 0, 22] },
+    { text: model.siteName, fontSize: 18, bold: true },
+    { text: cov.address || "", fontSize: 11, color: "#5F5E5A", margin: [0, 1, 0, 16] },
     { table: { widths: ["auto", "*"], body: [
       [{ text: "Prepared for", color: "#5F5E5A" }, { text: cov.clientName || "—", bold: true }],
       [{ text: "Prepared by", color: "#5F5E5A" }, { text: "Watson Mattheus Consulting Electrical Engineers" }],
       [{ text: "Generated", color: "#5F5E5A" }, { text: `${model.generatedAt}${model.lastImport ? ` · data as of ${model.lastImport}` : ""}` }],
-    ] }, layout: "noBorders", fontSize: 10.5, margin: [0, 0, 0, 46] },
+    ] }, layout: "noBorders", fontSize: 10, margin: [0, 0, 0, 26] },
     { columns: [
       { width: "auto", stack: [
-        { text: `${s.compliantPct}%`, fontSize: 44, bold: true, color: tone(s.compliantPct) },
-        { text: "compliant", fontSize: 12, color: "#5F5E5A", margin: [2, 0, 0, 0] },
+        { text: `${s.compliantPct}%`, fontSize: 34, bold: true, color: tone(s.compliantPct) },
+        { text: "compliant", fontSize: 11, color: "#5F5E5A", margin: [2, 0, 0, 0] },
       ] },
-      { width: "*", text: `${s.required} COC-required shops\n${s.clear} clear · ${s.noCoc} no COC · ${s.failed} failed`, fontSize: 12, color: "#5F5E5A", margin: [26, 14, 0, 0] },
+      { width: "*", text: `${s.required} COC-required shops\n${s.clear} clear · ${s.noCoc} no COC · ${s.failed} failed`, fontSize: 11, color: "#5F5E5A", margin: [22, 8, 0, 0] },
     ] },
   ];
 
@@ -139,24 +139,24 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
   const cardLayout = {
     hLineWidth: () => 0.7, vLineWidth: () => 0.7,
     hLineColor: () => "#E2E2DD", vLineColor: () => "#E2E2DD",
-    paddingLeft: () => 9, paddingRight: () => 9, paddingTop: () => 8, paddingBottom: () => 9,
+    paddingLeft: () => 6, paddingRight: () => 6, paddingTop: () => 6, paddingBottom: () => 7,
   };
   const card = (label: string, value: string, sub: string, opts?: { color?: string; bar?: Content }): any => ({
     fillColor: "#FFFFFF",
     stack: [
       { text: label, fontSize: 8, color: "#5F5E5A" },
-      { text: value, fontSize: 17, bold: true, color: opts?.color ?? "#1A1A1A", margin: [0, 2, 0, 0] },
+      { text: value, fontSize: 14, bold: true, color: opts?.color ?? "#1A1A1A", margin: [0, 2, 0, 0] },
       ...(opts?.bar ? [opts.bar] : []),
-      { text: sub, fontSize: 7, color: "#888780", margin: [0, 2, 0, 0] },
+      { text: sub, fontSize: 6.5, color: "#888780", margin: [0, 2, 0, 0] },
     ],
   });
   const verdictCard = (): any => ({
     fillColor: "#FFFFFF",
     stack: [
       { text: "Verdict mix", fontSize: 8, color: "#5F5E5A" },
-      { text: "", fontSize: 5 },
-      verdictBar(k.verdict, 110),
-      { text: `P ${k.verdict.pass} · R/CV ${k.verdict.review + k.verdict.cv} · ${k.verdict.pending} pend · F ${k.verdict.fail}`, fontSize: 6.5, color: "#5F5E5A", margin: [0, 5, 0, 0] },
+      { text: "", fontSize: 4 },
+      verdictBar(k.verdict, 78),
+      { text: `P ${k.verdict.pass} · R/CV ${k.verdict.review + k.verdict.cv} · ${k.verdict.pending}pd · F ${k.verdict.fail}`, fontSize: 6, color: "#5F5E5A", margin: [0, 4, 0, 0] },
     ],
   });
   const mPct = sk && sk.meteringTotal ? Math.round((sk.meteringDone / sk.meteringTotal) * 100) : 100;
