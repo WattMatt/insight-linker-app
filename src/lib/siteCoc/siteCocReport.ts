@@ -103,13 +103,16 @@ function verdictBar(v: { pass: number; fail: number; review: number; cv: number;
   return { canvas: rects, margin: [0, 4, 0, 2] };
 }
 
-// Wide rounded gauge bar for the cover headline (rect canvas — reliable across pdfmake/pdf.js).
+// Cover gauge bar built as a 2-cell table (NOT a canvas): a standalone canvas block gets bumped to
+// the next page by pdfmake/pdf.js pagination; a table flows reliably inline.
 function gaugeBar(pct: number, color: string): Content {
   const W = 320, p = Math.max(0, Math.min(100, pct));
-  return { canvas: [
-    { type: "rect", x: 0, y: 0, w: W, h: 10, r: 5, color: "#ECECEC" },
-    { type: "rect", x: 0, y: 0, w: (W * p) / 100, h: 10, r: 5, color },
-  ], margin: [0, 12, 0, 8] };
+  const fw = Math.max(2, Math.round((W * p) / 100)), rest = Math.max(2, W - fw);
+  return {
+    table: { widths: [fw, rest], heights: [9], body: [[{ text: "", fillColor: color }, { text: "", fillColor: "#ECECEC" }]] },
+    layout: { defaultBorder: false, paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0 },
+    margin: [0, 12, 0, 10],
+  } as Content;
 }
 
 // Zebra-striped, borderless-vertical table layout. Status/colored cells keep their own fillColor
