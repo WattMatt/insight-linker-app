@@ -1,3 +1,5 @@
+import type { SiteKpiBlock } from "./reportKpis";
+
 export type VerdictKind = "pass" | "fail" | "review" | "cv" | "pending";
 
 export interface ReportCert {
@@ -18,12 +20,13 @@ export interface CocReportModel {
   kpis: { cocCoveragePct: number; evalCoveragePct: number; verdict: { pass: number; fail: number; review: number; cv: number; pending: number }; outstanding: number };
   issues: { noCoc: { name: string }[]; failed: { name: string; certNo: string; failedRules: string[] }[] };
   tenants: ReportTenant[];
+  siteKpis?: SiteKpiBlock;
 }
 
 interface SubRow { id: string; name: string; tenant_name: string | null; is_coc_required: boolean | null }
 interface CertRow { subsection_id: string | null; cert_no: string; cert_type: string; verdict: string; rules: Record<string, string> | null; issued_date: string | null; coc_document_id: string | null; eval_document_id: string | null }
 interface SchedRow { subsection_id: string | null; shop_no_raw: string; initial_cert_nos: string; supplementary_cert_nos: string }
-export interface BuildInput { siteName: string; generatedAt: string; lastImport: string | null; clientName?: string | null; address?: string | null; subsections: SubRow[]; certificates: CertRow[]; schedule: SchedRow[]; }
+export interface BuildInput { siteName: string; generatedAt: string; lastImport: string | null; clientName?: string | null; address?: string | null; subsections: SubRow[]; certificates: CertRow[]; schedule: SchedRow[]; siteKpis?: SiteKpiBlock; }
 
 export function verdictKind(verdict: string, rules: Record<string, string> | null): VerdictKind {
   const v = (verdict || "").toUpperCase();
@@ -105,5 +108,6 @@ export function buildCocReportModel(input: BuildInput): CocReportModel {
     kpis,
     issues: { noCoc: noCoc.map(t => ({ name: t.name })), failed: issuesFailed },
     tenants,
+    siteKpis: input.siteKpis,
   };
 }

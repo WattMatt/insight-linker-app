@@ -59,8 +59,8 @@ function miniBar(pct: number, color: string): Content {
     { type: "rect", x: 0, y: 0, w: (w * p) / 100, h: 5, r: 2, color },
   ], margin: [0, 3, 0, 0] };
 }
-function verdictBar(v: { pass: number; fail: number; review: number; cv: number; pending: number }): Content {
-  const total = Math.max(1, v.pass + v.fail + v.review + v.cv + v.pending), W = 340;
+function verdictBar(v: { pass: number; fail: number; review: number; cv: number; pending: number }, W = 340): Content {
+  const total = Math.max(1, v.pass + v.fail + v.review + v.cv + v.pending);
   const rects: { type: "rect"; x: number; y: number; w: number; h: number; color: string }[] = [];
   let x = 0;
   const push = (n: number, c: string) => { if (n) { rects.push({ type: "rect", x, y: 0, w: (W * n) / total, h: 12, color: c }); x += (W * n) / total; } };
@@ -98,9 +98,30 @@ export function buildSiteCocReportDocDef(model: CocReportModel): TDocumentDefini
 
   const narrative = `${model.siteName} has ${s.required} COC-required shops. ${s.clear} are clear (Pass), ${s.noCoc} have no COC on file, and ${s.failed} ${s.failed === 1 ? "has a failed certificate" : "have failed certificates"}. Overall compliance is ${s.compliantPct}%, with ${k.outstanding} outstanding ${k.outstanding === 1 ? "action" : "actions"}. COC documents are on record for ${k.cocCoveragePct}% of required shops and evaluation reports for ${k.evalCoveragePct}%.`;
 
-  const summary: Content[] = [
-    { text: "Executive summary", fontSize: 16, bold: true, margin: [0, 0, 0, 4] },
-    { text: narrative, fontSize: 11, margin: [0, 0, 0, 12] },
+  const tone = (pct: number) => (pct >= 80 ? "#1D9E75" : pct >= 50 ? "#EF9F27" : "#E24B4A");
+  const verdictCell = (): Content => ({ stack: [
+    { text: "Verdict mix", fontSize: 8, color: "#5F5E5A" },
+    verdictBar(k.verdict, 120),
+    { text: `P${k.verdict.pass} · R/CV${k.verdict.review + k.verdict.cv} · ${k.verdict.pending}pend · F${k.verdict.fail}`, fontSize: 7, color: "#5F5E5A", margin: [0, 2, 0, 0] },
+  ], margin: [0, 0, 8, 0] } as Content);
+
+  const sk = model.siteKpis;
+  const kpiSection: Content[] = sk ? [
+    { columns: [
+      kpiCell("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, miniBar(s.compliantPct, tone(s.compliantPct))),
+      kpiCell("COC coverage", `${k.cocCoveragePct}%`, "have a COC", miniBar(k.cocCoveragePct, tone(k.cocCoveragePct))),
+      kpiCell("Eval coverage", `${k.evalCoveragePct}%`, "have an eval", miniBar(k.evalCoveragePct, tone(k.evalCoveragePct))),
+      verdictCell(),
+      kpiCell("COC expiry", `${sk.expiry.expired}/${sk.expiry.within30}/${sk.expiry.within90}`, "exp · ≤30d · ≤90d"),
+    ], columnGap: 10, margin: [0, 0, 0, 10] },
+    { columns: [
+      kpiCell("Open snags", `${sk.snagsOpen}`, `${sk.snagsHighRisk} high-risk`),
+      kpiCell("Oldest snag", sk.oldestOpenDays != null ? `${sk.oldestOpenDays}d` : "—", "open ageing"),
+      kpiCell("Inspection pass", `${sk.inspectionPassPct}%`, `${sk.inspectionPass}/${sk.inspectionPass + sk.inspectionFail} items`, miniBar(sk.inspectionPassPct, tone(sk.inspectionPassPct))),
+      kpiCell("Site readiness", `${sk.readinessPct}%`, "deliverables", miniBar(sk.readinessPct, tone(sk.readinessPct))),
+      kpiCell("Metering", `${sk.meteringDone}/${sk.meteringTotal}`, "subsections", miniBar(sk.meteringTotal ? Math.round((sk.meteringDone / sk.meteringTotal) * 100) : 100, tone(sk.meteringTotal ? Math.round((sk.meteringDone / sk.meteringTotal) * 100) : 100))),
+    ], columnGap: 10, margin: [0, 0, 0, 12] },
+  ] : [
     { columns: [
       kpiCell("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, miniBar(s.compliantPct, "#1D9E75")),
       kpiCell("COC coverage", `${k.cocCoveragePct}%`, "shops with a COC", miniBar(k.cocCoveragePct, "#185FA5")),
@@ -110,12 +131,12 @@ export function buildSiteCocReportDocDef(model: CocReportModel): TDocumentDefini
     { text: "Certificate verdict breakdown", fontSize: 9, color: "#5F5E5A" },
     verdictBar(k.verdict),
     { text: `Pass ${k.verdict.pass} · Review/CV ${k.verdict.review + k.verdict.cv} · Pending ${k.verdict.pending} · Fail ${k.verdict.fail}`, fontSize: 8, color: "#5F5E5A", margin: [0, 0, 0, 12] },
-    { columns: [
-      { text: [{ text: `${s.required}\n`, fontSize: 16, bold: true }, { text: "COC required", fontSize: 8, color: "#5F5E5A" }] },
-      { text: [{ text: `${s.clear}\n`, fontSize: 16, bold: true, color: TEXT.pass }, { text: "Clear (Pass)", fontSize: 8, color: "#5F5E5A" }] },
-      { text: [{ text: `${s.noCoc}\n`, fontSize: 16, bold: true, color: TEXT.fail }, { text: "No COC on file", fontSize: 8, color: "#5F5E5A" }] },
-      { text: [{ text: `${s.failed}\n`, fontSize: 16, bold: true, color: TEXT.fail }, { text: "Failed", fontSize: 8, color: "#5F5E5A" }] },
-    ], margin: [0, 0, 0, 12] },
+  ];
+
+  const summary: Content[] = [
+    { text: "Executive summary", fontSize: 16, bold: true, margin: [0, 0, 0, 4] },
+    { text: narrative, fontSize: 11, margin: [0, 0, 0, 12] },
+    ...kpiSection,
     { text: "Issues & exceptions", fontSize: 12, bold: true, margin: [0, 0, 0, 4] },
     { text: `No COC on file (${model.issues.noCoc.length})`, fontSize: 9, color: TEXT.fail },
     { text: model.issues.noCoc.map(i => i.name).join(" · ") || "—", fontSize: 9, margin: [0, 0, 0, 6] },
