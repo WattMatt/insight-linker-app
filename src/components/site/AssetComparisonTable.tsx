@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Search, CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon, Eye, Loader2, Pencil, Check, X } from "lucide-react";
+import { Search, CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon, Eye, Loader2, Pencil, Check, X, Trash2 } from "lucide-react";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { RobustImage } from "@/components/RobustImage";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
@@ -33,6 +33,9 @@ import {
   type InspectionTenantMatch,
   type ComparisonResult,
 } from "@/lib/assetVerification";
+
+interface SavedReport { id: string; file_name: string; file_url: string; created_at: string; }
+const REPORT_CATEGORY = getReportCategoryName("asset-verification");
 
 interface AssetComparisonTableProps {
   assets: Asset[];
@@ -61,7 +64,7 @@ export const AssetComparisonTable = ({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "verified" | "discrepancies" | "unverified">("all");
   const [imageDialog, setImageDialog] = useState<{ url: string; title: string } | null>(null);
-  const [pdfPreview, setPdfPreview] = useState<{ url: string; blob: Blob; filename: string; complianceChecks: PDFComplianceCheck } | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string; blob?: Blob; complianceChecks?: PDFComplianceCheck; isObjectUrl?: boolean } | null>(null);
   const [savingToDocuments, setSavingToDocuments] = useState(false);
   const siteId = useMemo(() => {
     // Extract siteId from URL or other context if available
@@ -71,6 +74,20 @@ export const AssetComparisonTable = ({
   const [generating, setGenerating] = useState(false);
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
   const [saving, setSaving] = useState(false);
+  const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
+  const [deletingReport, setDeletingReport] = useState<string | null>(null);
+
+  const fetchSavedReports = useCallback(async () => {
+    if (!siteId) return;
+    const { data } = await supabase
+      .from("site_documents")
+      .select("id, file_name, file_url, created_at")
+      .eq("site_id", siteId)
+      .eq("category", REPORT_CATEGORY)
+      .order("created_at", { ascending: false });
+    setSavedReports((data ?? []) as unknown as SavedReport[]);
+  }, [siteId]);
+  useEffect(() => { fetchSavedReports(); }, [fetchSavedReports]);
 
   // Build comparison results - status is computed from inspections, never persisted.
   const comparisonResults = useMemo(
@@ -271,11 +288,12 @@ export const AssetComparisonTable = ({
       });
       
       const url = URL.createObjectURL(result.blob);
-      setPdfPreview({ 
-        url, 
-        blob: result.blob, 
+      setPdfPreview({
+        url,
+        blob: result.blob,
         filename: result.filename,
-        complianceChecks: result.complianceChecks 
+        complianceChecks: result.complianceChecks,
+        isObjectUrl: true,
       });
     } catch (error) {
       console.error("Error generating preview:", error);
@@ -286,15 +304,16 @@ export const AssetComparisonTable = ({
   };
 
   const handleSaveToDocuments = async () => {
-    if (!pdfPreview || !siteId) {
+    if (!pdfPreview || !pdfPreview.blob || !siteId) {
       toast.error("Unable to save: missing context");
       return;
     }
+    const blob = pdfPreview.blob;
     
     setSavingToDocuments(true);
     try {
       const result = await savePDFToDocuments({
-        blob: pdfPreview.blob,
+        blob,
         fileName: pdfPreview.filename,
         siteId,
         categoryName: getReportCategoryName("asset-verification"),
@@ -302,8 +321,9 @@ export const AssetComparisonTable = ({
 
       if (result.success) {
         toast.success("Asset verification report saved to documents!");
-        URL.revokeObjectURL(pdfPreview.url);
+        if (pdfPreview.isObjectUrl) URL.revokeObjectURL(pdfPreview.url);
         setPdfPreview(null);
+        fetchSavedReports();
       } else {
         toast.error(result.error || "Failed to save report");
       }
@@ -312,6 +332,28 @@ export const AssetComparisonTable = ({
       toast.error("Failed to save report to documents");
     } finally {
       setSavingToDocuments(false);
+    }
+  };
+
+  // Delete a saved report: remove the storage object (best-effort) then the site_documents row.
+  const handleDeleteSavedReport = async (r: SavedReport) => {
+    if (!window.confirm(`Delete "${r.file_name}"? This cannot be undone.`)) return;
+    setDeletingReport(r.id);
+    try {
+      if (r.file_url?.includes("supabase.co/storage")) {
+        const path = r.file_url.split("/documents/")[1]?.split("?")[0];
+        if (path) await supabase.storage.from("documents").remove([path]);
+      }
+      const { error } = await supabase.from("site_documents").delete().eq("id", r.id);
+      if (error) throw error;
+      toast.success("Report deleted");
+      setSavedReports((prev) => prev.filter((x) => x.id !== r.id));
+      if (pdfPreview && !pdfPreview.isObjectUrl && pdfPreview.url === r.file_url) setPdfPreview(null);
+    } catch (error) {
+      console.error("Error deleting report:", error);
+      toast.error("Could not delete the report");
+    } finally {
+      setDeletingReport(null);
     }
   };
 
@@ -511,6 +553,36 @@ export const AssetComparisonTable = ({
         </CardContent>
       </Card>
 
+      {savedReports.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Saved reports</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="rounded-md border divide-y">
+              {savedReports.map((r) => (
+                <div key={r.id} className="flex items-center justify-between gap-2 p-2">
+                  <div className="min-w-0">
+                    <div className="text-sm truncate">{r.file_name}</div>
+                    <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button size="sm" variant="ghost" onClick={() => setPdfPreview({ url: r.file_url, filename: r.file_name })} title="Preview / download">
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    {!readOnly && (
+                      <Button size="sm" variant="ghost" onClick={() => handleDeleteSavedReport(r)} disabled={deletingReport === r.id} title="Delete report">
+                        {deletingReport === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Results Table */}
       <Card>
         <CardContent className="p-0">
@@ -661,19 +733,20 @@ export const AssetComparisonTable = ({
         </DialogContent>
       </Dialog>
 
-      {/* PDF Preview Dialog */}
+      {/* PDF Preview Dialog — generated report (with blob) or a saved report (url only) */}
       {pdfPreview && (
         <DocumentPreviewDialog
           open={!!pdfPreview}
           onOpenChange={(open) => {
             if (!open) {
-              URL.revokeObjectURL(pdfPreview.url);
+              if (pdfPreview.isObjectUrl) URL.revokeObjectURL(pdfPreview.url);
               setPdfPreview(null);
             }
           }}
           fileUrl={pdfPreview.url}
           fileName={pdfPreview.filename}
-          onSaveToDocuments={handleSaveToDocuments}
+          downloadBlobData={pdfPreview.blob}
+          onSaveToDocuments={pdfPreview.blob ? handleSaveToDocuments : undefined}
           saveLocation="site"
           contextName={siteName}
           isSaving={savingToDocuments}
