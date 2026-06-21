@@ -79,3 +79,41 @@ export function toCocDoc(d: {
     fileUrl: d.file_url,
   };
 }
+
+/**
+ * One COC certificate line for a subsection card: 'I' (initial) or 'S'
+ * (supplementary — includes Temporary). Used by the Site Summary report cards.
+ */
+export interface CocCardLine {
+  label: 'I' | 'S';
+  number: string;        // cocNumber, or 'Missing' when the initial is absent, or '—' when uploaded without a number
+  status: CocDocStatus;  // 'Pass' | 'Fail' | 'Pending' | 'Missing'
+  missing: boolean;      // true only for the synthetic "initial is absent" line
+}
+
+/**
+ * Build the I/S certificate lines for a subsection card from its COC documents.
+ *
+ * Unlike groupCocDocuments (which promotes the earliest doc to "initial" for
+ * roll-up purposes), this uses the STRICT coc_type: an 'I' line is only backed
+ * by a document explicitly typed 'Initial'. If none exists we still emit an
+ * 'I — Missing' line — even when supplementary certificates are present — so the
+ * card always shows whether the initial COC is on file. Temporary docs are
+ * listed as supplementaries ('S'). Issue-date ascending within each group.
+ */
+export function buildCocCardLines(docs: CocDoc[]): CocCardLine[] {
+  const sorted = [...docs].sort((a, b) => (a.cocIssueDate ?? '').localeCompare(b.cocIssueDate ?? ''));
+  const initial = sorted.find(d => d.cocType === 'Initial') ?? null;
+  const supplementaries = sorted.filter(d => d.cocType !== 'Initial');
+
+  const lines: CocCardLine[] = [];
+  lines.push(
+    initial
+      ? { label: 'I', number: initial.cocNumber?.trim() || '—', status: initial.cocStatus, missing: false }
+      : { label: 'I', number: 'Missing', status: 'Missing', missing: true },
+  );
+  for (const s of supplementaries) {
+    lines.push({ label: 'S', number: s.cocNumber?.trim() || '—', status: s.cocStatus, missing: false });
+  }
+  return lines;
+}

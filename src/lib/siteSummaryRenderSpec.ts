@@ -156,13 +156,6 @@ export const SECTION_SPECS: Record<string, SectionSpec> = {
     pageBreakBefore: true,
     renderPriority: 6,
   },
-  'asset-verification': {
-    id: 'asset-verification',
-    legacyIds: ['asset-summary'],
-    defaultTitle: 'Asset Verification Summary',
-    type: 'kpi',
-    renderPriority: 7,
-  },
   'fortress-checklist': {
     id: 'fortress-checklist',
     legacyIds: [],
@@ -222,46 +215,6 @@ export const INSPECTION_COLUMNS: TableColumnSpec[] = [
   { id: 'status', header: 'Status', width: 80 },
   { id: 'inspector', header: 'Inspector', width: 100 },
   { id: 'date', header: 'Date', width: 80 },
-];
-
-// Asset Verification KPI cards
-export interface AssetKpiCardSpec {
-  id: string;
-  label: string;
-  color: string;
-  getValue: (metrics: AssetVerificationMetrics) => number;
-  format: (value: number) => string;
-}
-
-export const ASSET_VERIFICATION_CARDS: AssetKpiCardSpec[] = [
-  { 
-    id: 'total-assets', 
-    label: 'Electrical Meters', 
-    color: STATUS_COLORS.info,
-    getValue: (m) => m.totalAssets,
-    format: (v) => v.toString(),
-  },
-  { 
-    id: 'verified', 
-    label: 'Verified', 
-    color: STATUS_COLORS.success,
-    getValue: (m) => m.verified,
-    format: (v) => v.toString(),
-  },
-  { 
-    id: 'discrepancies', 
-    label: 'Discrepancies', 
-    color: STATUS_COLORS.warning,
-    getValue: (m) => m.discrepancies,
-    format: (v) => v.toString(),
-  },
-  { 
-    id: 'pending', 
-    label: 'Pending', 
-    color: STATUS_COLORS.muted,
-    getValue: (m) => m.unverified,
-    format: (v) => v.toString(),
-  },
 ];
 
 // ============================================================================
@@ -330,15 +283,6 @@ export interface SiteSummaryMetrics {
   snagFree: number;
 }
 
-// Asset verification metrics for site summary
-export interface AssetVerificationMetrics {
-  totalAssets: number;
-  verified: number;
-  discrepancies: number;
-  unverified: number;
-  verificationRate: number;
-}
-
 // Individual snag details
 export interface SnagData {
   id: string;
@@ -353,6 +297,10 @@ export interface SubsectionData {
   name: string;
   category: string | null;
   cocStatus: string | null;
+  // Whether this subsection requires a COC. A `false` value (e.g. a generator
+  // marked "does not require a COC") means it must never be reported as COC
+  // "Missing" nor counted against COC compliance.
+  isCocRequired?: boolean;
   meteringStatus: string | null;
   meterSerialNumber: string | null;
   ctRatio: string | null;
@@ -516,10 +464,15 @@ export function calculateMetrics(
 ): SiteSummaryMetrics {
   const subsectionCount = subsections.length;
   const safeDenominator = Math.max(subsections.length, 1);
-  const cocRequired = cocRequiredCount ?? subsections.filter(s => s.cocStatus !== null).length;
-  const cocCompliant = subsections.filter(s =>
-    ['Approved', 'Valid', 'Pass'].includes(s.cocStatus || '')
-  ).length;
+  // A subsection "requires" a COC when isCocRequired is true. For legacy callers
+  // that don't supply the flag, fall back to "has a coc_status" as before.
+  const requiresCoc = (s: SubsectionData) => s.isCocRequired ?? (s.cocStatus !== null);
+  const isCocApproved = (s: SubsectionData) =>
+    ['Approved', 'Valid', 'Pass'].includes(s.cocStatus || '');
+  const cocRequired = cocRequiredCount ?? subsections.filter(requiresCoc).length;
+  // Numerator is required-AND-approved only, so a NOT-required subsection that
+  // happens to carry an approved status can never push COC compliance over 100%.
+  const cocCompliant = subsections.filter(s => requiresCoc(s) && isCocApproved(s)).length;
   const meteringInstalled = subsections.filter(s =>
     s.meteringStatus === 'Installed' || !!s.meterSerialNumber
   ).length;
@@ -547,12 +500,16 @@ export function calculateMetrics(
 }
 
 /**
- * Calculate health by category
+ * Calculate health by category.
+ *
+ * Returns ALL categories present, sorted alphabetically. (Previously this
+ * silently capped the result at the first 4 categories, dropping the rest with
+ * no indication.) Pass a positive `maxCategories` to cap explicitly.
  */
 export function calculateCategoryHealth(
   subsections: SubsectionData[],
   getCategoryAbbr: (cat: string) => string,
-  maxCategories: number = 4
+  maxCategories?: number
 ): CategoryHealthData[] {
   const categoryGroups = subsections.reduce((acc, sub) => {
     const cat = sub.category || 'Uncategorized';
@@ -561,9 +518,9 @@ export function calculateCategoryHealth(
     if (sub.isCompliant) acc[cat].compliant++;
     return acc;
   }, {} as Record<string, { total: number; compliant: number }>);
-  
-  return Object.entries(categoryGroups)
-    .slice(0, maxCategories)
+
+  const all = Object.entries(categoryGroups)
+    .sort(([a], [b]) => a.localeCompare(b))
     .map(([category, data]) => ({
       category,
       abbreviation: getCategoryAbbr(category),
@@ -571,182 +528,8 @@ export function calculateCategoryHealth(
       compliant: data.compliant,
       percentage: Math.round((data.compliant / data.total) * 100) || 0,
     }));
-}
 
-/**
- * Normalize meter serial for matching (same logic as AssetVerification)
- */
-function normalizeMeterSerial(serial: string | null | undefined): string {
-  return (serial || "").toUpperCase().replace(/[^A-Z0-9]/g, "").trim();
-}
-
-/**
- * Compare two values for discrepancy detection
- */
-function compareValues(
-  assetValue: string | null | undefined,
-  inspectionValue: string | null | undefined
-): "match" | "mismatch" | "na" {
-  const normAsset = (assetValue || "").toUpperCase().replace(/[^A-Z0-9/]/g, "").trim();
-  const normInspection = (inspectionValue || "").toUpperCase().replace(/[^A-Z0-9/]/g, "").trim();
-
-  if ((!normAsset || normAsset === "NA" || normAsset === "TBC") && 
-      (!normInspection || normInspection === "NA" || normInspection === "TBC")) {
-    return "na";
-  }
-
-  if (!normAsset || normAsset === "NA" || normAsset === "TBC") return "na";
-  if (!normInspection || normInspection === "NA" || normInspection === "TBC") return "na";
-
-  return normAsset === normInspection ? "match" : "mismatch";
-}
-
-interface InspectionTenantData {
-  meterSerialNumber?: string;
-  ctSizeAndRatio?: string;
-  breakerSize?: string;
-  shopNumber?: string;
-  shopName?: string;
-}
-
-/**
- * Asset verification schedule row for detailed table
- */
-export interface AssetScheduleRow {
-  premisesId: string;
-  meterSerial: string;
-  breakerSize: string;
-  ctRatio: string;
-  inspectedSerial: string;
-  inspectedBreaker: string;
-  inspectedCT: string;
-  status: 'verified' | 'discrepancy' | 'pending';
-  discrepancyFields: string[];
-}
-
-/**
- * Calculate asset verification metrics using inspection json_data
- * Matches the same logic as the AssetVerification component
- */
-export function calculateAssetMetrics(
-  assets: Array<{ id: string; meter_serial_number: string | null; ct_ratio: string | null; breaker_size?: string | null; premises_id: string }>,
-  inspections: Array<{ json_data?: unknown }>
-): AssetVerificationMetrics {
-  const totalAssets = assets.length;
-  
-  if (totalAssets === 0) {
-    return { totalAssets: 0, verified: 0, discrepancies: 0, unverified: 0, verificationRate: 0 };
-  }
-
-  // Build inspection meter matches map from json_data (same as AssetVerification)
-  const inspectionMeterMatches = new Map<string, InspectionTenantData>();
-  
-  inspections.forEach(inspection => {
-    const jsonData = inspection.json_data as { 
-      tenants?: Array<InspectionTenantData>
-    };
-    
-    const tenants = jsonData?.tenants || [];
-    tenants.forEach(tenant => {
-      if (!tenant.meterSerialNumber) return;
-      
-      const normalizedSerial = normalizeMeterSerial(tenant.meterSerialNumber);
-      if (!normalizedSerial || normalizedSerial === 'NA' || normalizedSerial === 'TBC') return;
-      
-      // Keep first match
-      if (!inspectionMeterMatches.has(normalizedSerial)) {
-        inspectionMeterMatches.set(normalizedSerial, tenant);
-      }
-    });
-  });
-
-  let verified = 0;
-  let discrepancies = 0;
-
-  assets.forEach(asset => {
-    const normalizedSerial = normalizeMeterSerial(asset.meter_serial_number);
-    const inspectionMatch = normalizedSerial && normalizedSerial !== "NA" && normalizedSerial !== "TBC"
-      ? inspectionMeterMatches.get(normalizedSerial) || null
-      : null;
-
-    if (inspectionMatch) {
-      const ctMatch = compareValues(asset.ct_ratio, inspectionMatch.ctSizeAndRatio);
-      const breakerMatch = compareValues(asset.breaker_size, inspectionMatch.breakerSize);
-      const hasDiscrepancy = ctMatch === "mismatch" || breakerMatch === "mismatch";
-      
-      if (hasDiscrepancy) {
-        discrepancies++;
-      } else {
-        verified++;
-      }
-    }
-  });
-
-  const unverified = totalAssets - verified - discrepancies;
-  const verificationRate = Math.round(((verified + discrepancies) / totalAssets) * 100);
-
-  return { totalAssets, verified, discrepancies, unverified, verificationRate };
-}
-
-/**
- * Generate detailed asset verification schedule for PDF table
- */
-export function generateAssetSchedule(
-  assets: Array<{ id: string; meter_serial_number: string | null; ct_ratio: string | null; breaker_size?: string | null; premises_id: string }>,
-  inspections: Array<{ json_data?: unknown }>
-): AssetScheduleRow[] {
-  // Build inspection meter matches map from json_data
-  const inspectionMeterMatches = new Map<string, InspectionTenantData>();
-  
-  inspections.forEach(inspection => {
-    const jsonData = inspection.json_data as { 
-      tenants?: Array<InspectionTenantData>
-    };
-    
-    const tenants = jsonData?.tenants || [];
-    tenants.forEach(tenant => {
-      if (!tenant.meterSerialNumber) return;
-      
-      const normalizedSerial = normalizeMeterSerial(tenant.meterSerialNumber);
-      if (!normalizedSerial || normalizedSerial === 'NA' || normalizedSerial === 'TBC') return;
-      
-      if (!inspectionMeterMatches.has(normalizedSerial)) {
-        inspectionMeterMatches.set(normalizedSerial, tenant);
-      }
-    });
-  });
-
-  return assets.map(asset => {
-    const normalizedSerial = normalizeMeterSerial(asset.meter_serial_number);
-    const inspectionMatch = normalizedSerial && normalizedSerial !== "NA" && normalizedSerial !== "TBC"
-      ? inspectionMeterMatches.get(normalizedSerial) || null
-      : null;
-
-    const discrepancyFields: string[] = [];
-    let status: 'verified' | 'discrepancy' | 'pending' = 'pending';
-
-    if (inspectionMatch) {
-      const ctMatch = compareValues(asset.ct_ratio, inspectionMatch.ctSizeAndRatio);
-      const breakerMatch = compareValues(asset.breaker_size, inspectionMatch.breakerSize);
-      
-      if (ctMatch === 'mismatch') discrepancyFields.push('CT Ratio');
-      if (breakerMatch === 'mismatch') discrepancyFields.push('Breaker');
-      
-      status = discrepancyFields.length > 0 ? 'discrepancy' : 'verified';
-    }
-
-    return {
-      premisesId: asset.premises_id || 'N/A',
-      meterSerial: asset.meter_serial_number || 'N/A',
-      breakerSize: asset.breaker_size || 'N/A',
-      ctRatio: asset.ct_ratio || 'N/A',
-      inspectedSerial: inspectionMatch?.meterSerialNumber || '-',
-      inspectedBreaker: inspectionMatch?.breakerSize || '-',
-      inspectedCT: inspectionMatch?.ctSizeAndRatio || '-',
-      status,
-      discrepancyFields,
-    };
-  });
+  return maxCategories && maxCategories > 0 ? all.slice(0, maxCategories) : all;
 }
 
 // ============================================================================
@@ -890,6 +673,7 @@ export function calculateFortressMetrics(
 export interface DocumentCategoryMetrics {
   categoryName: string;
   fileCount: number;
+  files: string[]; // every document filename in this category (sorted)
 }
 
 export interface DocumentSummaryMetrics {
@@ -898,42 +682,49 @@ export interface DocumentSummaryMetrics {
 }
 
 /**
- * Calculate document summary metrics from site and subsection documents
- * Groups all documents by category name to match the Documents tab display
+ * Calculate document summary metrics from site and subsection documents.
+ * Groups all documents by category name (to match the Documents tab display)
+ * and lists every filename under its category.
  */
 export function calculateDocumentMetrics(
-  siteDocuments: Array<{ 
-    category: string; 
+  siteDocuments: Array<{
+    category: string;
     file_name?: string;
     site_document_categories?: { name: string } | null;
   }>,
-  subsectionDocuments: Array<{ 
-    category_id?: string; 
+  subsectionDocuments: Array<{
+    category_id?: string;
     file_name?: string;
     document_categories?: { name: string } | null;
   }>
 ): DocumentSummaryMetrics {
-  const categoryMap = new Map<string, number>();
-  
-  // Count site documents by category name (from joined category or fallback to category field)
-  siteDocuments.forEach(doc => {
-    const category = doc.site_document_categories?.name || doc.category || 'Uncategorized';
-    categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
-  });
-  
-  // Count subsection documents by their category name (from joined document_categories)
-  subsectionDocuments.forEach(doc => {
-    const category = doc.document_categories?.name || 'Uncategorized';
-    categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
-  });
-  
-  // Convert to sorted array - sort alphabetically to match Documents tab
-  const categories = Array.from(categoryMap.entries())
-    .map(([categoryName, fileCount]) => ({ categoryName, fileCount }))
+  const categoryFiles = new Map<string, string[]>();
+  const add = (category: string, fileName?: string) => {
+    if (!categoryFiles.has(category)) categoryFiles.set(category, []);
+    categoryFiles.get(category)!.push(fileName?.trim() || '(unnamed file)');
+  };
+
+  // Site documents by category name (joined category or fallback to category field)
+  siteDocuments.forEach(doc =>
+    add(doc.site_document_categories?.name || doc.category || 'Uncategorized', doc.file_name)
+  );
+
+  // Subsection documents by their joined category name
+  subsectionDocuments.forEach(doc =>
+    add(doc.document_categories?.name || 'Uncategorized', doc.file_name)
+  );
+
+  // Sort categories alphabetically (matches the Documents tab); sort filenames within each.
+  const categories = Array.from(categoryFiles.entries())
+    .map(([categoryName, files]) => ({
+      categoryName,
+      fileCount: files.length,
+      files: [...files].sort((a, b) => a.localeCompare(b)),
+    }))
     .sort((a, b) => a.categoryName.localeCompare(b.categoryName));
-  
+
   const totalDocuments = siteDocuments.length + subsectionDocuments.length;
-  
+
   return {
     totalDocuments,
     categories,

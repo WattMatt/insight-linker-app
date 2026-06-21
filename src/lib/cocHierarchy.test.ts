@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeCocType, normalizeCocDocStatus, cocDocFails, rollupStatus, groupCocDocuments, toCocDoc, CocDoc,
-  isCocCertificateCategory,
+  isCocCertificateCategory, buildCocCardLines,
 } from './cocHierarchy';
 
 const doc = (over: Partial<CocDoc>): CocDoc => ({
@@ -107,5 +107,58 @@ describe('isCocCertificateCategory', () => {
   });
   it('rejects unrelated categories', () => {
     expect(isCocCertificateCategory('04 Metering')).toBe(false);
+  });
+});
+
+describe('buildCocCardLines', () => {
+  it('no documents => single "I — Missing" line', () => {
+    const lines = buildCocCardLines([]);
+    expect(lines).toEqual([{ label: 'I', number: 'Missing', status: 'Missing', missing: true }]);
+  });
+
+  it('initial present => I line carries its number and status', () => {
+    const lines = buildCocCardLines([
+      doc({ id: 'a', cocType: 'Initial', cocNumber: 'COC-1', cocStatus: 'Pass' }),
+    ]);
+    expect(lines).toEqual([{ label: 'I', number: 'COC-1', status: 'Pass', missing: false }]);
+  });
+
+  it('initial + supplementaries => I then S lines, issue-date ascending', () => {
+    const lines = buildCocCardLines([
+      doc({ id: 's2', cocType: 'Supplementary', cocNumber: 'COC-30', cocIssueDate: '2026-03-01', cocStatus: 'Pending' }),
+      doc({ id: 'i', cocType: 'Initial', cocNumber: 'COC-10', cocIssueDate: '2026-01-01', cocStatus: 'Pass' }),
+      doc({ id: 's1', cocType: 'Supplementary', cocNumber: 'COC-20', cocIssueDate: '2026-02-01', cocStatus: 'Pass' }),
+    ]);
+    expect(lines).toEqual([
+      { label: 'I', number: 'COC-10', status: 'Pass', missing: false },
+      { label: 'S', number: 'COC-20', status: 'Pass', missing: false },
+      { label: 'S', number: 'COC-30', status: 'Pending', missing: false },
+    ]);
+  });
+
+  it('supplementary present but NO initial => still emits "I — Missing" first', () => {
+    const lines = buildCocCardLines([
+      doc({ id: 's', cocType: 'Supplementary', cocNumber: 'COC-99', cocStatus: 'Pass' }),
+    ]);
+    expect(lines).toEqual([
+      { label: 'I', number: 'Missing', status: 'Missing', missing: true },
+      { label: 'S', number: 'COC-99', status: 'Pass', missing: false },
+    ]);
+  });
+
+  it('Temporary docs are listed as supplementary (S)', () => {
+    const lines = buildCocCardLines([
+      doc({ id: 'i', cocType: 'Initial', cocNumber: 'COC-10', cocStatus: 'Pass' }),
+      doc({ id: 't', cocType: 'Temporary', cocNumber: 'COC-T', cocStatus: 'Pending' }),
+    ]);
+    expect(lines.map(l => l.label)).toEqual(['I', 'S']);
+    expect(lines[1].number).toBe('COC-T');
+  });
+
+  it('uploaded initial without a number => "—" placeholder, not Missing', () => {
+    const lines = buildCocCardLines([
+      doc({ id: 'i', cocType: 'Initial', cocNumber: null, cocStatus: 'Pending' }),
+    ]);
+    expect(lines).toEqual([{ label: 'I', number: '—', status: 'Pending', missing: false }]);
   });
 });

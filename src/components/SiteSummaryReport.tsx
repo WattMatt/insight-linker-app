@@ -7,6 +7,7 @@ import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { qrRedirectUrl } from "@/lib/qrBaseUrl";
+import { isCocCertificateCategory, toCocDoc, buildCocCardLines } from "@/lib/cocHierarchy";
 import {
   generateReport,
   createSectionHeader,
@@ -27,7 +28,6 @@ import {
   SUBSECTION_CARD_FIELDS,
   COC_VALIDATION_COLUMNS,
   INSPECTION_COLUMNS,
-  ASSET_VERIFICATION_CARDS,
   SECTION_SPECS,
   STATUS_COLORS,
   getAccentPalette,
@@ -36,7 +36,6 @@ import {
   findSectionSpec,
   calculateMetrics,
   calculateCategoryHealth,
-  calculateAssetMetrics,
   calculateFortressMetrics,
   calculateDocumentMetrics,
   type SubsectionData,
@@ -156,10 +155,24 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
   };
 
   // Transform DB subsection to SubsectionCardData (extended for cards)
-  const transformToSubsectionCardData = (sub: any, allSnags: any[], assets: any[]): SubsectionCardData => {
+  const transformToSubsectionCardData = (
+    sub: any,
+    allSnags: any[],
+    assets: any[],
+    subsectionDocs: any[],
+  ): SubsectionCardData => {
     const subSnags = allSnags.filter(s =>
       s.subsection_id === sub.id &&
       isSnagOpen(s.status)
+    );
+
+    // Build the Initial/Supplementary COC certificate lines from this subsection's
+    // COC-category documents (the authoritative per-document model). Always yields
+    // at least an "I — Missing" line when the initial is absent.
+    const cocCertificates = buildCocCardLines(
+      (subsectionDocs || [])
+        .filter(d => d.subsection_id === sub.id && isCocCertificateCategory(d.document_categories?.name || ''))
+        .map(d => toCocDoc(d)),
     );
 
     // Encode the STABLE qr-redirect endpoint (NOT the stored qr_code_url PNG, and
@@ -190,6 +203,8 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
       category: sub.category,
       cocStatus: sub.coc_status,
       cocNumber: sub.coc_number,
+      isCocRequired: sub.is_coc_required ?? true,
+      cocCertificates,
       meteringStatus: sub.metering_status,
       meterSerialNumber: sub.meter_serial_number,
       ctRatio: sub.ct_ratio,
@@ -243,11 +258,13 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
     const [inspectionsRes, docsRes, subsectionDocsRes, assetsRes, checklistRes] = await Promise.all([
       supabase.from("inspections").select("*").eq("site_id", siteId),
       supabase.from("site_documents").select("*, site_document_categories(name)").eq("site_id", siteId),
-      // CRITICAL FIX: Filter subsection documents by subsection IDs belonging to this site
+      // CRITICAL FIX: Filter subsection documents by subsection IDs belonging to this site.
+      // COC fields (coc_*) drive the per-card Initial/Supplementary certificate list.
       subsectionIds.length > 0
-        ? supabase.from("subsection_documents").select("subsection_id, file_name, category_id, document_categories(name)").in("subsection_id", subsectionIds)
+        ? supabase.from("subsection_documents").select("id, subsection_id, file_name, file_url, category_id, coc_type, coc_number, coc_status, coc_issue_date, coc_expiry_date, document_categories(name)").in("subsection_id", subsectionIds)
         : Promise.resolve({ data: [], error: null }),
-      supabase.from("site_assets").select("id, meter_serial_number, ct_ratio, breaker_size, premises_id, asset_category").eq("site_id", siteId).eq("asset_category", "electrical_meter"),
+      // trade_as is required: subsection→asset matching keys on premises_id OR trade_as.
+      supabase.from("site_assets").select("id, meter_serial_number, ct_ratio, breaker_size, premises_id, trade_as, asset_category").eq("site_id", siteId).eq("asset_category", "electrical_meter"),
       supabase.from("site_marking_checklist").select("section_name, is_checked, status").eq("site_id", siteId),
     ]);
 
@@ -260,9 +277,10 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
       : { data: [], error: null };
     const allSnags = snagsRes.data || [];
 
-    // Transform subsections to card format with snags and asset breaker size
-    const subsectionCardData: SubsectionCardData[] = subsections.map(sub => 
-      transformToSubsectionCardData(sub, allSnags, siteAssets)
+    // Transform subsections to card format with snags, asset breaker size and COC certificates
+    const subsectionDocsData = subsectionDocsRes.data || [];
+    const subsectionCardData: SubsectionCardData[] = subsections.map(sub =>
+      transformToSubsectionCardData(sub, allSnags, siteAssets, subsectionDocsData)
     );
 
     // Also create SubsectionData for metrics calculation
@@ -280,9 +298,6 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
     );
     const metrics = calculateMetrics(subsectionData, cocRequired, openSnags, siteHealthScore(healthFactors));
 
-    // Calculate asset verification metrics using inspection json_data
-    const assetMetrics = calculateAssetMetrics(siteAssets, allInspections);
-
     // Calculate Fortress checklist metrics
     const checklistItems = checklistRes.data || [];
     const fortressMetrics = calculateFortressMetrics(checklistItems);
@@ -294,7 +309,6 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
     console.log('[SiteSummaryReport] Section Data Availability:', {
       subsections: subsections.length,
       siteAssets: siteAssets.length,
-      assetMetrics,
       fortressChecklistItems: checklistItems.length,
       fortressMetrics,
       siteDocuments: docsRes.data?.length || 0,
@@ -329,26 +343,30 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
           break;
 
         case "health-by-category":
-          // Use calculateCategoryHealth from spec
-          const categoryData = calculateCategoryHealth(subsectionData, getCategoryAbbreviation, 4);
-          
+          // Show ALL categories (no silent truncation). createKpiRow splits the
+          // row evenly, so chunk into rows of 4 to keep cards readable.
+          const categoryData = calculateCategoryHealth(subsectionData, getCategoryAbbreviation);
+
           if (categoryData.length > 0) {
             content.push(createSectionHeader(title));
-            content.push(createKpiRow(
-              categoryData.map(cat => ({
-                value: `${cat.percentage}%`,
-                label: cat.abbreviation,
-                color: cat.percentage >= 80 ? STATUS_COLORS.success : 
-                       cat.percentage >= 60 ? STATUS_COLORS.warning : STATUS_COLORS.error,
-              }))
-            ));
+            const CATS_PER_ROW = 4;
+            for (let i = 0; i < categoryData.length; i += CATS_PER_ROW) {
+              content.push(createKpiRow(
+                categoryData.slice(i, i + CATS_PER_ROW).map(cat => ({
+                  value: `${cat.percentage}%`,
+                  label: cat.abbreviation,
+                  color: cat.percentage >= 80 ? STATUS_COLORS.success :
+                         cat.percentage >= 60 ? STATUS_COLORS.warning : STATUS_COLORS.error,
+                }))
+              ));
+            }
           }
           break;
 
         case "documents-summary":
-          // Calculate document metrics from fetched documents
+          // Calculate document metrics from fetched documents (subsectionDocsData
+          // is built once above, alongside the subsection cards).
           const siteDocsData = docsRes.data || [];
-          const subsectionDocsData = subsectionDocsRes.data || [];
           const docMetrics = calculateDocumentMetrics(siteDocsData, subsectionDocsData);
           console.log(`[SiteSummaryReport] documents-summary: ${docMetrics.totalDocuments} docs, ${docMetrics.categories.length} categories`);
           
@@ -361,7 +379,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
               { value: docMetrics.categories.length.toString(), label: 'Categories', color: STATUS_COLORS.muted },
             ]));
             
-            // Documents by category table
+            // List every document filename grouped under its category.
             if (docMetrics.categories.length > 0) {
               content.push({
                 text: 'Documents by Category',
@@ -370,39 +388,19 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
                 color: '#374151',
                 margin: [0, 8, 0, 6],
               });
-              
-              const tableBody = [
-                [
-                  { text: 'Category', bold: true, fontSize: 8, color: '#ffffff' },
-                  { text: 'Files', bold: true, fontSize: 8, color: '#ffffff', alignment: 'center' as const },
-                ],
-                ...docMetrics.categories.map((cat, idx) => {
-                  const bgColor = idx % 2 === 1 ? '#f9fafb' : null;
-                  return [
-                    { text: cat.categoryName, fontSize: 8, fillColor: bgColor },
-                    { text: cat.fileCount.toString(), fontSize: 8, alignment: 'center' as const, fillColor: bgColor, bold: true },
-                  ];
-                }),
-              ];
-              
-              content.push({
-                table: {
-                  headerRows: 1,
-                  widths: ['*', 60],
-                  body: tableBody,
-                },
-                layout: {
-                  hLineWidth: () => 0.5,
-                  vLineWidth: () => 0.5,
-                  hLineColor: () => '#e5e7eb',
-                  vLineColor: () => '#e5e7eb',
-                  fillColor: (rowIndex: number) => rowIndex === 0 ? '#374151' : null,
-                  paddingLeft: () => 6,
-                  paddingRight: () => 6,
-                  paddingTop: () => 4,
-                  paddingBottom: () => 4,
-                },
-                margin: [0, 0, 0, 12],
+
+              docMetrics.categories.forEach(cat => {
+                content.push({
+                  text: `${cat.categoryName} (${cat.fileCount})`,
+                  fontSize: 9,
+                  bold: true,
+                  color: '#1e3a5f',
+                  margin: [0, 6, 0, 2],
+                });
+                content.push({
+                  ul: cat.files.map(f => ({ text: f, fontSize: 8, color: '#374151' })),
+                  margin: [8, 0, 0, 4],
+                });
               });
             }
           }
@@ -437,8 +435,10 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
 
         case "coc-validations":
         case "documents": // Support legacy section ID
-          // COC verdict is now the subsection's manual coc_status; list the required subsections.
-          const cocSubsections = subsections.filter(s => s.is_coc_required || s.coc_status);
+          // Only subsections that REQUIRE a COC belong here. A subsection marked
+          // "does not require a COC" (e.g. a generator) must never be listed as
+          // Missing, so it is excluded even if it carries a legacy coc_status.
+          const cocSubsections = subsections.filter(s => s.is_coc_required);
           if (cocSubsections.length > 0) {
             if (spec?.pageBreakBefore) {
               content.push({ text: '', pageBreak: 'before' });
@@ -486,93 +486,11 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
         case "subsection-qr-codes":
           break;
 
+        // Asset Verification now lives in its own dedicated report (Asset
+        // Verification tab); it is intentionally no longer part of the Site
+        // Summary. Legacy section IDs are accepted and skipped.
         case "asset-verification":
-        case "asset-summary": // Support legacy section ID
-          console.log(`[SiteSummaryReport] asset-verification: ${assetMetrics.totalAssets} assets, verified=${assetMetrics.verified}, discrepancies=${assetMetrics.discrepancies}`);
-          if (assetMetrics.totalAssets > 0) {
-            content.push(createSectionHeader(title, 'primary'));
-            content.push(createKpiRow(
-              ASSET_VERIFICATION_CARDS.map(card => ({
-                value: card.format(card.getValue(assetMetrics)),
-                label: card.label,
-                color: card.color,
-              }))
-            ));
-            // Add verification rate text
-            content.push({ 
-              text: `Verification Rate: ${assetMetrics.verificationRate}%`, 
-              fontSize: 10, 
-              bold: true,
-              margin: [0, 8, 0, 16] 
-            });
-            
-            // Add detailed asset verification schedule table
-            const { generateAssetSchedule } = await import('@/lib/siteSummaryRenderSpec');
-            const assetSchedule = generateAssetSchedule(siteAssets, allInspections);
-            
-            if (assetSchedule.length > 0) {
-              content.push({
-                text: 'Asset Verification Schedule',
-                fontSize: 11,
-                bold: true,
-                color: '#374151',
-                margin: [0, 0, 0, 8],
-              });
-              
-              // Create table with asset register vs inspected values
-              const tableBody = [
-                // Header row with slightly larger font for readability
-                [
-                  { text: 'Premises', bold: true, fontSize: 9, color: '#ffffff' },
-                  { text: 'Meter S/N', bold: true, fontSize: 9, color: '#ffffff' },
-                  { text: 'Breaker', bold: true, fontSize: 9, color: '#ffffff' },
-                  { text: 'CT Ratio', bold: true, fontSize: 9, color: '#ffffff' },
-                  { text: 'Insp. Breaker', bold: true, fontSize: 9, color: '#ffffff' },
-                  { text: 'Insp. CT', bold: true, fontSize: 9, color: '#ffffff' },
-                  { text: 'Status', bold: true, fontSize: 9, color: '#ffffff' },
-                ],
-                // Data rows - clean white background with horizontal lines between rows
-                ...assetSchedule.map((row) => {
-                  const statusColor = row.status === 'verified' ? '#16a34a' : 
-                                      row.status === 'discrepancy' ? '#dc2626' : '#9ca3af';
-                  const statusText = row.status === 'verified' ? '✓ Verified' : 
-                                     row.status === 'discrepancy' ? '✗ Discrepancy' : '○ Pending';
-                  
-                  return [
-                    { text: row.premisesId, fontSize: 9, color: '#374151' },
-                    { text: row.meterSerial, fontSize: 9, color: '#374151' },
-                    { text: row.breakerSize, fontSize: 9, color: '#374151' },
-                    { text: row.ctRatio, fontSize: 9, color: '#374151' },
-                    { text: row.inspectedBreaker, fontSize: 9, color: row.discrepancyFields.includes('Breaker') ? '#dc2626' : '#374151' },
-                    { text: row.inspectedCT, fontSize: 9, color: row.discrepancyFields.includes('CT Ratio') ? '#dc2626' : '#374151' },
-                    { text: statusText, fontSize: 9, color: statusColor, bold: true },
-                  ];
-                }),
-              ];
-              
-              content.push({
-                table: {
-                  headerRows: 1,
-                  // Optimized widths: Premises widest, then evenly distributed for other columns
-                  widths: ['24%', '13%', '11%', '11%', '13%', '11%', '17%'],
-                  body: tableBody,
-                },
-                layout: {
-                  // Horizontal lines between all rows for clean separation
-                  hLineWidth: () => 0.5,
-                  vLineWidth: () => 0,
-                  hLineColor: () => '#e5e7eb',
-                  paddingLeft: () => 10,
-                  paddingRight: () => 10,
-                  paddingTop: () => 8,
-                  paddingBottom: () => 8,
-                  // Only header row has dark background, all data rows are white
-                  fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : '#ffffff',
-                },
-                margin: [0, 0, 0, 12],
-              });
-            }
-          }
+        case "asset-summary":
           break;
 
         case "fortress-checklist":

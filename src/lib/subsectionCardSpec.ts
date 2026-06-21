@@ -12,6 +12,7 @@ import QRCode from 'qrcode';
 // Re-export types from the spec for consistency
 export type { SnagData, SubsectionData } from './siteSummaryRenderSpec';
 import type { SnagData, SubsectionData } from './siteSummaryRenderSpec';
+import type { CocCardLine } from './cocHierarchy';
 
 // Extended card data with tenant name (used in some views)
 export interface SubsectionCardData extends SubsectionData {
@@ -20,6 +21,9 @@ export interface SubsectionCardData extends SubsectionData {
   cocIssueDate?: string | null;
   cocType?: string | null;
   breakerSize?: string | null;
+  // Initial/Supplementary COC certificate lines built from subsection_documents
+  // (see cocHierarchy.buildCocCardLines). Empty when not yet populated.
+  cocCertificates?: CocCardLine[];
 }
 
 // ============================================================================

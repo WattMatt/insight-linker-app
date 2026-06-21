@@ -5,16 +5,16 @@
  * using the shared SubsectionCardSpec for layout consistency.
  */
 
-import { 
+import {
   SubsectionCardData,
   SnagData,
-  CARD_LAYOUT, 
-  STATUS_COLORS, 
+  CARD_LAYOUT,
+  STATUS_COLORS,
   RISK_COLORS,
-  getCocStatusLabel,
   getComplianceLabel,
   generateSubsectionQRCode
 } from './subsectionCardSpec';
+import type { CocCardLine } from './cocHierarchy';
 
 // ============================================================================
 // MAIN RENDERER
@@ -113,33 +113,75 @@ function createCardHeader(data: SubsectionCardData, accentColor: string): any {
   };
 }
 
-function createCardBody(data: SubsectionCardData, qrCodeDataUrl: string | null): any {
-  // Normalize COC status for color mapping
-  const cocStatusNorm = (data.cocStatus || '').toLowerCase();
-  const cocStatusKey = ['approved', 'valid', 'pass'].includes(cocStatusNorm) ? 'pass' 
-    : ['rejected', 'invalid', 'fail', 'failed'].includes(cocStatusNorm) ? 'fail' 
-    : 'pending';
-  const cocColors = STATUS_COLORS[cocStatusKey] || STATUS_COLORS.pending;
+// Small status pill for a single COC line (Pass/Fail/Pending).
+function cocLineStatusBadge(status: CocCardLine['status']): any {
+  const colors = status === 'Pass' ? STATUS_COLORS.pass
+    : status === 'Fail' || status === 'Missing' ? STATUS_COLORS.fail
+    : STATUS_COLORS.pending;
+  return createStatusBadge(status, colors);
+}
 
-  // Left column: COC Status, Breaker Size, Metering info
+// COC certificate block: lists every certificate as an "I" (initial) or "S"
+// (supplementary) line. A subsection that does not require a COC shows
+// "Not Required" and is never reported as Missing. When the initial certificate
+// is absent we still render an "I — Missing" line.
+function createCocBlock(data: SubsectionCardData): any {
+  if (data.isCocRequired === false) {
+    return {
+      columns: [
+        { text: 'COC:', fontSize: CARD_LAYOUT.labelSize, color: '#6b7280', width: 70 },
+        createStatusBadge('Not Required', { bg: '#f3f4f6', text: '#6b7280', border: '#d1d5db' }),
+      ],
+      margin: [0, 0, 0, 8],
+    };
+  }
+
+  const lines: CocCardLine[] = data.cocCertificates && data.cocCertificates.length > 0
+    ? data.cocCertificates
+    : [{ label: 'I', number: 'Missing', status: 'Missing', missing: true }];
+
+  return {
+    stack: [
+      { text: 'COC Certificates:', fontSize: CARD_LAYOUT.labelSize, color: '#6b7280', margin: [0, 0, 0, 3] },
+      ...lines.map(line => ({
+        columns: [
+          {
+            // I / S tag
+            table: { widths: ['auto'], body: [[{
+              text: line.label, fontSize: 8, bold: true,
+              color: line.missing ? '#991b1b' : '#1e40af', alignment: 'center',
+            }]] },
+            layout: {
+              hLineWidth: () => 0, vLineWidth: () => 0,
+              paddingLeft: () => 5, paddingRight: () => 5, paddingTop: () => 1, paddingBottom: () => 1,
+              fillColor: () => (line.missing ? '#fee2e2' : '#dbeafe'),
+            },
+            width: 'auto',
+          },
+          {
+            text: line.number,
+            fontSize: CARD_LAYOUT.valueSize,
+            color: line.missing ? '#991b1b' : '#374151',
+            bold: !line.missing,
+            italics: line.missing,
+            margin: [6, 1, 0, 0],
+            width: '*',
+          },
+          line.missing ? { text: '', width: 'auto' } : cocLineStatusBadge(line.status),
+        ],
+        margin: [0, 1, 0, 1],
+      })),
+    ],
+    margin: [0, 0, 0, 8],
+  };
+}
+
+function createCardBody(data: SubsectionCardData, qrCodeDataUrl: string | null): any {
+  // Left column: COC certificates (I/S), Breaker Size, Metering info
   const leftColumn = {
     stack: [
-      // COC Status row
-      {
-        columns: [
-          { text: 'COC Status:', fontSize: CARD_LAYOUT.labelSize, color: '#6b7280', width: 70 },
-          createStatusBadge(getCocStatusLabel(data.cocStatus), cocColors),
-        ],
-        margin: [0, 0, 0, 8],
-      },
-      // COC Number if available
-      data.cocNumber ? {
-        columns: [
-          { text: 'COC #:', fontSize: CARD_LAYOUT.labelSize, color: '#6b7280', width: 70 },
-          { text: data.cocNumber, fontSize: CARD_LAYOUT.valueSize, color: '#374151' },
-        ],
-        margin: [0, 0, 0, 6],
-      } : { text: '' },
+      // COC certificate list (Initial / Supplementary), or "Not Required"
+      createCocBlock(data),
       // Circuit Breaker Size row
       {
         columns: [
