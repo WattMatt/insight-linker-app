@@ -1096,11 +1096,25 @@ const InspectionDetail = () => {
           img.crossOrigin = 'anonymous';
 
           img.onload = () => {
-            const logoWidth = size * 0.24 * 1.5; // Rectangular, wider than tall
-            const logoHeight = size * 0.24;
+            // Preserve the logo's real aspect ratio (matches qrCodeGenerator /
+            // LabeledQRCode); the old hard-coded 1.5:1 squashed the wide WM logo.
+            const maxLogoSize = size * 0.3;
+            let logoWidth = img.width;
+            let logoHeight = img.height;
+            if (logoWidth > logoHeight) {
+              if (logoWidth > maxLogoSize) {
+                logoHeight = (logoHeight * maxLogoSize) / logoWidth;
+                logoWidth = maxLogoSize;
+              }
+            } else {
+              if (logoHeight > maxLogoSize) {
+                logoWidth = (logoWidth * maxLogoSize) / logoHeight;
+                logoHeight = maxLogoSize;
+              }
+            }
             const x = (size - logoWidth) / 2;
             const y = (size - logoHeight) / 2;
-            const padding = logoHeight * 0.1; // 10% of logo height
+            const padding = Math.min(logoWidth, logoHeight) * 0.15;
 
             // Draw white rectangular background for logo
             ctx.fillStyle = 'white';
