@@ -302,10 +302,22 @@ documents. **Pure presentation — all actions are callbacks; no direct Supabase
 | `onDeleteDocument`/`onPreview`/`onDownload` | `(…)=>void` | row actions (parent does the work) |
 | `onUploadClick`/`onCreateCategory`/`onDeleteCategory` | callbacks | category/upload actions |
 | `onBulkDeleteCategories?`/`onBulkDeleteDocumentsInCategory?` | callbacks | bulk ops |
+| `canManage?` | `boolean` | Admin-only gate (`useUserRole() === 'Admin'`); when false the management UI is hidden (View + Download only) |
+| `onRenameDocument`/`onMoveDocuments`/`onDeleteDocuments` | callbacks | per-row + bulk doc mutations |
+| `onViewHistory` | callback | open per-document audit history |
+| `onRenameCategory`/`onReorderCategory` | callbacks | inline category rename + up/down reorder (`order_index`) |
 
 - Derived `unifiedDocuments` (tags each `source: "site"|"subsection"`), `filteredDocuments`,
-  `groupedByCategory`, `groupedBySubsection`. `UnifiedDocumentsList` and `EmptyDocumentsState` are local
-  (not exported). Caller: `SiteDetail`.
+  `groupedByCategory`, `groupedBySubsection`. The grouped list is rendered inline; `EmptyDocumentsState`
+  is local (not exported). Caller: `SiteDetail`.
+- **Management UI (admin only, gated by `canManage`)**: selection checkboxes + a bulk action bar (bulk
+  Move to… / Delete; Move disabled when a selection mixes site-level and subsection docs — different
+  category tables). Each row shows a metadata line (size · date · uploader, "—" when unknown) and a "⋮"
+  overflow menu (Rename / Move to… / History / Delete). Each non-system category has its own "⋮" menu
+  (Upload here / Rename / Move up / Move down / Empty / Delete category). Rename is inline for both docs
+  and categories; system categories show a 🔒 badge and have no menu. Sibling components
+  `MoveDocumentsDialog.tsx` + `DocumentHistoryDialog.tsx`; mutations live in core lib
+  `src/lib/documents/`.
 
 ## DocumentDialogs.tsx — `DocumentDialogs`
 

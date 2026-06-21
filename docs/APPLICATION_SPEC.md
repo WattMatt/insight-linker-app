@@ -703,7 +703,7 @@ Same fields as Create, pre-populated. Additional feature:
 | 2 | Schematic | `Workflow` | `SchematicDiagram` | Visual block diagram of electrical distribution. Drag-and-drop blocks, connections, PDF upload for floor plans, link blocks to subsections, view tenant meter/CT/breaker photos |
 | 3 | Asset Verification | `ShieldCheck` | `AssetVerification` | Excel import, comparison table, meter register, PDF report |
 | 4 | Compliance | `Shield` | `ComplianceDashboard` | COC compliance stats, pie/line charts, validation log, inline violation overrides, re-validation |
-| 5 | Documents | `FileText` | `SiteDocuments` | Site + subsection documents by category. Upload, preview, download, delete. Category CRUD. Two view modes: by-site-category and unified-all |
+| 5 | Documents | `FileText` | `SiteDocuments` | Site + subsection documents by category. View, download (all roles). **Admin-only management**: multi-file upload + validation (type/size), per-document rename (inline), move/recategorize (single + bulk via selection), audit history, metadata (size · date · uploader); per-category rename / reorder / empty / delete (`is_system` report+COC categories locked 🔒). Two view modes: by-site-category and unified-all |
 | 6 | Inspections | `ClipboardCheck` | `SiteLevelInspections` | All inspections for this site. Create inspection dialog (with template selection) |
 | 7 | Subsections | `Layers` | `SubsectionList` | Filterable table/grid of subsections. Filters: search, COC status, compliance, snags, metering, category. Group by: none/category/status/compliance. Delete subsection |
 | 8 | QR Codes | `QrCode` | `QRAnalytics` | Generate QR for each subsection, download individual, bulk ZIP download |
@@ -781,7 +781,16 @@ Same fields as Create, pre-populated. Additional feature:
   3. **"Review" button** → opens `COCPreviewDialog` showing extracted data fields for human review/correction
   4. **"Approve & Verify" button** (in `COCPreviewApproval`) → calls `validate-coc` Edge Function → stores validation result in `coc_validations` → updates `subsections.coc_status` via trigger
 - **Document preview**: `DocumentPreviewDialog` renders PDFs, images, DOCX inline
-- **Document actions**: Preview, Download (`downloadFile()` from `fileDownload.ts`), Delete
+- **Document actions**: Preview, Download (`downloadFile()` from `fileDownload.ts`)
+- **Management layer** (Admin-only — gated by `canManage = useUserRole() === 'Admin'`; non-admins see View + Download only):
+  - **Multi-file upload + validation**: allowed types pdf/doc/docx/xls/xlsx/png/jpg/jpeg/gif/webp/svg, max 50 MB per file
+  - **Per-document "⋮" overflow menu**: Rename (inline edit), Move to… (recategorize), History, Delete
+  - **Selection checkboxes + bulk action bar**: bulk Move to… and Delete (a selection mixing site-level and subsection documents disables Move — they live in different category tables)
+  - **Per-category "⋮" menu** (non-system categories): Upload here, Rename (inline), Move up / Move down (reorder via `order_index`), Empty (delete all files), Delete category
+  - **System categories** (report + COC) show a 🔒 badge, are locked from rename/move-target/delete, and have no menu
+  - **Metadata line per row**: size · date · uploader ("—" when unknown)
+  - **Audit history**: rename/move/delete write to `activity_logs`; the per-document History dialog reads `activity_logs` filtered by `document_id`
+  - **Storage sync**: move/rename physically relocate the storage object via download→upload→remove (copy-then-delete with rollback)
 
 **Tab 5: COC & Metering** (merged view)
 - COC validation history table

@@ -239,6 +239,29 @@ to stop `VersionError`/missing-store crashes (`offlineDB.ts:3-6`). Files:
 `useOfflineFloorPlanAnnotations`. Sync flow → [06-flows/offline-sync.md](06-flows/offline-sync.md);
 per-symbol docs → [07-components-hooks-lib/](07-components-hooks-lib/).
 
+### Document management layer (`src/lib/documents/`)
+
+The rename/move/delete mutation engine behind the Site Detail → **Documents** tab
+(Admin-only). Four modules:
+- `documentMutations.ts` — rename/move/delete site- and subsection-documents. Storage
+  stays in sync by physically relocating the object via **download→upload→remove**
+  (copy-then-delete with rollback; the repo's storage client has no `copy`/`move`).
+  Site docs keep the denormalized `category` text and `category_id` in sync. Every
+  mutation writes an `activity_logs` audit row (`document_renamed`/`document_moved`/
+  `document_deleted`).
+- `reportCategories.ts` — constants for the app-managed report/COC category names that
+  are seeded `is_system = true` (locked from rename/move-target/delete).
+- `uploadConstraints.ts` — upload validation (allowed types pdf/doc/docx/xls/xlsx/png/
+  jpg/jpeg/gif/webp/svg; 50 MB/file max).
+- `paths.ts` — pure storage-path helpers.
+
+Two category tables are kept distinct (not conflated): site docs →
+`site_document_categories` (per `site_id`); subsection docs → `document_categories`
+(per `subsection_id`). UI/dialogs (`SiteDocuments.tsx`, `MoveDocumentsDialog.tsx`,
+`DocumentHistoryDialog.tsx`) → [07-components-hooks-lib/](07-components-hooks-lib/);
+schema changes (`file_size`/`mime_type`/`uploaded_by`/`updated_by`, `is_system`) in
+migration `20260621120000_site_documents_management.sql` → [02-data-model/](02-data-model/).
+
 ### Backend = edge functions + RPCs (not Next API routes)
 
 There are **no `src/app/**/route.ts` API handlers** — the Next layer is purely

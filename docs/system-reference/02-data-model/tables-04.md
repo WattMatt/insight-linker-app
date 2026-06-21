@@ -457,6 +457,7 @@ Enabled (`20260109105319`). Effective policy names:
 | name | text | no | — | |
 | order_index | integer | no | 0 | |
 | created_at | timestamptz | no | now() | |
+| is_system | boolean | no | false | locks app-managed report/COC categories from rename / reorder / delete / move-target (20260621120000) |
 
 types.ts (`src/integrations/supabase/types.ts:2444-2474`) matches; no discrepancies.
 
@@ -475,6 +476,7 @@ None (no `updated_at` column; no trigger created).
 ### Notable history
 - Backfilled from legacy free-text `site_documents.category` at creation (20251016021558).
 - RLS churn: anon read existed only 20251016021558→20251016035546.
+- `is_system` column added (20260621120000) to lock app-managed report/COC categories from the Documents-tab management UI (rename / reorder / delete + as a move-target).
 
 ---
 
@@ -494,6 +496,10 @@ None (no `updated_at` column; no trigger created).
 | created_at | timestamptz | no | now() | |
 | updated_at | timestamptz | no | now() | |
 | category_id | uuid | yes | — | → site_document_categories(id) ON DELETE CASCADE (20251016021558) |
+| file_size | bigint | yes | — | (20260621120000) |
+| mime_type | text | yes | — | (20260621120000) |
+| uploaded_by | uuid | yes | — | → auth.users(id) (20260621120000) |
+| updated_by | uuid | yes | — | → auth.users(id) (20260621120000) |
 
 types.ts (`src/integrations/supabase/types.ts:2476-2525`) matches; no discrepancies.
 
@@ -514,6 +520,7 @@ Enabled (`20251014140001`). Effective policy names:
 ### Notable history
 - `category_id` FK column added + backfilled from the (site_id, category) text pair (20251016021558).
 - Heavy anon-read churn: `Public users can view site documents` (20251015103303, dropped 20251016035546); `Public can view site documents` (20251016064723) and per-command policies → blanket auth (20251120080517) → role-scoped (20251120110544) → public read re-added (20260123052442, conditional) → tier-2 demotion (2026-06-11).
+- Document-management columns added (20260621120000): `file_size`, `mime_type`, `uploaded_by`, `updated_by` — populated going forward by the Documents-tab management layer (`updated_by` stamped on rename/move). Migration `20260621120000_site_documents_management.sql`.
 
 ---
 

@@ -145,6 +145,7 @@ No DELETE policy exists. ⚠️ Tier-2 note: the `allow read` policy is `SELECT 
 | name | text | no | — | |
 | order_index | integer | no | 0 | |
 | created_at | timestamptz | no | now() | |
+| is_system | boolean | no | false | locks app-managed report/COC categories from the Documents-tab UI (20260621120000) |
 
 **Constraints / indexes / unique keys.** PK on `id`. FK on `subsection_id`. No CHECK, no extra indexes, no unique keys.
 
@@ -170,6 +171,7 @@ No DELETE policy exists. ⚠️ Tier-2 note: the `allow read` policy is `SELECT 
 - `20251120110544` dropped the blanket policy; added Admin-manage + Client/Contractor SELECT (current set).
 - `20251120111033` added `Users can manage all document categories`.
 - `20260108071956` re-added anon `Public can view document categories` (removed again by 2026-06-11 tier-2).
+- `20260621120000` added `is_system` (boolean, default false) — locks app-managed report/COC categories from rename/move-target on the site Documents tab; seeded for report category names + COC categories.
 
 ---
 

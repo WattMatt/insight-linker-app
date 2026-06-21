@@ -1,7 +1,7 @@
 # Site Documents Tab — Management Features Design
 
 - **Date:** 2026-06-21
-- **Status:** Approved design (pre-implementation)
+- **Status:** ✅ SHIPPED to prod 2026-06-21 (origin/main 65f71ad; migration applied via Management API; Vercel deployed). Manual runtime verification pending.
 - **Scope owner:** Arno Mattheus
 - **Topic:** Rename documents, recategorize documents (single + bulk), category management (rename / reorder / empty / delete), audit trail, document metadata, multi-file upload, and upload validation on the Site Detail → Documents tab.
 

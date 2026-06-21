@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-06-21-site-documents-management-design.md`
 
+> **Status:** ✅ Executed & shipped 2026-06-21 — all 16 tasks complete, 395 tests green, build clean, on origin/main 65f71ad, prod migration applied, Vercel deployed. Only manual Admin/non-Admin runtime verification remains.
+
 ---
 
 ## Conventions used in this plan

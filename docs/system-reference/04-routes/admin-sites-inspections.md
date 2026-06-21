@@ -102,6 +102,38 @@ Note: documents uploaded here go to the **`documents` bucket with `getPublicUrl`
 public URL, unlike site images which use signed URLs. ⚠️ Whether the `documents` bucket is
 actually public is a storage-policy question (see `triggers-enums-storage.md`), not verified here.
 
+**Documents tab — management layer (shipped 2026-06-21, commit `65f71ad`).** The `documents` tab
+renders `SiteDocuments` (`src/components/site/SiteDocuments.tsx`); management is **Admin-only** —
+all mutation UI is gated by `canManage`, set in the parent as
+`canManageDocuments = useUserRole() === 'Admin'` (`SiteDetail.tsx:57`) and passed in (`:812`).
+Non-admins see read-only (View + Download only). Mutation logic lives in `src/lib/documents/`
+(`documentMutations.ts`, `paths.ts`, `reportCategories.ts`, `uploadConstraints.ts`); supporting
+dialogs are `MoveDocumentsDialog.tsx`, `DocumentHistoryDialog.tsx`, and the upload dialog in
+`DocumentDialogs.tsx`.
+- **Per-document:** View, Download, and a `⋮` overflow menu with Rename (inline), Move to…,
+  History, Delete. Each row shows a metadata line (size · date · uploader, "—" when unknown).
+- **Selection + bulk bar:** checkboxes drive bulk Move to… / Delete; a selection mixing site-level
+  and subsection docs disables Move (they live in different category tables).
+- **Per-category `⋮` (admin, non-system):** Upload here, Rename (inline), Move up / Move down
+  (reorder via `order_index`), Empty (delete all files), Delete category. **System categories**
+  (app-managed report/COC categories) show a 🔒 badge and have **no menu**.
+- **Multi-file upload with validation:** allowed types `pdf/doc/docx/xls/xlsx/png/jpg/jpeg/gif/webp/svg`,
+  max **50 MB per file** (`uploadConstraints.ts`).
+- **Audit trail:** rename/move/delete insert into `activity_logs` (`action` =
+  `document_renamed | document_moved | document_deleted`, with `user_email`, `user_id`, details
+  JSON-as-text — `documentMutations.ts:77,108,132`); the per-document History dialog reads
+  `activity_logs` filtered by `document_id`.
+- **Storage sync:** move/rename physically relocate the storage object via download→upload→remove
+  (no `storage.copy/move` in repo), copy-then-delete with rollback; site docs keep the
+  denormalized category text **and** `category_id` in sync.
+- **Schema (migration `20260621120000_site_documents_management.sql`, applied to prod):**
+  `site_documents` += `file_size` (bigint), `mime_type` (text), `uploaded_by`, `updated_by`
+  (uuid→`auth.users`); `site_document_categories` and `document_categories` each += `is_system`
+  (boolean NOT NULL default false). `is_system = true` locks report/COC categories from
+  rename/move-target/delete. The two category tables are distinct: **site docs** →
+  `site_document_categories` (per `site_id`); **subsection docs** → `document_categories`
+  (per `subsection_id`).
+
 ---
 
 ## 3. `/sites/[siteId]/subsections/[subsectionId]` — `SubsectionDetail` view
