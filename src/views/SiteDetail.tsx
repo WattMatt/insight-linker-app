@@ -30,6 +30,11 @@ import { SiteCocTab } from "@/views/site-coc/SiteCocTab";
 import { calculateCocComplianceStats } from "@/lib/complianceCalculations";
 import { computeSiteDeliverables, categoryMatches, THERMAL_CATEGORY_PATTERNS } from "@/lib/siteDeliverables";
 import { buildSiteKpiBlock } from "@/lib/siteCoc/reportKpis";
+import { useUserRole } from "@/hooks/useUserRole";
+import { renameDocument, moveDocuments, deleteDocuments, type DocRef } from "@/lib/documents/documentMutations";
+import { validateUploadFile } from "@/lib/documents/uploadConstraints";
+import { MoveDocumentsDialog, type MoveDoc } from "@/components/site/MoveDocumentsDialog";
+import { DocumentHistoryDialog } from "@/components/site/DocumentHistoryDialog";
 
 interface SiteDocument {
   category: string;
@@ -48,6 +53,8 @@ const SiteDetail = () => {
   const { clientId, siteId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { data: userRole } = useUserRole();
+  const canManageDocuments = userRole === "Admin";
 
   // States
   const [site, setSite] = useState<Site | null>(null);
@@ -77,7 +84,9 @@ const SiteDetail = () => {
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [uploadCategoryId, setUploadCategoryId] = useState<string | null>(null);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [moveDialogDocs, setMoveDialogDocs] = useState<MoveDoc[] | null>(null);
+  const [historyDoc, setHistoryDoc] = useState<{ id: string; name: string } | null>(null);
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [isCreateInspectionOpen, setIsCreateInspectionOpen] = useState(false);
@@ -114,7 +123,7 @@ const SiteDetail = () => {
     try {
       const { data, error } = await supabase
         .from('site_documents')
-        .select('id, file_name, file_url, category, category_id')
+        .select('id, file_name, file_url, category, category_id, file_size, uploaded_by, created_at')
         .eq('site_id', siteId)
         .order('created_at', { ascending: false });
 
@@ -146,10 +155,15 @@ const SiteDetail = () => {
       const { data: docs, error: docsError } = await supabase
         .from('subsection_documents')
         .select(`
-          id, 
-          file_name, 
-          file_url, 
+          id,
+          file_name,
+          file_url,
           subsection_id,
+          category_id,
+          file_size,
+          uploaded_at,
+          uploaded_by,
+          coc_number,
           document_categories(name)
         `)
         .in('subsection_id', subsectionIds)
@@ -157,11 +171,16 @@ const SiteDetail = () => {
 
       if (docsError) throw docsError;
 
-      const enrichedDocs = (docs || []).map(doc => ({
+      const enrichedDocs = (docs || []).map((doc: any) => ({
         id: doc.id,
         file_name: doc.file_name,
         file_url: doc.file_url,
         subsection_id: doc.subsection_id,
+        category_id: doc.category_id ?? null,
+        file_size: doc.file_size ?? null,
+        uploaded_at: doc.uploaded_at ?? null,
+        uploaded_by: doc.uploaded_by ?? null,
+        coc_number: doc.coc_number ?? null,
         category_name: doc.document_categories?.name || null
       }));
 
@@ -191,7 +210,7 @@ const SiteDetail = () => {
     try {
       const { data, error } = await supabase
         .from('site_document_categories')
-        .select('id, name')
+        .select('id, name, order_index, is_system')
         .eq('site_id', siteId)
         .order('order_index');
 
@@ -216,7 +235,7 @@ const SiteDetail = () => {
               ...cat
             }))
           )
-          .select('id, name');
+          .select('id, name, order_index, is_system');
 
         if (!insertError && newCategories) {
           setDocumentCategories(newCategories);
@@ -529,25 +548,80 @@ const SiteDetail = () => {
 
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadFile || !uploadCategoryId || !siteId) return;
-    try {
-      const category = documentCategories.find(c => c.id === uploadCategoryId);
-      const fileName = `${siteId}/${category?.name || 'misc'}/${Date.now()}-${uploadFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-      const { data, error } = await supabase.storage.from('documents').upload(fileName, uploadFile);
-      if (error) throw error;
-      const { data: urlData } = supabase.storage.from('documents').getPublicUrl(data.path);
-      await supabase.from('site_documents').insert({
-        site_id: siteId, category_id: uploadCategoryId, file_name: uploadFile.name,
-        file_url: urlData.publicUrl, category: category?.name || 'Misc'
-      });
-      toast.success("Uploaded successfully");
-      setUploadFile(null);
-      setUploadCategoryId(null);
-      setUploadDialogOpen(false);
-      fetchSiteDocuments();
-    } catch (error) {
-      toast.error("Upload failed");
+    if (uploadFiles.length === 0 || !uploadCategoryId || !siteId) return;
+    const category = documentCategories.find(c => c.id === uploadCategoryId);
+    const { data: { user } } = await supabase.auth.getUser();
+    let ok = 0, failed = 0;
+    for (const file of uploadFiles) {
+      const v = validateUploadFile(file);
+      if (!v.ok) { toast.error(v.reason); failed++; continue; }
+      try {
+        const path = `${siteId}/${category?.name || 'misc'}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+        const { data, error } = await supabase.storage.from('documents').upload(path, file);
+        if (error) throw error;
+        const { data: urlData } = supabase.storage.from('documents').getPublicUrl(data.path);
+        const { error: insErr } = await supabase.from('site_documents').insert({
+          site_id: siteId, category_id: uploadCategoryId, file_name: file.name, file_url: urlData.publicUrl,
+          category: category?.name || 'Misc', file_size: file.size, mime_type: file.type || null, uploaded_by: user?.id ?? null,
+        });
+        if (insErr) throw insErr;
+        ok++;
+      } catch { failed++; }
     }
+    if (ok) toast.success(`${ok} file${ok === 1 ? '' : 's'} uploaded`);
+    if (failed) toast.error(`${failed} file${failed === 1 ? '' : 's'} failed`);
+    setUploadFiles([]); setUploadCategoryId(null); setUploadDialogOpen(false);
+    fetchSiteDocuments();
+  };
+
+  const toDocRef = (d: any): DocRef => ({
+    id: d.id, source: d.source, file_name: d.file_name, file_url: d.file_url,
+    site_id: d.site_id ?? siteId ?? null, subsection_id: d.subsection_id ?? null,
+    category_id: d.category_id ?? null, coc_number: d.coc_number ?? null,
+  });
+  const refetchDocs = () => { fetchSiteDocuments(); fetchSubsectionDocuments(); };
+
+  const handleRenameDocument = async (doc: any, newName: string) => {
+    const r = await renameDocument(toDocRef(doc), newName);
+    r.ok ? toast.success("Renamed") : toast.error(r.error || "Rename failed");
+    refetchDocs();
+  };
+  const handleDeleteDocuments = async (docs: any[]) => {
+    if (!window.confirm(`Delete ${docs.length} document(s)? This cannot be undone.`)) return;
+    const results = await deleteDocuments(docs.map(toDocRef));
+    const okCount = results.filter(r => r.ok).length;
+    toast.success(`${okCount} deleted${okCount < results.length ? `, ${results.length - okCount} failed` : ""}`);
+    refetchDocs();
+  };
+  const handleConfirmMove = async (targetId: string, targetName: string) => {
+    if (!moveDialogDocs) return;
+    const results = await moveDocuments(moveDialogDocs.map(toDocRef), { id: targetId, name: targetName });
+    const okCount = results.filter(r => r.ok).length;
+    toast.success(`${okCount} moved${okCount < results.length ? `, ${results.length - okCount} failed` : ""}`);
+    setMoveDialogDocs(null);
+    refetchDocs();
+  };
+  const handleRenameCategory = async (categoryId: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const oldName = documentCategories.find(c => c.id === categoryId)?.name ?? "";
+    if (/coc/i.test(oldName) && !/coc/i.test(trimmed) &&
+        !window.confirm('This category auto-tags new uploads as COC. Renaming away from "COC" stops that for future uploads. Continue?')) {
+      return;
+    }
+    const { error } = await supabase.from('site_document_categories').update({ name: trimmed }).eq('id', categoryId);
+    error ? toast.error("Rename failed") : toast.success("Category renamed");
+    fetchDocumentCategories();
+  };
+  const handleReorderCategory = async (categoryId: string, direction: "up" | "down") => {
+    const sorted = [...documentCategories].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+    const i = sorted.findIndex(c => c.id === categoryId);
+    const j = direction === "up" ? i - 1 : i + 1;
+    if (i < 0 || j < 0 || j >= sorted.length) return;
+    const a = sorted[i], b = sorted[j];
+    await supabase.from('site_document_categories').update({ order_index: b.order_index ?? 0 }).eq('id', a.id);
+    await supabase.from('site_document_categories').update({ order_index: a.order_index ?? 0 }).eq('id', b.id);
+    fetchDocumentCategories();
   };
 
   const handleCreateInspection = async () => {
@@ -735,6 +809,13 @@ const SiteDetail = () => {
             onDeleteCategory={handleDeleteCategory}
             onBulkDeleteCategories={handleBulkDeleteCategories}
             onBulkDeleteDocumentsInCategory={handleBulkDeleteDocumentsInCategory}
+            canManage={canManageDocuments}
+            onRenameDocument={handleRenameDocument}
+            onMoveDocuments={(docs) => setMoveDialogDocs(docs as unknown as MoveDoc[])}
+            onDeleteDocuments={handleDeleteDocuments}
+            onViewHistory={(doc) => setHistoryDoc({ id: doc.id, name: doc.file_name })}
+            onRenameCategory={handleRenameCategory}
+            onReorderCategory={handleReorderCategory}
           />
           <DocumentPreviewDialog
             open={previewDocument !== null}
@@ -775,9 +856,22 @@ const SiteDetail = () => {
         createCategoryOpen={createCategoryOpen} setCreateCategoryOpen={setCreateCategoryOpen}
         newCategoryName={newCategoryName} setNewCategoryName={setNewCategoryName} onCreateCategory={handleCreateCategory}
         uploadCategoryId={uploadCategoryId} setUploadCategoryId={setUploadCategoryId}
-        uploadFile={uploadFile} setUploadFile={setUploadFile} onUploadDocument={handleUploadDocument}
+        uploadFiles={uploadFiles} setUploadFiles={setUploadFiles} onUploadDocument={handleUploadDocument}
         deleteCategoryId={deleteCategoryId} setDeleteCategoryId={setDeleteCategoryId}
         onDeleteCategory={handleDeleteCategory} categories={documentCategories}
+      />
+      <MoveDocumentsDialog
+        open={moveDialogDocs !== null}
+        onOpenChange={(o) => { if (!o) setMoveDialogDocs(null); }}
+        docs={moveDialogDocs ?? []}
+        siteCategories={documentCategories}
+        onConfirm={handleConfirmMove}
+      />
+      <DocumentHistoryDialog
+        open={historyDoc !== null}
+        onOpenChange={(o) => { if (!o) setHistoryDoc(null); }}
+        documentId={historyDoc?.id ?? null}
+        documentName={historyDoc?.name ?? ""}
       />
 
       <InspectionDialogs
