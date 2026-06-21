@@ -39,6 +39,10 @@ export interface AvVerifiedRow {
   ctMismatch: boolean;
   breaker: string;
   breakerMismatch: boolean;
+  // Inspection image URLs (resolved to compressed thumbnails at render time). Null when absent.
+  meterImage: string | null;
+  ctRatioImage: string | null;
+  breakerImage: string | null;
 }
 
 export interface AvDiscrepancyRow {
@@ -92,6 +96,9 @@ export function buildAssetVerificationReportModel(input: AvReportInput): AvRepor
       ctMismatch: r.ctMatch === "mismatch",
       breaker: dash(r.asset.breaker_size),
       breakerMismatch: r.breakerMatch === "mismatch",
+      meterImage: r.inspectionMatch?.meterImage ?? null,
+      ctRatioImage: r.inspectionMatch?.ctRatioImage ?? null,
+      breakerImage: r.inspectionMatch?.breakerImage ?? null,
     }));
 
   const discrepancyRows: AvDiscrepancyRow[] = [];

@@ -42,7 +42,11 @@ const cardGap = {
 
 const tone = (pct: number) => (pct >= 80 ? "#1D9E75" : pct >= 50 ? "#EF9F27" : "#E24B4A");
 
-export function buildAssetVerificationReportDocDef(model: AvReportModel, logoDataUrl?: string | null): TDocumentDefinitions {
+export function buildAssetVerificationReportDocDef(
+  model: AvReportModel,
+  logoDataUrl?: string | null,
+  images?: Map<string, string>,
+): TDocumentDefinitions {
   const s = model.summary;
   const rateColor = tone(s.verificationPct);
 
@@ -123,8 +127,22 @@ export function buildAssetVerificationReportDocDef(model: AvReportModel, logoDat
     { text: model.unverifiedRows.map((u) => u.premisesId).join(" · ") || "—", fontSize: 9 },
   ];
 
+  // Reference thumbnails (already fetched + compressed by the generator and keyed by source URL).
+  // Each is a small labeled image; missing/failed images are simply skipped (best-effort).
+  const img = images ?? new Map<string, string>();
+  const thumb = (url: string | null, label: string): Content | null => {
+    if (!url) return null;
+    const data = img.get(url);
+    if (!data) return null;
+    return { stack: [{ image: data, fit: [40, 30] }, { text: label, fontSize: 5, color: "#5F5E5A", alignment: "center", margin: [0, 1, 0, 0] }], width: "auto" } as Content;
+  };
+  const imagesCell = (r: AvReportModel["verifiedRows"][number]): any => {
+    const thumbs = [thumb(r.meterImage, "Meter"), thumb(r.ctRatioImage, "CT"), thumb(r.breakerImage, "Breaker")].filter(Boolean) as Content[];
+    return thumbs.length ? { columns: thumbs, columnGap: 4 } : { text: "—", fontSize: 7, color: "#B4B2A9" };
+  };
+
   const verifiedTable = (): Content => {
-    const head = ["Premises ID", "Trade as", "Status", "Inspection source", "Meter serial", "CT ratio", "Breaker"].map(hcell);
+    const head = ["Premises ID", "Trade as", "Status", "Inspection source", "Meter serial", "CT ratio", "Breaker", "Reference images"].map(hcell);
     const body = model.verifiedRows.map((r) => [
       { text: r.premisesId, fontSize: 7 },
       { text: r.tradeAs, fontSize: 7 },
@@ -133,9 +151,10 @@ export function buildAssetVerificationReportDocDef(model: AvReportModel, logoDat
       { text: r.meterSerial, fontSize: 7 },
       { text: r.ctRatio, fontSize: 7, fillColor: r.ctMismatch ? FILL_WARN : null, color: r.ctMismatch ? TEXT_WARN : undefined },
       { text: r.breaker, fontSize: 7, fillColor: r.breakerMismatch ? FILL_WARN : null, color: r.breakerMismatch ? TEXT_WARN : undefined },
+      imagesCell(r),
     ]);
-    if (!body.length) body.push([{ text: "No assets verified against inspection data.", fontSize: 7, colSpan: 7 } as any, {}, {}, {}, {}, {}, {}]);
-    return { table: { headerRows: 1, widths: [70, "*", 56, 110, 90, 72, 72], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
+    if (!body.length) body.push([{ text: "No assets verified against inspection data.", fontSize: 7, colSpan: 8 } as any, {}, {}, {}, {}, {}, {}, {}]);
+    return { table: { headerRows: 1, widths: [64, "*", 54, 96, 78, 62, 62, 138], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 4] };
   };
 
   const discrepancyTable = (): Content => {
@@ -166,6 +185,7 @@ export function buildAssetVerificationReportDocDef(model: AvReportModel, logoDat
   const tablesBlock: Content[] = [
     { text: "Verified against inspection data", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
     verifiedTable(),
+    { text: "Reference images are low-resolution thumbnails — log in to the app for the full-size meter, CT and breaker photos.", fontSize: 7, italics: true, color: "#5F5E5A", margin: [0, 0, 0, 8] },
     { text: "Value mismatches", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
     discrepancyTable(),
     { text: "Assets without matching inspection", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },

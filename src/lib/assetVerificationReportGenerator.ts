@@ -17,6 +17,7 @@ import { PDFComplianceCheck, createComplianceResult } from "./pdfTemplates";
 import type { ComparisonResult } from "./assetVerification";
 import { buildAssetVerificationReportModel } from "./assetVerificationReportModel";
 import { buildAssetVerificationReportDocDef } from "./assetVerificationReport";
+import { loadImagesSimple } from "./simpleImageLoader";
 
 export interface InspectionGeneratorOptions {
   siteName: string;
@@ -56,7 +57,16 @@ export async function generateInspectionBasedReport(
     stats,
   });
 
-  const blob = await generatePdfBlob(buildAssetVerificationReportDocDef(model, logoDataUrl));
+  // Resolve compressed reference thumbnails (meter / CT / breaker) for every verified asset that
+  // has inspection photos. Keyed by source URL and downscaled to keep the saved PDF small.
+  const imageUrls = model.verifiedRows
+    .flatMap((r) => [r.meterImage, r.ctRatioImage, r.breakerImage])
+    .filter((u): u is string => !!u);
+  const images = imageUrls.length
+    ? await loadImagesSimple(imageUrls, { compress: true, maxWidth: 240, quality: 0.55 })
+    : undefined;
+
+  const blob = await generatePdfBlob(buildAssetVerificationReportDocDef(model, logoDataUrl, images));
   const filename = generateDocumentFilename("Asset_Verification", siteName);
 
   const complianceChecks = createComplianceResult({

@@ -69,6 +69,20 @@ describe("buildAssetVerificationReportModel", () => {
     expect(m.verifiedRows[0]).toMatchObject({ premisesId: "P1", mismatch: true, source: "Sub 1", ctMismatch: true, breakerMismatch: false });
   });
 
+  it("carries inspection image URLs onto verified rows (null when absent)", () => {
+    const m = buildAssetVerificationReportModel({
+      siteName: "Site A", generatedAt: "d", referenceNumber: "r",
+      stats: stats({ total: 1, verifiedNoDiscrepancy: 1 }),
+      comparisonResults: [
+        result({
+          verified: true,
+          inspectionMatch: { inspectionId: "i", inspectionTitle: "t", subsectionId: null, meterSerialNumber: "M-100", meterImage: "https://x/meter.jpg", breakerImage: "https://x/breaker.jpg" },
+        }),
+      ],
+    });
+    expect(m.verifiedRows[0]).toMatchObject({ meterImage: "https://x/meter.jpg", ctRatioImage: null, breakerImage: "https://x/breaker.jpg" });
+  });
+
   it("emits one discrepancy row per mismatched field (CT + breaker → 2 rows)", () => {
     const m = buildAssetVerificationReportModel({
       siteName: "Site A", generatedAt: "d", referenceNumber: "r",
