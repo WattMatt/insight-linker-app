@@ -13,8 +13,8 @@ interface DocumentDialogsProps {
     onCreateCategory: (e: React.FormEvent) => void;
     uploadCategoryId: string | null;
     setUploadCategoryId: (id: string | null) => void;
-    uploadFile: File | null;
-    setUploadFile: (file: File | null) => void;
+    uploadFiles: File[];
+    setUploadFiles: (files: File[]) => void;
     onUploadDocument: (e: React.FormEvent) => void;
     deleteCategoryId: string | null;
     setDeleteCategoryId: (id: string | null) => void;
@@ -30,8 +30,8 @@ export function DocumentDialogs({
     onCreateCategory,
     uploadCategoryId,
     setUploadCategoryId,
-    uploadFile,
-    setUploadFile,
+    uploadFiles,
+    setUploadFiles,
     onUploadDocument,
     deleteCategoryId,
     setDeleteCategoryId,
@@ -76,39 +76,41 @@ export function DocumentDialogs({
             <Dialog open={uploadCategoryId !== null} onOpenChange={(open) => {
                 if (!open) {
                     setUploadCategoryId(null);
-                    setUploadFile(null);
+                    setUploadFiles([]);
                 }
             }}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Upload Document</DialogTitle>
-                        <DialogDescription>Upload a file to the selected category</DialogDescription>
+                        <DialogTitle>Upload Documents</DialogTitle>
+                        <DialogDescription>Upload one or more files to the selected category (max 50 MB each).</DialogDescription>
                     </DialogHeader>
                     <form onSubmit={onUploadDocument}>
                         <div className="space-y-4 py-4">
                             <div className="space-y-2">
-                                <Label htmlFor="document-file">Document File *</Label>
+                                <Label htmlFor="document-file">Document Files *</Label>
                                 <Input
                                     id="document-file"
                                     type="file"
-                                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                                    required={!uploadFile}
+                                    multiple
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.svg"
+                                    onChange={(e) => setUploadFiles(Array.from(e.target.files ?? []))}
+                                    required={uploadFiles.length === 0}
                                 />
-                                {uploadFile && (
-                                    <p className="text-sm text-muted-foreground mt-2">
-                                        Selected: <span className="font-medium text-foreground">{uploadFile.name}</span>
-                                    </p>
+                                {uploadFiles.length > 0 && (
+                                    <ul className="text-sm text-muted-foreground mt-2 list-disc pl-5">
+                                        {uploadFiles.map((f, i) => <li key={i}>{f.name}</li>)}
+                                    </ul>
                                 )}
                             </div>
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => {
                                 setUploadCategoryId(null);
-                                setUploadFile(null);
+                                setUploadFiles([]);
                             }}>
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={!uploadFile}>
+                            <Button type="submit" disabled={uploadFiles.length === 0}>
                                 <Upload className="h-4 w-4 mr-2" />
                                 Upload
                             </Button>
