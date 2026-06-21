@@ -29,8 +29,6 @@ import {
 import {
   createCoverPage,
   createPageHeader,
-  createPageFooter,
-  createKpiDashboard,
   createSectionHeader,
   createDataTable,
   createSpacer,
@@ -40,6 +38,7 @@ import {
   getStatusType,
   createStatusBadge,
 } from "./pdfTemplates";
+import { tintedKpiCard, gaugeBar, toneForPct, TONE_TINT } from "./pdfBars";
 import { fetchPDFTemplate } from "@/hooks/usePDFTemplateGateway";
 
 // Asset interface - matches AssetComparisonTable
@@ -147,23 +146,33 @@ export async function generateInspectionBasedReport(
     content.push(createSectionHeader('Verification Overview', 'primary'));
     content.push(createSpacer(5));
 
-    // KPI Dashboard with template accent color
-    content.push(createKpiDashboard([
-      { value: stats.total, label: 'Total Assets', color: accentColors.primary },
-      { value: stats.verifiedNoDiscrepancy, label: 'Verified', color: COLORS.success },
-      { value: stats.discrepancies, label: 'Discrepancies', color: COLORS.warning },
-      { value: stats.unverified, label: 'Not Verified', color: COLORS.error },
-    ]));
-
-    content.push(createSpacer(10));
-
-    // Verification Rate - simplified to avoid canvas issues
+    // KPI cards — COC-style tinted nested cards with pdf.js-safe table bars (src/lib/pdfBars.ts).
+    // Portrait A4: four 117pt columns fit the ~510pt content width, with white gaps between cards.
+    const rateTone = toneForPct(matchRate);
+    const cardGap = {
+      hLineWidth: () => 3, vLineWidth: () => 3,
+      hLineColor: () => '#FFFFFF', vLineColor: () => '#FFFFFF',
+      paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0,
+    };
     content.push({
-      text: `Verification Rate: ${matchRate}%`,
-      style: 'body',
-      bold: true,
-      margin: [0, 0, 0, 15],
-    });
+      table: {
+        widths: [117, 117, 117, 117],
+        body: [[
+          tintedKpiCard({ label: 'Total Assets', value: String(stats.total), sub: 'in register', tone: 'slate', contentWidth: 113 }),
+          tintedKpiCard({ label: 'Verified', value: String(stats.verifiedNoDiscrepancy), sub: `${matchRate}% of total`, tone: rateTone, barPct: matchRate, contentWidth: 113 }),
+          tintedKpiCard({ label: 'Discrepancies', value: String(stats.discrepancies), sub: 'value mismatches', tone: stats.discrepancies ? 'amber' : 'green', contentWidth: 113 }),
+          tintedKpiCard({ label: 'Not Verified', value: String(stats.unverified), sub: 'no inspection match', tone: stats.unverified ? 'red' : 'green', contentWidth: 113 }),
+        ]],
+      },
+      layout: cardGap,
+      margin: [0, 0, 0, 12],
+    } as Content);
+
+    // Verification-rate gauge — canvas-free table bar that renders correctly in the in-app pdf.js
+    // viewer (replaces the old plain-text rate that was "simplified to avoid canvas issues").
+    content.push({ text: `Verification rate — ${matchRate}%`, fontSize: 11, bold: true, color: TONE_TINT[rateTone].accent });
+    content.push(gaugeBar(matchRate, TONE_TINT[rateTone].accent));
+    content.push(createSpacer(8));
 
     // Summary Statistics Section
     content.push(createSectionHeader('Summary Statistics', 'secondary'));
@@ -373,7 +382,16 @@ export async function generateInspectionBasedReport(
       title: `${customization.coverTitle || 'Asset Verification Report'} - ${siteName}`,
       author: organizationName,
       header: createPageHeader(customization.coverTitle || 'Asset Verification Report', logoDataUrl, organizationName),
-      footer: customization.includePageNumbers ? createPageFooter('CONFIDENTIAL') : undefined,
+      footer: (currentPage: number, pageCount: number) =>
+        currentPage === 1
+          ? null
+          : {
+              margin: [42, 6, 42, 0],
+              columns: [
+                { text: `${organizationName} · Confidential`, fontSize: 7, color: '#A9A9A3' },
+                { text: `${siteName} · Page ${currentPage} of ${pageCount}`, fontSize: 7, color: '#A9A9A3', alignment: 'right' },
+              ],
+            },
     }
   );
 

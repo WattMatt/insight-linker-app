@@ -96,19 +96,21 @@ export function gaugeBar(pct: number, color: string, opts?: { width?: number; he
  * A tinted KPI card: a left accent bar beside a label / big value / optional bar / sub-text,
  * all on a tinted background. Built as a nested table so pdf.js sizes it to content reliably
  * (a fixed outer height makes pdf.js stretch the row and float content — see siteCocReport.ts).
+ * `contentWidth` (default 130, COC landscape) sizes the card body — pass a smaller value to fit
+ * more cards across a portrait page; the inner bar auto-shrinks to match.
  */
-export function tintedKpiCard(opts: { label: string; value: string; sub?: string; tone: Tone; barPct?: number }): Content {
-  const { label, value, sub, tone, barPct } = opts;
+export function tintedKpiCard(opts: { label: string; value: string; sub?: string; tone: Tone; barPct?: number; contentWidth?: number }): Content {
+  const { label, value, sub, tone, barPct, contentWidth = 130 } = opts;
   const tint = TONE_TINT[tone];
   const stack: Content[] = [
     { text: label, fontSize: 9, color: tint.label },
     { text: value, fontSize: 19, bold: true, color: tint.value, margin: [0, 3, 0, 0] },
   ];
-  if (barPct != null) stack.push(miniBar(barPct, tint.accent, { width: 108, track: tint.track }));
+  if (barPct != null) stack.push(miniBar(barPct, tint.accent, { width: Math.max(40, contentWidth - 18), track: tint.track }));
   if (sub != null) stack.push({ text: sub, fontSize: 7, color: tint.label, margin: [0, barPct != null ? 4 : 6, 0, 0] });
   return {
     fillColor: tint.bg,
-    table: { widths: [4, 130], body: [[{ text: "", fillColor: tint.accent }, { stack, margin: [9, 9, 8, 9] }]] },
+    table: { widths: [4, contentWidth], body: [[{ text: "", fillColor: tint.accent }, { stack, margin: [9, 9, 8, 9] }]] },
     layout: NO_BORDER,
   } as Content;
 }

@@ -82,4 +82,8 @@ describe("tintedKpiCard", () => {
     const stack = card.table.body[0][1].stack;
     expect(stack).toHaveLength(2); // label + value only
   });
+  it("respects a custom contentWidth for narrower portrait cards", () => {
+    const card: any = tintedKpiCard({ label: "Total", value: "12", tone: "slate", contentWidth: 113 });
+    expect(card.table.widths).toEqual([4, 113]);
+  });
 });
