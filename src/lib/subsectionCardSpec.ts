@@ -37,8 +37,8 @@ export const CARD_LAYOUT = {
   titleSize: 13,
   categoryBadgeSize: 9,
   
-  // QR Code
-  qrCodeSize: 70,
+  // QR Code (display size in the PDF card; generation resolution is decoupled — see generateSubsectionQRCode)
+  qrCodeSize: 90,
   qrCodeLogoSize: 18,
   
   // Content sections - tighter spacing
@@ -91,7 +91,11 @@ export async function generateSubsectionQRCode(
   
   try {
     const qrDataUrl = await QRCode.toDataURL(url, {
-      width: CARD_LAYOUT.qrCodeSize * 2, // 2x for retina
+      // High-res source, DECOUPLED from the small card display size. The encoded
+      // qr-redirect URL is ~107 chars → at ECC 'H' that's a 57x57-module (v10) QR;
+      // generating at 140px gave ~2.4px/module (unscannable + blurry). 500px gives
+      // ~8.5px/module — crisp when pdfmake downscales it into the card.
+      width: 500,
       margin: 1,
       color: {
         dark: '#000000',
@@ -138,7 +142,7 @@ async function embedLogoInQR(qrDataUrl: string, logoUrl: string): Promise<string
 
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
-      const maxLogoSize = CARD_LAYOUT.qrCodeLogoSize * 2;
+      const maxLogoSize = canvas.width * 0.28; // ~28% of the high-res QR (proportional, not a fixed px)
 
       // Draw the logo aspect-ratio-preserved with a white rectangular backing, matching
       // qrCodeGenerator / LabeledQRCode so a wide WM logo is never squashed into a square.
