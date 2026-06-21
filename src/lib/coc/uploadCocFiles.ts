@@ -18,7 +18,7 @@ export async function findOrCreateCategory(subsectionId: string, name: string): 
   const { data: cats } = await supabase.from("document_categories").select("name").eq("subsection_id", subsectionId);
   const maxOrder = (cats ?? []).reduce((m, c) => Math.max(m, parseInt((c.name || "").split(" ")[0]) || 0), 0);
   const { data, error } = await supabase
-    .from("document_categories").insert({ subsection_id: subsectionId, name, order_index: maxOrder + 1 }).select("id, name").single();
+    .from("document_categories").insert({ subsection_id: subsectionId, name, order_index: maxOrder + 1, is_system: true }).select("id, name").single();
   if (error || !data) throw new Error(`Could not resolve category "${name}": ${error?.message}`);
   return data;
 }

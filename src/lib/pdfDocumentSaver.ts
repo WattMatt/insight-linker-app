@@ -76,6 +76,7 @@ async function saveToSiteDocuments(
         site_id: siteId,
         name: categoryName,
         order_index: 999,
+        is_system: true,
       })
       .select()
       .single();
@@ -145,6 +146,7 @@ async function saveToSubsectionDocuments(
         subsection_id: subsectionId,
         name: categoryName,
         order_index: 999,
+        is_system: true,
       })
       .select()
       .single();
