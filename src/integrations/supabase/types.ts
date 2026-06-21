@@ -804,6 +804,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_system: boolean
           name: string
           order_index: number
           subsection_id: string
@@ -811,6 +812,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_system?: boolean
           name: string
           order_index?: number
           subsection_id: string
@@ -818,6 +820,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_system?: boolean
           name?: string
           order_index?: number
           subsection_id?: string
@@ -2044,6 +2047,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_system: boolean
           name: string
           order_index: number
           site_id: string
@@ -2051,6 +2055,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_system?: boolean
           name: string
           order_index?: number
           site_id: string
@@ -2058,6 +2063,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_system?: boolean
           name?: string
           order_index?: number
           site_id?: string
@@ -2079,10 +2085,14 @@ export type Database = {
           created_at: string
           file_count: number | null
           file_name: string
+          file_size: number | null
           file_url: string
           id: string
+          mime_type: string | null
           site_id: string
           updated_at: string
+          updated_by: string | null
+          uploaded_by: string | null
         }
         Insert: {
           category: string
@@ -2090,10 +2100,14 @@ export type Database = {
           created_at?: string
           file_count?: number | null
           file_name: string
+          file_size?: number | null
           file_url: string
           id?: string
+          mime_type?: string | null
           site_id: string
           updated_at?: string
+          updated_by?: string | null
+          uploaded_by?: string | null
         }
         Update: {
           category?: string
@@ -2101,10 +2115,14 @@ export type Database = {
           created_at?: string
           file_count?: number | null
           file_name?: string
+          file_size?: number | null
           file_url?: string
           id?: string
+          mime_type?: string | null
           site_id?: string
           updated_at?: string
+          updated_by?: string | null
+          uploaded_by?: string | null
         }
         Relationships: [
           {
