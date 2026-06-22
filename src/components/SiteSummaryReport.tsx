@@ -8,6 +8,7 @@ import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { qrRedirectUrl } from "@/lib/qrBaseUrl";
 import { isCocCertificateCategory, toCocDoc, buildCocCardLines } from "@/lib/cocHierarchy";
+import { matchAssetForSubsection } from "@/lib/report/subsectionAssetMatch";
 import {
   generateReport,
   createSectionHeader,
@@ -180,23 +181,11 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
     // scan time, so this QR survives a frontend domain change. See src/lib/qrBaseUrl.ts.
     const qrUrl = qrRedirectUrl(sub.id);
     
-    // Find matching asset by premises_id or trade_as containing the subsection name
-    // premises_id may have format like "YA - KIOSK" while subsection name is just "KIOSK"
-    // trade_as may have format like "YA - KFC" while subsection name is just "KFC"
-    const subNameNorm = sub.name?.toLowerCase().trim() || '';
-    const matchingAsset = assets.find(a => {
-      const premisesNorm = a.premises_id?.toLowerCase().trim() || '';
-      const tradeAsNorm = a.trade_as?.toLowerCase().trim() || '';
-      // Check for exact match or if premises_id/trade_as ends with the subsection name
-      const matchesPremises = premisesNorm === subNameNorm || 
-             premisesNorm.endsWith(` - ${subNameNorm}`) ||
-             premisesNorm.endsWith(`-${subNameNorm}`);
-      const matchesTradeAs = tradeAsNorm === subNameNorm ||
-             tradeAsNorm.endsWith(` - ${subNameNorm}`) ||
-             tradeAsNorm.endsWith(`-${subNameNorm}`);
-      return matchesPremises || matchesTradeAs;
-    });
-    
+    // Resolve the electrical-meter asset the SAME way Asset Verification does:
+    // identity join on the normalized meter serial first, then premises_id/trade_as
+    // name-suffix as fallback. Both surfaces then read the same site_assets.breaker_size.
+    const matchingAsset = matchAssetForSubsection(sub, assets);
+
     return {
       id: sub.id,
       name: sub.name,
