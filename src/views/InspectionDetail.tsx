@@ -1079,7 +1079,10 @@ const InspectionDetail = () => {
       const url = qrRedirectUrl(inspData.subsection_id || subsectionId);
 
       const canvas = document.createElement('canvas');
-      const size = 200;
+      // 500px source: the ~107-char qr-redirect URL at ECC 'H' is a 57-module code;
+      // 200px gave ~3.4px/module (too dense). 500px = ~8.5px/module — matches the
+      // other QR generators and stays crisp when displayed/printed.
+      const size = 500;
       canvas.width = size;
       canvas.height = size;
 
@@ -1827,7 +1830,7 @@ const InspectionDetail = () => {
           <Label>QR Code</Label>
           <div className="mt-2">
             {qrCodeUrl && (
-              <RobustImage src={qrCodeUrl} alt="QR Code" className="w-32 h-32 border rounded" />
+              <RobustImage src={qrCodeUrl} alt="QR Code" className="w-64 h-64 border rounded" />
             )}
           </div>
         </div>
