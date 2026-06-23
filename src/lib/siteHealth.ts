@@ -5,6 +5,7 @@
  * COC certification is tracked separately (see complianceCalculations.ts) and is
  * NOT part of this score. Pure functions, no I/O — see siteHealth.test.ts.
  */
+import { inspectionHasImages } from './inspectionImages';
 
 export interface SubsectionForHealth {
   id: string;
@@ -20,6 +21,7 @@ export interface SnagForHealth {
 export interface InspectionForHealth {
   subsection_id?: string | null;
   status?: string | null;
+  json_data?: unknown;
 }
 export interface FactorScores { metering: number; snags: number; inspections: number; }
 export interface HealthWeights { snags: number; inspections: number; metering: number; }
@@ -61,7 +63,7 @@ export function factorScores(
   const metering = total === 0 ? 100 : Math.round((subsections.filter(isMetered).length / total) * 100);
   const snagScore = snags.length === 0 ? 100 : Math.round((snags.filter(isSnagResolved).length / snags.length) * 100);
   const inspectedIds = new Set(
-    inspections.filter(isInspectionCompleted).map(i => i.subsection_id).filter(Boolean) as string[],
+    inspections.filter(inspectionHasImages).map(i => i.subsection_id).filter(Boolean) as string[],
   );
   // Inspection-not-applicable subsections are waived: neither inspected nor missing.
   const inspectionReq = subsections.filter(s => s.is_inspection_required !== false);
@@ -83,7 +85,7 @@ export function readiness(
 ): ReadinessResult {
   const blockedIds = new Set(snags.filter(isBlockingOpenSnag).map(s => s.subsection_id));
   const inspectedIds = new Set(
-    inspections.filter(isInspectionCompleted).map(i => i.subsection_id).filter(Boolean) as string[],
+    inspections.filter(inspectionHasImages).map(i => i.subsection_id).filter(Boolean) as string[],
   );
   let ready = 0, failMeter = 0, failSnag = 0, failInsp = 0;
   for (const s of subsections) {

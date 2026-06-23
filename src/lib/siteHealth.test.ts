@@ -7,6 +7,11 @@ import {
 
 const sub = (id: string, over = {}) => ({ id, metering_status: null, meter_serial_number: null, ...over });
 
+// Inspection json_data carrying at least one photo (sections form).
+const PHOTO_JSON = { sec: { item: { photos: ['u1'] } } };
+const withPhoto = (subsection_id: string, over: Record<string, unknown> = {}) =>
+  ({ subsection_id, json_data: PHOTO_JSON, ...over });
+
 describe('predicates', () => {
   it('isMetered: installed status', () => {
     expect(isMetered({ id: '1', metering_status: 'Installed' })).toBe(true);
@@ -40,8 +45,8 @@ describe('factorScores', () => {
       { subsection_id: 'a', status: 'Open' }, { subsection_id: 'a', status: 'Rectified' },
       { subsection_id: 'b', status: 'Closed' },
     ];
-    // Existence-based: both inspections count (status ignored), so 2 of 3 subsections are inspected.
-    const insp = [{ subsection_id: 'a', status: 'Completed' }, { subsection_id: 'b', status: 'Pending' }];
+    // Image-based: both inspections carry a photo, so 2 of 3 subsections are inspected.
+    const insp = [withPhoto('a'), withPhoto('b')];
     const f = factorScores(subs, snags, insp);
     expect(f.metering).toBe(67);
     expect(f.snags).toBe(67);
@@ -54,9 +59,14 @@ describe('factorScores', () => {
     const f = factorScores([], [], []);
     expect(f).toEqual({ metering: 100, snags: 100, inspections: 100 });
   });
-  it('multiple completed inspections on one subsection count it once', () => {
-    const insp = [{ subsection_id: 'a', status: 'Completed' }, { subsection_id: 'a', status: 'Done' }];
+  it('multiple inspections on one subsection count it once', () => {
+    const insp = [withPhoto('a'), withPhoto('a')];
     expect(factorScores([sub('a'), sub('b')], [], insp).inspections).toBe(50);
+  });
+  it('an inspection with no images does NOT count as inspected', () => {
+    const subs = [sub('a'), sub('b')];
+    const insp = [{ subsection_id: 'a', json_data: {} }, withPhoto('b')]; // a empty, b populated
+    expect(factorScores(subs, [], insp).inspections).toBe(50);
   });
 });
 
@@ -74,7 +84,7 @@ describe('readiness', () => {
   it('a subsection is ready only when metered, no blocking open snag, and inspected', () => {
     const subs = [sub('ok', { metering_status: 'Installed' }), sub('bad')];
     const snags = [{ subsection_id: 'bad', status: 'Open', risk_level: 'Critical' }];
-    const insp = [{ subsection_id: 'ok', status: 'Completed' }];
+    const insp = [withPhoto('ok')];
     const r = readiness(subs, snags, insp);
     expect(r.ready).toBe(1);
     expect(r.total).toBe(2);
@@ -84,7 +94,7 @@ describe('readiness', () => {
   });
   it('only Critical/High open snags block; Medium/Low do not', () => {
     const subs = [sub('a', { metering_status: 'Installed' })];
-    const insp = [{ subsection_id: 'a', status: 'Completed' }];
+    const insp = [withPhoto('a')];
     const minor = [{ subsection_id: 'a', status: 'Open', risk_level: 'Medium' }];
     expect(readiness(subs, minor, insp).ready).toBe(1);
     const major = [{ subsection_id: 'a', status: 'Open', risk_level: 'High' }];
@@ -92,9 +102,16 @@ describe('readiness', () => {
   });
   it('a resolved critical snag does not block', () => {
     const subs = [sub('a', { metering_status: 'Installed' })];
-    const insp = [{ subsection_id: 'a', status: 'Completed' }];
+    const insp = [withPhoto('a')];
     const snags = [{ subsection_id: 'a', status: 'Rectified', risk_level: 'Critical' }];
     expect(readiness(subs, snags, insp).ready).toBe(1);
+  });
+  it('an empty (image-less) inspection leaves the subsection inspection-failing', () => {
+    const subs = [sub('a', { metering_status: 'Installed' })];
+    const insp = [{ subsection_id: 'a', json_data: {} }];
+    const r = readiness(subs, [], insp);
+    expect(r.failing.inspection).toBe(1);
+    expect(r.ready).toBe(0);
   });
 });
 
@@ -114,7 +131,7 @@ describe('inspection-not-applicable waiver', () => {
       { id: 'b' },                                 // required, NOT inspected
       { id: 'c', is_inspection_required: false },  // waived
     ];
-    const insps = [{ subsection_id: 'a' }];
+    const insps = [withPhoto('a')];
     // Required = a,b. Inspected = a. Factor = 1/2 = 50 (c neither counts nor drags).
     expect(factorScores(subs, [], insps).inspections).toBe(50);
   });
