@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { useSearchParams } from "@/lib/navigation";
 import { hasValidCocStatus } from "@/lib/complianceCalculations";
 import { isInspectionCompleted } from "@/lib/siteHealth";
+import { isCocCertificateCategory, toCocDoc } from "@/lib/cocHierarchy";
+import { computeSubsectionVerdict } from "@/lib/subsectionCompliance";
 import type { SubsectionData, SiteData, EditFormData } from "./types";
 
 interface OverviewTabProps {
@@ -56,6 +58,19 @@ export function OverviewTab({
 }: OverviewTabProps) {
   const [searchParams] = useSearchParams();
   const highlightSnagId = searchParams.get("snag");
+
+  // Two-dimension verdict (same source as the Site Summary report cards).
+  const verdict = computeSubsectionVerdict({
+    isCocRequired: subsection.isCocRequired,
+    openSnagCount: openSnagsCount,
+    meteringStatus: subsection.meteringStatus,
+    meterSerialNumber: subsection.meterSerialNumber,
+    cocDocs: (supabaseDocuments || [])
+      .filter((d: any) => isCocCertificateCategory(d.category || ''))
+      .map((d: any) => toCocDoc(d)),
+    today: new Date().toISOString().split('T')[0],
+  });
+
   useEffect(() => {
     if (!highlightSnagId) return;
     const el = document.querySelector(`[data-snag-id="${highlightSnagId}"]`);
@@ -137,6 +152,23 @@ export function OverviewTab({
               >
                 {subsection.isCocRequired ? "Disable" : "Enable"}
               </Button>
+            </div>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground mb-1">Compliance</p>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm w-40">Installation Review</span>
+                <Badge variant={verdict.installation ? "default" : "destructive"}>
+                  {verdict.installation ? "Compliant" : "Non-Compliant"}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm w-40">Documentation</span>
+                <Badge variant={!verdict.documentationRequired ? "secondary" : verdict.documentation ? "default" : "destructive"}>
+                  {!verdict.documentationRequired ? "Not required" : verdict.documentation ? "Compliant" : "Initial COC missing/invalid"}
+                </Badge>
+              </div>
             </div>
           </div>
           <div>
