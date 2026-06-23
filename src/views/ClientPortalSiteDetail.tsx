@@ -20,6 +20,7 @@ import { SchematicDiagram } from "@/components/site/SchematicDiagram";
 import { AssetVerification } from "@/components/site/AssetVerification";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { ClientPortalDocuments } from "@/components/client-portal/ClientPortalDocuments";
+import { ClientCocView } from "@/components/client-portal/ClientCocView";
 import { downloadFile } from "@/lib/fileDownload";
 import { Site, Subsection } from "@/types/site";
 
@@ -278,6 +279,10 @@ const ClientPortalSiteDetail = () => {
             <Layers className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Subsections</span>
           </TabsTrigger>
+          <TabsTrigger value="coc" className="gap-2 shrink-0">
+            <FileBarChart className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">COC</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* Dashboard Tab */}
@@ -347,6 +352,15 @@ const ClientPortalSiteDetail = () => {
         {/* Asset Verification Tab */}
         <TabsContent value="asset-verification" className="space-y-6">
           <AssetVerification siteId={siteId!} siteName={site.name} readOnly />
+        </TabsContent>
+
+        {/* COC Tab */}
+        <TabsContent value="coc" className="space-y-4">
+          <ClientCocView
+            siteId={siteId!}
+            siteName={site.name}
+            onPreview={(url, name) => setPreviewDocument({ url, name })}
+          />
         </TabsContent>
 
         {/* Documents Tab */}
