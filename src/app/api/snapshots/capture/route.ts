@@ -51,7 +51,7 @@ export async function GET(req: Request) {
       fetchAll(supabase, "sites", "id, name, client_id"),
       fetchAll(supabase, "subsections", "id, site_id, name, coc_status, is_coc_required, is_thermal_required, is_inspection_required, metering_status, meter_serial_number"),
       fetchAll(supabase, "snags", "id, subsection_id, status, risk_level, title"),
-      fetchAll(supabase, "inspections", "subsection_id, status, site_id"),
+      fetchAll(supabase, "inspections", "subsection_id, status, site_id, json_data"),
       fetchAll(supabase, "site_schematics", "site_id"),
       fetchAll(supabase, "site_assets", "site_id"),
       fetchAll(supabase, "site_documents", "site_id, category"),
