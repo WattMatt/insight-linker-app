@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { countInspectionPhotos } from "@/lib/inspectionImages";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -125,27 +126,8 @@ export function BulkInspectionReportGenerator({
           .filter(i => i.template_id)
           .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
         
-        // Count photos in inspection data (sections + tenants)
-        let photoCount = 0;
-        if (latestInspection?.json_data) {
-          const jsonData = latestInspection.json_data as Record<string, any>;
-          Object.entries(jsonData).forEach(([key, section]: [string, any]) => {
-            // Handle tenants array separately
-            if (key === 'tenants' && Array.isArray(section)) {
-              section.forEach((tenant: any) => {
-                if (tenant.meterImage) photoCount++;
-                if (tenant.breakerImage) photoCount++;
-                if (tenant.ctRatioImage) photoCount++;
-              });
-            } else if (typeof section === 'object' && section !== null && key !== 'generalInfo') {
-              Object.values(section).forEach((item: any) => {
-                if (Array.isArray(item?.photos)) {
-                  photoCount += item.photos.length;
-                }
-              });
-            }
-          });
-        }
+        // Count photos in inspection data (sections + tenants) — shared helper.
+        const photoCount = countInspectionPhotos(latestInspection?.json_data);
 
         return {
           subsectionId: sub.id,
