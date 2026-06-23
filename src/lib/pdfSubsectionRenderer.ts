@@ -11,7 +11,6 @@ import {
   CARD_LAYOUT,
   STATUS_COLORS,
   RISK_COLORS,
-  getComplianceLabel,
   generateSubsectionQRCode
 } from './subsectionCardSpec';
 import type { CocCardLine } from './cocHierarchy';
@@ -345,20 +344,39 @@ function createSnagsSection(snags: SnagData[]): any {
 }
 
 function createCardFooter(data: SubsectionCardData): any {
-  const isCompliant = data.isCompliant;
-  const complianceColors = isCompliant === true 
-    ? STATUS_COLORS.compliant 
-    : isCompliant === false 
-      ? STATUS_COLORS.nonCompliant 
-      : { bg: '#f3f4f6', text: '#6b7280', border: '#d1d5db' };
+  const okColors = STATUS_COLORS.compliant;
+  const badColors = STATUS_COLORS.nonCompliant;
 
-  return {
+  const installOk = data.installationReview !== false;
+  const installRow = {
     columns: [
-      { text: 'Compliance:', fontSize: CARD_LAYOUT.labelSize, color: '#6b7280', width: 70 },
-      createStatusBadge(getComplianceLabel(isCompliant), complianceColors),
+      { text: 'Installation Review:', fontSize: CARD_LAYOUT.labelSize, color: '#6b7280', width: 110 },
+      createStatusBadge(installOk ? 'Compliant' : 'Non-Compliant', installOk ? okColors : badColors),
     ],
-    margin: [0, CARD_LAYOUT.sectionSpacing, 0, 0],
+    margin: [0, 0, 0, 4],
   };
+
+  // Documentation: "Not Required" reads as satisfied; required-but-not-compliant shows a reason.
+  let docLabel: string;
+  let docColors: { bg: string; text: string; border?: string };
+  if (data.documentationRequired === false) {
+    docLabel = 'Not Required';
+    docColors = { bg: '#f3f4f6', text: '#6b7280', border: '#d1d5db' };
+  } else if (data.documentation) {
+    docLabel = 'Compliant';
+    docColors = okColors;
+  } else {
+    docLabel = 'Non-Compliant — initial COC missing/invalid';
+    docColors = badColors;
+  }
+  const docRow = {
+    columns: [
+      { text: 'Documentation:', fontSize: CARD_LAYOUT.labelSize, color: '#6b7280', width: 110 },
+      createStatusBadge(docLabel, docColors),
+    ],
+  };
+
+  return { stack: [installRow, docRow], margin: [0, CARD_LAYOUT.sectionSpacing, 0, 0] };
 }
 
 // ============================================================================
