@@ -24,6 +24,10 @@ export interface SubsectionCardData extends SubsectionData {
   // Initial/Supplementary COC certificate lines built from subsection_documents
   // (see cocHierarchy.buildCocCardLines). Empty when not yet populated.
   cocCertificates?: CocCardLine[];
+  // Two-dimension compliance for the report card (see subsectionCompliance.ts).
+  installationReview?: boolean;
+  documentation?: boolean;
+  documentationRequired?: boolean;
 }
 
 // ============================================================================

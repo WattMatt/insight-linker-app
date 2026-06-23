@@ -9,6 +9,7 @@ import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSave
 import { qrRedirectUrl } from "@/lib/qrBaseUrl";
 import { isCocCertificateCategory, toCocDoc, buildCocCardLines } from "@/lib/cocHierarchy";
 import { matchAssetForSubsection } from "@/lib/report/subsectionAssetMatch";
+import { computeSubsectionVerdict } from "@/lib/subsectionCompliance";
 import {
   generateReport,
   createSectionHeader,
@@ -107,30 +108,6 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
     return snags;
   };
 
-  // Match dashboard compliance logic exactly (strict multi-point check)
-  const calculateSubsectionCompliance = (
-    subsection: any,
-    snags: any[]
-  ): boolean => {
-    if (subsection.is_coc_required && 
-        !['Approved', 'Valid', 'Pass'].includes(subsection.coc_status || '')) {
-      return false;
-    }
-    if (subsection.is_coc_required && 
-        subsection.metering_status === 'Missing' && 
-        !subsection.meter_serial_number) {
-      return false;
-    }
-    const subsectionSnags = snags.filter(snag =>
-      snag.subsection_id === subsection.id &&
-      isSnagOpen(snag.status)
-    );
-    if (subsectionSnags.length > 0) {
-      return false;
-    }
-    return true;
-  };
-
   // Fetch template configuration using the gateway - SINGLE SOURCE OF TRUTH
   const fetchTemplateConfig = async (): Promise<TemplateConfig> => {
     try {
@@ -161,20 +138,28 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
     allSnags: any[],
     assets: any[],
     subsectionDocs: any[],
+    today: string,
   ): SubsectionCardData => {
     const subSnags = allSnags.filter(s =>
       s.subsection_id === sub.id &&
       isSnagOpen(s.status)
     );
 
-    // Build the Initial/Supplementary COC certificate lines from this subsection's
-    // COC-category documents (the authoritative per-document model). Always yields
-    // at least an "I — Missing" line when the initial is absent.
-    const cocCertificates = buildCocCardLines(
-      (subsectionDocs || [])
-        .filter(d => d.subsection_id === sub.id && isCocCertificateCategory(d.document_categories?.name || ''))
-        .map(d => toCocDoc(d)),
-    );
+    // COC-category documents for this subsection (the authoritative per-document model).
+    // Drives BOTH the I/S certificate lines and the Documentation verdict, so they agree.
+    const cocDocs = (subsectionDocs || [])
+      .filter(d => d.subsection_id === sub.id && isCocCertificateCategory(d.document_categories?.name || ''))
+      .map(d => toCocDoc(d));
+    const cocCertificates = buildCocCardLines(cocDocs);
+
+    const verdict = computeSubsectionVerdict({
+      isCocRequired: sub.is_coc_required ?? true,
+      openSnagCount: subSnags.length,
+      meteringStatus: sub.metering_status,
+      meterSerialNumber: sub.meter_serial_number,
+      cocDocs,
+      today,
+    });
 
     // Encode the STABLE qr-redirect endpoint (NOT the stored qr_code_url PNG, and
     // NOT a domain-pinned landing URL). The redirect resolves the live domain at
@@ -199,7 +184,10 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
       ctRatio: sub.ct_ratio,
       breakerSize: matchingAsset?.breaker_size || null,
       snagCount: subSnags.length,
-      isCompliant: calculateSubsectionCompliance(sub, allSnags),
+      isCompliant: verdict.overall,
+      installationReview: verdict.installation,
+      documentation: verdict.documentation,
+      documentationRequired: verdict.documentationRequired,
       qrCodeUrl: qrUrl,
       tenantName: sub.tenant_name,
       snags: subSnags.map(s => ({
@@ -268,8 +256,9 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
 
     // Transform subsections to card format with snags, asset breaker size and COC certificates
     const subsectionDocsData = subsectionDocsRes.data || [];
+    const today = new Date().toISOString().split('T')[0];
     const subsectionCardData: SubsectionCardData[] = subsections.map(sub =>
-      transformToSubsectionCardData(sub, allSnags, siteAssets, subsectionDocsData)
+      transformToSubsectionCardData(sub, allSnags, siteAssets, subsectionDocsData, today)
     );
 
     // Also create SubsectionData for metrics calculation
