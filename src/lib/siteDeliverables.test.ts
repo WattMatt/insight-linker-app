@@ -41,6 +41,9 @@ const baseInput = (over: Partial<SiteDeliverablesInput> = {}): SiteDeliverablesI
 const get = (s: ReturnType<typeof computeSiteDeliverables>, key: string) =>
   s.deliverables.find(d => d.key === key)!;
 
+// Inspection json_data carrying at least one photo (sections form).
+const PHOTO_JSON = { sec: { item: { photos: ['u1'] } } };
+
 describe('computeSiteDeliverables — counts', () => {
   it('snags: resolved vs open, blocking on Critical/High open', () => {
     const s = computeSiteDeliverables(baseInput({
@@ -85,16 +88,30 @@ describe('computeSiteDeliverables — counts', () => {
     expect(get(none, 'coc').status).toBe('not_required');
   });
 
-  it('inspections: existence-based — any inspection marks a subsection done', () => {
+  it('inspections: image-based — an inspection with photos marks a subsection done', () => {
     const s = computeSiteDeliverables(baseInput({
       subsections: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
-      // Status is ignored now; both subsections have an inspection, so both count.
-      inspections: [{ subsection_id: 'a', status: 'Completed' }, { subsection_id: 'b', status: 'Pending' }],
+      // Both inspections carry a photo, so both subsections count.
+      inspections: [{ subsection_id: 'a', json_data: PHOTO_JSON }, { subsection_id: 'b', json_data: PHOTO_JSON }],
     }));
     const d = get(s, 'inspections');
     expect(d.done).toBe(2);
     expect(d.total).toBe(2);
     expect(d.outstandingItems.length).toBe(0);
+  });
+
+  it('inspections: an inspection with no images leaves the subsection outstanding', () => {
+    const s = computeSiteDeliverables(baseInput({
+      subsections: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
+      inspections: [
+        { subsection_id: 'a', json_data: PHOTO_JSON }, // populated
+        { subsection_id: 'b', json_data: {} },          // empty -> outstanding
+      ],
+    }));
+    const d = get(s, 'inspections');
+    expect(d.done).toBe(1);
+    expect(d.total).toBe(2);
+    expect(d.outstandingItems.map(i => i.subsectionId)).toEqual(['b']);
   });
 
   it('metering: excludes Not Required from total', () => {
@@ -306,7 +323,7 @@ describe('summarizeSitesForTriage — tiebreaks', () => {
     const higher = baseInput({
       siteId: 'higher', siteName: 'Higher',
       subsections: [{ id: 's', name: 'S', metering_status: 'Installed', is_coc_required: true, coc_status: 'Pass' }],
-      inspections: [{ subsection_id: 's', status: 'Completed' }],
+      inspections: [{ subsection_id: 's', json_data: PHOTO_JSON }],
       hasSchematic: false, assetCount: 1,
       documentCategories: ['Thermal', 'Site Summary Reports'],
     }); // outstanding 1 (schematic), applicable 8, complete 7 => 88%

@@ -7,10 +7,11 @@
  * Pure functions, no I/O. See siteDeliverables.test.ts.
  */
 import {
-  isMetered, isSnagResolved, isInspectionCompleted, getHealthBand, BLOCKING_RISK_LEVELS,
+  isMetered, isSnagResolved, getHealthBand, BLOCKING_RISK_LEVELS,
   type SubsectionForHealth, type SnagForHealth, type InspectionForHealth,
 } from './siteHealth';
 import { hasValidCocStatus, hasFailedCocStatus, type SubsectionForCompliance } from './complianceCalculations';
+import { inspectionHasImages } from './inspectionImages';
 
 export type DeliverableKey =
   | 'snags' | 'inspections' | 'metering' | 'coc'
@@ -209,7 +210,7 @@ function buildCoc(input: SiteDeliverablesInput, subName: Map<string, string>): D
 
 function buildInspections(input: SiteDeliverablesInput, subName: Map<string, string>): DeliverableResult {
   const inspected = new Set(
-    input.inspections.filter(isInspectionCompleted).map(i => i.subsection_id).filter(Boolean) as string[],
+    input.inspections.filter(inspectionHasImages).map(i => i.subsection_id).filter(Boolean) as string[],
   );
   // Inspection-not-applicable subsections (is_inspection_required === false) are waived.
   const applicable = input.subsections.filter(s => s.is_inspection_required !== false);
