@@ -47,16 +47,14 @@ Any logged-in client can therefore read **every site's** COC rows via a direct q
 A new **lean read-only `ClientCocView`** component, rendered as a **6th tab** in `ClientPortalSiteDetail.tsx`, mirroring the `ClientPortalDocuments` precedent. It imports **zero write modules** — there is no structural path for an import/upload/resolve/save action to leak in. It reuses the pure `src/lib/siteCoc/*` libs so the client's verdict is identical to the admin source of truth.
 
 ### Components & data flow
-1. Client opens a site in the portal → `ClientPortalSiteDetail` → **COC** tab → `ClientCocView({ siteId })`.
-2. `ClientCocView` queries `coc_db_schedule` (shops) + `coc_certificates` (verdicts) with `.eq('site_id', siteId)`. RLS scopes to the client's own site (same pattern as the other client queries in that file).
-3. Rows are mapped through `cocHierarchy.ts` / `cocCompliance.ts` / `statusDisplay.ts` into a **curated per-shop summary table**:
-   - Shop / tenant name
-   - COC required (Y/N)
-   - Verdict badge (reusing `statusDisplay` tone/labels)
-   - Expiry date
-   - "View COC" link → the certificate PDF from `subsection_documents`, opened in the existing **in-app viewer** (never a new tab).
-   - (Exact column set to be confirmed against available fields during planning; derived only via the existing libs, no new verdict logic.)
-4. **Download COC report** button reuses `cocReportModel.ts` → `siteCocReport.ts` to generate the full PDF **client-side, download-only** — no `handleSave`, no `handleDelete`, no `site_documents` write.
+1. Client opens a site in the portal → `ClientPortalSiteDetail` → **COC** tab → `ClientCocView({ siteId, siteName, onPreview })`.
+2. **On-screen summary** sources from already-client-scoped tables — **no `coc_*` read needed**:
+   - `subsections` → `name`, `tenant_name`, `is_coc_required`, `coc_status`, `coc_expiry_date`. `coc_status` (`'Pass' | 'Pending' | 'Missing' | 'Fail' | 'N/A'`) is the DB-gated source of truth (migration `20260611160000`).
+   - `subsection_documents` filtered by `isCocCertificateCategory(document_categories.name)` → the "View COC" PDF link.
+3. A pure, unit-tested mapper `buildClientCocSummary(subsections, cocDocs)` (`src/lib/siteCoc/clientCocSummary.ts`) produces a **curated per-shop summary** — shop/tenant, COC required (Y/N), status badge (tone from a small `cocStatusTone` helper), expiry, and the "View COC" link opened in the in-app `DocumentPreviewDialog` (never a new tab). Only COC-required subsections are listed.
+4. **Download COC report** button lazily reads `coc_db_schedule` + `coc_certificates` **only on click** (RLS-scoped to the client's own site by the migration), then reuses `cocReportModel.ts` → `siteCocReport.ts` → `generatePdfBlob` → `downloadBlob` to generate the full PDF **client-side, download-only** — no `handleSave`, no `handleDelete`, no `site_documents` write. The cover omits client/address and `siteKpis` in v1 (`null`/undefined) to avoid extra queries.
+
+This split is why the RLS fix is still mandatory: only the report (step 4) reads the `coc_*` tables client-side; the on-screen summary does not.
 
 ### New / touched files
 - **New:** `src/components/client-portal/ClientCocView.tsx`
@@ -67,24 +65,26 @@ A new **lean read-only `ClientCocView`** component, rendered as a **6th tab** in
 
 ## RLS migration (bundled)
 
-Replace the broad `USING (true)` SELECT policy on each of `coc_certificates`, `coc_db_schedule`, `coc_import_batches` with a staff policy plus a client-own-site policy. Pattern (repeat per table):
+Replace the broad `USING (true)` SELECT policy (verbatim names confirmed from `20260619130000`: `"auth read coc_import_batches"`, `"auth read coc_db_schedule"`, `"auth read coc_certificates"`) on each of the three `coc_*` tables with a staff policy (all non-clients, preserving current access) plus a client-own-site policy. Pattern (per table that clients read):
 
 ```sql
-DROP POLICY "auth read coc_certificates" ON public.coc_certificates;
+DROP POLICY IF EXISTS "auth read coc_certificates" ON public.coc_certificates;
 
 CREATE POLICY "staff read coc_certificates" ON public.coc_certificates
   FOR SELECT TO authenticated
-  USING (has_role(auth.uid(),'Admin') OR has_role(auth.uid(),'Contractor'));
+  USING (NOT public.has_role(auth.uid(), 'Client'));
 
 CREATE POLICY "clients read own site coc_certificates" ON public.coc_certificates
   FOR SELECT TO authenticated
   USING (
-    has_role(auth.uid(),'Client') AND
+    public.has_role(auth.uid(), 'Client') AND
     site_id IN (SELECT id FROM public.sites WHERE client_id = public.get_user_client_id())
   );
 ```
 
-(Exact existing policy names to be confirmed against migration `20260619130000` before writing the DROP.)
+Repeat for `coc_db_schedule`. For `coc_import_batches`, clients don't read it, so just give it the `staff read` (non-client) policy. The `NOT has_role('Client')` staff form preserves existing Admin/Contractor/User access exactly while closing only the client cross-tenant path. Full migration SQL is in the implementation plan.
+
+**Sibling write leak (flagged, optional):** the same `20260619130000` migration also grants `INSERT`/`UPDATE`/`DELETE` `TO authenticated USING (true)` on these tables — so a client can currently *modify/delete* any site's COC data, not just read it. Closing this (staff-only writes) is isolated as an optional, sign-off-required step in the plan since it's beyond the originally-approved SELECT scope.
 
 **Deploy note:** prod migrations are applied via the Supabase Management API `database/query`, **not** `db push`, due to known schema drift (per project memory). The migration file is still committed for repo history.
 
