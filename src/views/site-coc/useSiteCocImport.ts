@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { parseDbSchedule, parseCertificateDetail, parseVerification, mergeCertificates } from "@/lib/siteCoc/parseWorkbooks";
 import { assembleScheduleRows, assembleCertificateRows, summarize } from "@/lib/siteCoc/ingest";
 import { applyPriorMatches } from "@/lib/siteCoc/reimport";
+import { reassignPendingPoolFiles } from "@/lib/coc/reassignPool";
 import { normCert, normShop } from "@/lib/siteCoc/normalize";
 import type { SubsectionLite } from "@/lib/siteCoc/types";
 
@@ -55,10 +56,10 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
       // Snapshot prior resolutions (manual + auto) BEFORE anything is deleted, so a re-import does
       // not throw away matching work. Carry them onto rows the new auto-matcher leaves unmatched.
       const { data: priorRows } = await supabase
-        .from("coc_db_schedule").select("shop_no_raw, subsection_id").eq("site_id", siteId);
-      const priorMap = new Map<string, string>();
+        .from("coc_db_schedule").select("shop_no_raw, subsection_id, match_status").eq("site_id", siteId);
+      const priorMap = new Map<string, { id: string; status: "matched" | "manual" }>();
       for (const p of priorRows ?? []) {
-        if (p.subsection_id) priorMap.set(normShop(p.shop_no_raw), p.subsection_id);
+        if (p.subsection_id) priorMap.set(normShop(p.shop_no_raw), { id: p.subsection_id, status: p.match_status === "manual" ? "manual" : "matched" });
       }
       const validSubIds = new Set(subsLite.map(s => s.id));
 
@@ -123,6 +124,9 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
       }
 
       await supabase.from("coc_import_batches").update(summary).eq("id", batch.id);
+
+      // Newly-imported certs may now place pool files that were waiting on the schedule.
+      await reassignPendingPoolFiles(siteId);
 
       toast.success(`Imported ${summary.certs_imported} certificates across ${summary.shops_imported} shops (${summary.unmatched_count} unmatched).`);
       onDone();
