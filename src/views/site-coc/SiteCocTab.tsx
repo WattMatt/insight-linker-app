@@ -8,15 +8,18 @@ import { liveMatchCounts } from "@/lib/siteCoc/coverage";
 import type { SiteKpiBlock } from "@/lib/siteCoc/reportKpis";
 import { useSiteCoc } from "./useSiteCoc";
 import { useSiteCocImport } from "./useSiteCocImport";
+import { useSiteCocPool } from "./useSiteCocPool";
 import { ScheduleSubTab } from "./ScheduleSubTab";
 import { CertificatesSubTab } from "./CertificatesSubTab";
 import { VerificationSubTab } from "./VerificationSubTab";
 import { ReportSubTab } from "./ReportSubTab";
+import { AssignSubTab } from "./AssignSubTab";
 import { SiteCocLoadCard } from "./SiteCocLoadCard";
 
 export function SiteCocTab({ siteId, siteName, clientName, siteAddress, siteKpis, companyLogo }: { siteId: string | undefined; siteName: string; clientName?: string | null; siteAddress?: string | null; siteKpis?: SiteKpiBlock; companyLogo?: string | null }) {
   const { schedule, certificates, batch, subsections, loading, refetch, resolveShop, rerunAutoMatch } = useSiteCoc(siteId);
   const { importing, runImport } = useSiteCocImport(siteId, refetch);
+  const pool = useSiteCocPool(siteId, refetch);
   const schedRef = useRef<HTMLInputElement>(null);
   const verifRef = useRef<HTMLInputElement>(null);
   const [schedFile, setSchedFile] = useState<File | null>(null);
@@ -72,18 +75,20 @@ export function SiteCocTab({ siteId, siteName, clientName, siteAddress, siteKpis
         </CardContent>
       </Card>
 
-      <SiteCocLoadCard siteId={siteId} subsections={subsections} onDone={refetch} />
+      <SiteCocLoadCard pool={pool} />
 
       <Tabs defaultValue="schedule">
         <TabsList>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
           <TabsTrigger value="certificates">Certificates</TabsTrigger>
           <TabsTrigger value="verification">Verification</TabsTrigger>
+          <TabsTrigger value="assign">Assign{pool.pending.length ? ` (${pool.pending.length})` : ""}</TabsTrigger>
           <TabsTrigger value="report">Report</TabsTrigger>
         </TabsList>
         <TabsContent value="schedule"><Card><CardContent className="pt-4">{loading ? "Loading…" : <ScheduleSubTab rows={schedule} subsections={subsections} onResolve={resolveShop} />}</CardContent></Card></TabsContent>
         <TabsContent value="certificates"><Card><CardContent className="pt-4">{loading ? "Loading…" : <CertificatesSubTab rows={certificates} />}</CardContent></Card></TabsContent>
         <TabsContent value="verification"><Card><CardContent className="pt-4">{loading ? "Loading…" : <VerificationSubTab rows={certificates} />}</CardContent></Card></TabsContent>
+        <TabsContent value="assign"><Card><CardContent className="pt-4"><AssignSubTab pending={pool.pending} subsections={subsections} onAssign={(f, s) => pool.assignManual(f, s, f.detected_kind === "eval" ? "eval" : "coc")} onAssignMany={pool.assignManyTo} onReassign={pool.reassign} busy={pool.busy} /></CardContent></Card></TabsContent>
         <TabsContent value="report"><Card><CardContent className="pt-4"><ReportSubTab siteId={siteId} siteName={siteName} schedule={schedule} certificates={certificates} batch={batch} subsections={subsections} clientName={clientName} siteAddress={siteAddress} siteKpis={siteKpis} companyLogo={companyLogo} /></CardContent></Card></TabsContent>
       </Tabs>
     </div>
