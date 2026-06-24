@@ -28,6 +28,8 @@ export type Database = {
           assigned_document_id: string | null
           uploaded_by: string | null
           created_at: string
+          reason: string | null
+          candidate_ids: Json
         }
         Insert: {
           id?: string
@@ -42,6 +44,8 @@ export type Database = {
           assigned_document_id?: string | null
           uploaded_by?: string | null
           created_at?: string
+          reason?: string | null
+          candidate_ids?: Json
         }
         Update: {
           id?: string
@@ -56,6 +60,8 @@ export type Database = {
           assigned_document_id?: string | null
           uploaded_by?: string | null
           created_at?: string
+          reason?: string | null
+          candidate_ids?: Json
         }
         Relationships: [
           {
