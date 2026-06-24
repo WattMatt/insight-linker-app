@@ -1,49 +1,20 @@
 import { useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Loader2, Trash2 } from "lucide-react";
-import { useSiteCocPool, type PoolFile } from "./useSiteCocPool";
-import type { SubsectionOption } from "./useSiteCoc";
+import { Upload, Loader2 } from "lucide-react";
+import { useSiteCocPool } from "./useSiteCocPool";
 
-function PoolRow({ file, subsections, onAssign, onDelete, busy }: {
-  file: PoolFile; subsections: SubsectionOption[];
-  onAssign: (f: PoolFile, sub: string, kind: "coc" | "eval") => void;
-  onDelete: (f: PoolFile) => void; busy: boolean;
-}) {
-  const [kind, setKind] = useState<"coc" | "eval">(file.detected_kind === "eval" ? "eval" : "coc");
-  const [sub, setSub] = useState<string>("");
-  return (
-    <tr className="border-b">
-      <td className="p-2 text-xs max-w-[18rem] truncate" title={file.file_name}>{file.file_name}</td>
-      <td className="p-2 font-mono text-xs whitespace-nowrap">{file.detected_cert_no ?? "—"}</td>
-      <td className="p-2">
-        <Select value={kind} onValueChange={(v) => setKind(v as "coc" | "eval")}>
-          <SelectTrigger className="h-8 w-24"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="coc">COC</SelectItem><SelectItem value="eval">Eval</SelectItem></SelectContent>
-        </Select>
-      </td>
-      <td className="p-2">
-        <Select value={sub} onValueChange={setSub}>
-          <SelectTrigger className="h-8 w-56"><SelectValue placeholder="Choose subsection…" /></SelectTrigger>
-          <SelectContent>
-            {subsections.map(s => <SelectItem key={s.id} value={s.id}>{s.name}{s.tenant_name && s.tenant_name !== s.name ? ` · ${s.tenant_name}` : ""}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </td>
-      <td className="p-2 text-right whitespace-nowrap">
-        <Button size="sm" disabled={!sub || busy} onClick={() => onAssign(file, sub, kind)}>Assign</Button>
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDelete(file)} title="Remove from pool"><Trash2 className="h-4 w-4 text-destructive" /></Button>
-      </td>
-    </tr>
-  );
-}
-
-export function SiteCocLoadCard({ siteId, subsections, onDone }: { siteId: string | undefined; subsections: SubsectionOption[]; onDone: () => void }) {
-  const { pending, busy, upload, assignManual, remove } = useSiteCocPool(siteId, onDone);
+export function SiteCocLoadCard({ pool }: { pool: ReturnType<typeof useSiteCocPool> }) {
+  const { busy, progress, outcomes, upload } = pool;
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
-  const handleFiles = (l: FileList | null) => { if (l && l.length) upload(Array.from(l)); };
+  const lastBatch = useRef<File[]>([]);
+  const handleFiles = (l: FileList | null) => {
+    if (!l || !l.length) return;
+    const arr = Array.from(l);
+    lastBatch.current = arr;
+    upload(arr);
+  };
 
   return (
     <Card>
@@ -57,27 +28,28 @@ export function SiteCocLoadCard({ siteId, subsections, onDone }: { siteId: strin
           className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors ${drag ? "bg-accent border-primary" : "bg-muted/20 hover:bg-muted/40"}`}
         >
           {busy
-            ? <span className="inline-flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> Working…</span>
-            : <span className="inline-flex items-center gap-2 text-sm text-muted-foreground"><Upload className="h-4 w-4" /> Drop all COC PDFs + evaluation reports. They upload to a pool; exact register matches auto-assign, the rest you assign below.</span>}
+            ? <span className="inline-flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> {progress ? `Uploading ${progress.done}/${progress.total}…` : "Working…"}</span>
+            : <span className="inline-flex items-center gap-2 text-sm text-muted-foreground"><Upload className="h-4 w-4" /> Drop all COC PDFs + evaluation reports. They upload to a pool; exact register matches auto-assign — assign the rest in the Assign tab.</span>}
           <input ref={inputRef} type="file" multiple className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.html,.htm"
             onChange={e => { handleFiles(e.target.files); if (inputRef.current) inputRef.current.value = ""; }} />
         </div>
 
-        {pending.length > 0 ? (
-          <div>
-            <p className="mb-2 text-xs font-medium text-amber-700">{pending.length} file(s) awaiting assignment</p>
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-sm">
-                <thead><tr className="border-b text-left bg-muted/40">
-                  {["File", "Cert no", "Type", "Subsection", ""].map(h => <th key={h} className="p-2 font-medium">{h}</th>)}
-                </tr></thead>
-                <tbody>
-                  {pending.map(f => <PoolRow key={f.id} file={f} subsections={subsections} onAssign={assignManual} onDelete={remove} busy={busy} />)}
-                </tbody>
-              </table>
-            </div>
+        {!busy && outcomes.length > 0 && (
+          <div className="space-y-1">
+            {outcomes.map((o, i) => (
+              <div key={i} className="flex items-center justify-between text-xs border-b py-1">
+                <span className="truncate max-w-[24rem]" title={o.name}>{o.name}</span>
+                {o.state === "uploaded"
+                  ? <span className="text-emerald-600">uploaded{o.detectedCertNo ? ` · ${o.detectedCertNo}` : " · no cert no"}</span>
+                  : <span className="flex items-center gap-2 text-destructive">failed
+                      <Button size="sm" variant="ghost" className="h-6" disabled={busy}
+                        onClick={() => { const f = lastBatch.current.find(x => x.name === o.name); if (f) upload([f]); }}>Retry</Button>
+                    </span>}
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground pt-1">Assign the unmatched files in the <strong>Assign</strong> tab.</p>
           </div>
-        ) : <p className="text-xs text-muted-foreground">No files awaiting assignment.</p>}
+        )}
       </CardContent>
     </Card>
   );
