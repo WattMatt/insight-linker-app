@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { normShop } from "@/lib/siteCoc/normalize";
 import { matchSubsection } from "@/lib/siteCoc/ingest";
+import { reassignPendingPoolFiles } from "@/lib/coc/reassignPool";
 
 export interface CocScheduleRow {
   id: string; subsection_id: string | null; shop_no_raw: string; trading_name: string;
@@ -53,19 +54,21 @@ export function useSiteCoc(siteId: string | undefined) {
    * Stamp one shop→subsection match: the schedule row (by id) and its certificates (by id, matched
    * against the loaded set via normalised shop — not a raw shop_no_raw equality). Does NOT refetch,
    * so callers can batch. */
-  const stampMatch = useCallback(async (scheduleRowId: string, shopNoRaw: string, subsectionId: string) => {
-    await supabase.from("coc_db_schedule").update({ subsection_id: subsectionId, match_status: "matched" }).eq("id", scheduleRowId);
+  const stampMatch = useCallback(async (scheduleRowId: string, shopNoRaw: string, subsectionId: string, status: "matched" | "manual" = "matched") => {
+    await supabase.from("coc_db_schedule").update({ subsection_id: subsectionId, match_status: status }).eq("id", scheduleRowId);
     const target = normShop(shopNoRaw);
     const certIds = certificates.filter(c => normShop(c.shop_no_raw) === target).map(c => c.id);
     if (certIds.length) {
-      await supabase.from("coc_certificates").update({ subsection_id: subsectionId, match_status: "matched" }).in("id", certIds);
+      await supabase.from("coc_certificates").update({ subsection_id: subsectionId, match_status: status }).in("id", certIds);
     }
   }, [certificates]);
 
-  /** Manually map an unmatched schedule shop to a subsection. */
+  /** Manually map an unmatched schedule shop to a subsection (stamped 'manual' so re-import never clobbers it),
+   * then re-trigger pool assignment so files waiting on this shop attach automatically. */
   const resolveShop = useCallback(async (scheduleRowId: string, shopNoRaw: string, subsectionId: string) => {
     if (!siteId) return;
-    await stampMatch(scheduleRowId, shopNoRaw, subsectionId);
+    await stampMatch(scheduleRowId, shopNoRaw, subsectionId, "manual");
+    await reassignPendingPoolFiles(siteId);
     await refetch();
   }, [siteId, stampMatch, refetch]);
 
