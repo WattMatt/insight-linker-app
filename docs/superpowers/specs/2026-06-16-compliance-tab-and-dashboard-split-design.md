@@ -44,3 +44,24 @@ A (drop COC) → B (bug fixes) → C (split-view), each verified before the next
 User clarified the split-view belonged on the **per-site** dashboard, not the main app home page. Course-correction:
 - **Reverted** the `Dashboard.tsx` (home `/`) KPI/Outstanding split back to its original single-scroll layout (`git checkout 5b46e54 -- src/views/Dashboard.tsx`).
 - **Consolidated at the site level instead:** the SiteDetail **"Dashboard" (overview)** tab now hosts inner sub-tabs — **KPIs** (`ComplianceDashboard`, default landing) and **Checklist** (`SiteComplianceChecklist`). The top-level **Compliance** tab is removed; stale `?tab=compliance` URLs redirect to `overview`. `ComplianceDashboard` + its bug fixes (Thread B) are unchanged — just relocated.
+
+## KPI Full Upgrade — design (2026-06-16, approved via mockup)
+Target: the site Dashboard → **KPIs** sub-tab (`ComplianceDashboard`). Scope = all four user-chosen dimensions, **built in one go** (frontend + trends backend together).
+
+**Core principle:** rebuild the KPIs on `computeSiteDeliverables()` (+ `siteHealth.readiness()`) so the KPIs and the Checklist sub-tab share ONE source of truth (kills the current parallel ad-hoc stats).
+
+**Sections (per approved mockup):**
+1. **Readiness hero** ← `siteHealth.readiness()`: ready/total subsections + failing breakdown (metering/snags/inspection). Honest replacement for the deleted "X of Y compliant" line.
+2. **Handover completion hero + 8-deliverable grid** ← `computeSiteDeliverables()`: `completionPct`, `blockingCount`, `outstandingCount`, per-deliverable `done/total/status/blocking`. Covers all 8 deliverables, not today's 4.
+3. **Snag risk & aging** ← snags (`risk_level`, `created_at`, `rectified_at`): open/in-progress/closed (reuse `snagStatusBucket`) + critical-open + oldest-open age.
+4. **COC expiry** ← `subsection.coc_expiry_date` bucketed ≤30 / ≤90 / expired.
+5. **Trends (last 8 weeks)** ← NEW `site_health_snapshots` table (health score, outstanding, completion). Empty until data accrues; "collecting data" state when <2 points.
+
+**Drill-down:** every card click-throughs via `OutstandingItem.subsectionId` + the existing `buildActionHref` deep-links (or switches to the Checklist sub-tab scoped to that category). 
+
+**Data threading:** pass the already-computed `deliverablesSummary` from `SiteDetail` into `ComplianceDashboard` as a prop; add `coc_expiry_date` to the subsections prop; compute readiness from the `healthSnags`/`healthInspections` it already fetches.
+
+**Trends backend (proposed default — confirm at plan review):** Vercel cron → Next API route that reuses `computeSiteDeliverables` and upserts one `site_health_snapshots` row per site per day. RLS: authenticated read, service-role write. No backfill (trends start at first capture).
+- **GATE:** the prod migration for `site_health_snapshots` must be reviewed before push — see [[prod-migration-drift]] (prod schema is ahead of `schema_migrations`; reconcile first; API-applied SQL).
+
+**Verification:** new pure helpers (COC-expiry bucketing, snag-aging, snapshot mapping) unit-tested; tsc touched-files clean + full vitest; runtime check of the KPIs sub-tab; capture route tested locally before the cron is wired.
