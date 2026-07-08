@@ -81,14 +81,14 @@ describe('cross-library COC consistency — report and dashboard can never disag
   }
 });
 
-describe('empty site — every rate metric is "no data", never a fabricated percentage', () => {
-  it('zero subsections => all rate metrics null, counts stay 0', () => {
-    const m = calculateMetrics([], { cocRequiredCount: 0, openSnagCount: 0, overallHealth: null });
+describe('empty site — every rate metric is 0, never a fabricated 100%', () => {
+  it('zero subsections => all rate metrics 0 (unpopulated = zero progress), counts stay 0', () => {
+    const m = calculateMetrics([], { cocRequiredCount: 0, openSnagCount: 0, overallHealth: 0 });
     expect(m.subsectionCount).toBe(0);
-    expect(m.overallHealth).toBeNull();
-    expect(m.cocCompliance).toBeNull();
-    expect(m.meteringData).toBeNull();
-    expect(m.snagFree).toBeNull();
+    expect(m.overallHealth).toBe(0);
+    expect(m.cocCompliance).toBe(0);
+    expect(m.meteringData).toBe(0);
+    expect(m.snagFree).toBe(0);
   });
 });
 

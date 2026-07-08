@@ -271,12 +271,12 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
     // production report matches the on-screen Site Health. Pass the full rows:
     // factorScores needs is_inspection_required (waivers) and json_data (photo
     // detection) — projecting them away zeroes the inspection factor.
-    // computeSiteHealth returns null for an empty site → cards render "—".
+    // computeSiteHealth scores an empty site 0 — cards render 0%, never a vacuous 100%.
     const health = computeSiteHealth(subsections, allSnags, allInspections);
     const metrics = calculateMetrics(subsectionData, {
       cocRequiredCount: cocRequired,
       openSnagCount: openSnags,
-      overallHealth: health?.score ?? null,
+      overallHealth: health.score,
     });
 
     // Calculate Fortress checklist metrics

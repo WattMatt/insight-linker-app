@@ -28,7 +28,7 @@ describe('latestSnapshotPerSite', () => {
     expect(latest.get('a')?.captured_at).toBe('2026-07-06');
   });
 
-  it('an EMPTY-site row (total_subsections=0) IS the latest answer — it means "No data"', () => {
+  it('an EMPTY-site row (total_subsections=0) IS the latest answer — it means 0%', () => {
     const latest = latestSnapshotPerSite([
       snap('a', '2026-07-06', 70, 5),
       snap('a', '2026-07-07', null, 0), // site emptied / recorded empty — newer answer wins
@@ -72,19 +72,21 @@ describe('buildSiteScoreMap', () => {
     });
   });
 
-  it('a covered EMPTY site is "No data" (null) — an empty site must NEVER score 100', () => {
+  it('a covered EMPTY site scores 0 — an unpopulated site must NEVER read as 100', () => {
     const scores = buildSiteScoreMap(['new-site'], [], {
       coveredSiteIds: ['new-site'], subsections: [], snags: [], inspections: [],
     });
-    expect(scores.get('new-site')?.healthScore).toBeNull();
+    expect(scores.get('new-site')?.healthScore).toBe(0);
     expect(scores.get('new-site')?.source).toBe('live');
   });
 
-  it('a legacy snapshot that stored 100 for an empty site is served as "No data", not 100', () => {
+  it('a legacy snapshot that stored 100 (or NULL) for an empty site is served as 0', () => {
     // Defends against pre-backfill rows: total_subsections=0 overrides any stored score.
-    const scores = buildSiteScoreMap(['a'], [snap('a', '2026-07-07', 100, 0)], noLive);
-    expect(scores.get('a')?.healthScore).toBeNull();
-    expect(scores.get('a')?.source).toBe('snapshot');
+    const legacy100 = buildSiteScoreMap(['a'], [snap('a', '2026-07-07', 100, 0)], noLive);
+    expect(legacy100.get('a')?.healthScore).toBe(0);
+    expect(legacy100.get('a')?.source).toBe('snapshot');
+    const legacyNull = buildSiteScoreMap(['a'], [snap('a', '2026-07-07', null, 0)], noLive);
+    expect(legacyNull.get('a')?.healthScore).toBe(0);
   });
 
   it('an uncovered site with no snapshot is absent — callers render a pending state, never a fake number', () => {

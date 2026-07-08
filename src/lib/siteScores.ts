@@ -19,9 +19,8 @@ import {
 
 export interface SiteScore {
   siteId: string;
-  /** null = "No data": the site has no subsections captured, so no score exists.
-   * An empty site must NEVER read as 100% (see computeSiteHealth). */
-  healthScore: number | null;
+  /** 0 for an unpopulated site (zero subsections) — never a fabricated 100. */
+  healthScore: number;
   /** Snapshot date (yyyy-mm-dd); null when the score was computed live just now. */
   capturedAt: string | null;
   source: "snapshot" | "live";
@@ -35,7 +34,7 @@ export interface SnapshotScoreRow {
 }
 
 /** A snapshot row answers the score question if it carries a score OR explicitly
- * recorded an empty site (which IS the answer: "No data"). */
+ * recorded an empty site (which IS the answer: 0% — nothing captured yet). */
 export function isUsableSnapshotRow(row: SnapshotScoreRow): boolean {
   return row.health_score !== null || row.total_subsections === 0;
 }
@@ -100,8 +99,8 @@ export function buildSiteScoreMap(
     if (snapshot) {
       scores.set(siteId, {
         siteId,
-        // A recorded empty site is "No data", whatever score an old capture stored.
-        healthScore: snapshot.total_subsections === 0 ? null : snapshot.health_score,
+        // A recorded empty site is 0%, whatever score an old capture stored.
+        healthScore: snapshot.total_subsections === 0 ? 0 : snapshot.health_score!,
         capturedAt: snapshot.captured_at,
         source: "snapshot",
       });
@@ -114,7 +113,7 @@ export function buildSiteScoreMap(
         subsBySite.get(siteId) ?? [],
         snagsBySite.get(siteId) ?? [],
         inspBySite.get(siteId) ?? [],
-      )?.score ?? null,
+      ).score,
       capturedAt: null,
       source: "live",
     });

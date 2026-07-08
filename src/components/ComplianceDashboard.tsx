@@ -155,9 +155,7 @@ export const ComplianceDashboard = ({
               <ShieldCheck className="h-4 w-4 text-muted-foreground" />
               Subsections ready
             </CardTitle>
-            <CardDescription>
-              {health ? `Operational health ${health.score}%` : "Operational health: no data — no subsections captured"}
-            </CardDescription>
+            <CardDescription>Operational health {health.score}%</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">

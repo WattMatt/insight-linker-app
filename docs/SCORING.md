@@ -7,10 +7,10 @@ _Last updated: 2026-07-08._
 A site's **health score** is computed by exactly one canonical entry point, [`src/lib/siteHealth.ts`](../src/lib/siteHealth.ts):
 
 ```
-computeSiteHealth(subsections, snags, inspections)  →  { score, factors } | null
+computeSiteHealth(subsections, snags, inspections)  →  { score, factors }
 ```
 
-(null = empty site, see convention 1; internally `siteHealthScore(factorScores(...))`).
+(0 for an empty site, see convention 1; internally `siteHealthScore(factorScores(...))`).
 
 Weighted factors (defaults): **snags 40%** (resolved / total snags), **inspections 35%**
 (photo-populated / inspection-required subsections), **metering 25%** (metered / total
@@ -19,11 +19,13 @@ NOT part of this score.
 
 ### Conventions every scoring surface must follow
 
-1. **An empty SITE has no score — ever.** A site with zero subsections has empty
-   denominators everywhere; `computeSiteHealth()` returns **null** and every surface
-   renders an explicit "No data"/"—" state. An empty site must NEVER display 100% (or
-   0%) — 40 of 76 production sites once read as a fabricated perfect 100 this way.
-   Snapshots store `health_score = NULL` for empty sites.
+1. **An unpopulated SITE scores 0%.** The health score measures progress toward a
+   fully captured, compliant site — a site with zero subsections is zero progress by
+   definition (product decision, 2026-07-08). It must NEVER display 100%: empty
+   denominators once scored vacuously-100, making 40 of 76 production sites read as
+   perfect with nothing captured. `factorScores()` returns all-zero factors for an
+   empty site and snapshots store `health_score = 0`, so every surface shows 0% (red
+   band) until the site is populated.
 2. **Inside a populated site, an empty factor scope is vacuously 100.** No snags → 100.
    No inspection-required subsections → 100. No COC-required subsections → 100% COC
    compliance (`cocComplianceRate()` in `complianceCalculations.ts` is the shared
@@ -35,7 +37,7 @@ NOT part of this score.
 4. **Snag openness** is decided only by `isSnagOpen()` / `isSnagResolved()`
    (case-insensitive; `rectified`/`closed` are terminal). No inline status lists.
 5. **Reports never invent a health number.** `calculateMetrics()` requires
-   `overallHealth` as an input (null for an empty site); the caller must pass the
+   `overallHealth` as an input (0 for an empty site); the caller must pass the
    canonical `computeSiteHealth()` result. There is deliberately no fallback formula.
 
 ## Where scores come from at runtime

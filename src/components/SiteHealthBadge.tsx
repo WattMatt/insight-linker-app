@@ -26,14 +26,8 @@ interface SiteHealthBadgeProps {
 export function SiteHealthBadge({ score, isLoading, size = "sm", className }: SiteHealthBadgeProps) {
   const sizeClasses = size === "lg" ? "px-3 py-1.5 text-base" : "px-2.5 py-1 text-sm";
 
-  if (!score || score.healthScore === null) {
-    // No fabricated numbers: a site without captured subsections has NO score (never 100%).
-    const noData = score !== undefined && score.healthScore === null;
-    const reason = noData
-      ? "No subsections captured for this site yet — no score exists"
-      : isLoading
-        ? "Loading site score…"
-        : "Site score not captured yet";
+  if (!score) {
+    const reason = isLoading ? "Loading site score…" : "Site score not captured yet";
     return (
       <span
         className={cn(
@@ -45,10 +39,8 @@ export function SiteHealthBadge({ score, isLoading, size = "sm", className }: Si
         title={reason}
         aria-label={reason}
       >
-        {noData ? "No data" : isLoading ? "…" : "—"}
-        {!noData && (
-          <span className={size === "lg" ? "text-sm font-normal" : "text-xs font-normal"}>Score</span>
-        )}
+        {isLoading ? "…" : "—"}
+        <span className={size === "lg" ? "text-sm font-normal" : "text-xs font-normal"}>Score</span>
       </span>
     );
   }

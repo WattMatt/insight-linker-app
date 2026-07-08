@@ -56,12 +56,11 @@ export interface KpiCardSpec {
   id: string;
   label: string;
   color: string;
-  getValue: (metrics: SiteSummaryMetrics) => number | null;
-  /** null = no data (empty site) — rendered as "—", never a fabricated percentage. */
-  format: (value: number | null) => string;
+  getValue: (metrics: SiteSummaryMetrics) => number;
+  format: (value: number) => string;
 }
 
-const formatPct = (v: number | null) => (v === null ? '—' : `${v}%`);
+const formatPct = (v: number) => `${v}%`;
 
 export const HEALTH_METRICS_CARDS: KpiCardSpec[] = [
   {
@@ -281,12 +280,13 @@ export interface SiteSummaryMetrics {
   cocCompliant: number;
   meteringInstalled: number;
   openSnags: number;
-  // Rate metrics are null for an empty site (no subsections): with no denominators there
-  // is no score, and an empty site must never render as 100% (or 0%). Cards show "—".
-  overallHealth: number | null;
-  cocCompliance: number | null;
-  meteringData: number | null;
-  snagFree: number | null;
+  // Rate metrics are 0 for an empty site (no subsections captured): the score measures
+  // progress toward a fully captured site, and nothing captured is zero progress. An
+  // empty site must never render as 100%.
+  overallHealth: number;
+  cocCompliance: number;
+  meteringData: number;
+  snagFree: number;
 }
 
 // Individual snag details
@@ -465,11 +465,11 @@ export interface CalculateMetricsInputs {
   /** Open snag count; defaults to summing snagCount off the rows. */
   openSnagCount?: number;
   /**
-   * The unified site health number (siteHealth.ts computeSiteHealth; null = empty site).
+   * The unified site health number (siteHealth.ts computeSiteHealth; 0 = empty site).
    * Required — a report must always show the same Overall Health the dashboards show;
    * there is deliberately no local fallback formula here.
    */
-  overallHealth: number | null;
+  overallHealth: number;
 }
 
 /**
@@ -494,8 +494,8 @@ export function calculateMetrics(
   const openSnags = inputs.openSnagCount ?? subsections.reduce((sum, s) => sum + s.snagCount, 0);
   const snagFree = 100 - Math.round((openSnags / safeDenominator) * 100);
 
-  // An empty site has no denominators — every rate metric is "no data" (null), never a
-  // fabricated 100% (or 0%). Counts remain 0.
+  // An empty site scores 0 on every rate metric — nothing captured is zero progress,
+  // and empty denominators must never read as 100%. Counts remain 0.
   const isEmptySite = subsectionCount === 0;
 
   return {
@@ -504,10 +504,10 @@ export function calculateMetrics(
     cocCompliant,
     meteringInstalled,
     openSnags,
-    overallHealth: isEmptySite ? null : inputs.overallHealth,
-    cocCompliance: isEmptySite ? null : cocComplianceRate(cocCompliant, cocRequired),
-    meteringData: isEmptySite ? null : Math.round((meteringInstalled / safeDenominator) * 100),
-    snagFree: isEmptySite ? null : Math.max(0, Math.min(100, snagFree)),
+    overallHealth: isEmptySite ? 0 : inputs.overallHealth,
+    cocCompliance: isEmptySite ? 0 : cocComplianceRate(cocCompliant, cocRequired),
+    meteringData: isEmptySite ? 0 : Math.round((meteringInstalled / safeDenominator) * 100),
+    snagFree: isEmptySite ? 0 : Math.max(0, Math.min(100, snagFree)),
   };
 }
 

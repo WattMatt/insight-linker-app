@@ -55,9 +55,9 @@ describe('factorScores', () => {
   it('no snags => snag factor is 100', () => {
     expect(factorScores([sub('a')], [], []).snags).toBe(100);
   });
-  it('no subsections => all factors 100', () => {
+  it('no subsections => all factors 0 (unpopulated site is zero progress, never vacuously perfect)', () => {
     const f = factorScores([], [], []);
-    expect(f).toEqual({ metering: 100, snags: 100, inspections: 100 });
+    expect(f).toEqual({ metering: 0, snags: 0, inspections: 0 });
   });
   it('multiple inspections on one subsection count it once', () => {
     const insp = [withPhoto('a'), withPhoto('a')];
@@ -125,21 +125,20 @@ describe('getHealthBand', () => {
 });
 
 describe('computeSiteHealth — the canonical entry point', () => {
-  it('an EMPTY site (zero subsections) has NO score — null, never a fabricated 100', () => {
-    expect(computeSiteHealth([], [], [])).toBeNull();
+  it('an EMPTY site (zero subsections) scores 0 — never a fabricated 100', () => {
+    expect(computeSiteHealth([], [], []).score).toBe(0);
   });
   it('a populated site scores exactly siteHealthScore(factorScores(...))', () => {
     const subs = [sub('a', { metering_status: 'Installed' }), sub('b')];
     const snags = [{ subsection_id: 'a', status: 'Open', risk_level: 'Low' }];
     const insp = [withPhoto('a')];
     const result = computeSiteHealth(subs, snags, insp);
-    expect(result).not.toBeNull();
-    expect(result!.score).toBe(siteHealthScore(factorScores(subs, snags, insp)));
+    expect(result.score).toBe(siteHealthScore(factorScores(subs, snags, insp)));
   });
   it('factor-level empty scopes inside a populated site remain vacuously 100', () => {
     // one subsection, metered, inspection-waived, zero snags → all factors 100 → score 100
     const subs = [sub('a', { metering_status: 'Installed', is_inspection_required: false })];
-    expect(computeSiteHealth(subs, [], [])!.score).toBe(100);
+    expect(computeSiteHealth(subs, [], []).score).toBe(100);
   });
 });
 

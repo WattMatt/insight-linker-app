@@ -83,8 +83,8 @@ export async function GET(req: Request) {
       };
       const summary = computeSiteDeliverables(input);
       const rd = readiness(input.subsections, input.snags, input.inspections);
-      // null for an empty site — stored as NULL so no surface can read a fabricated 100.
-      const healthScore = computeSiteHealth(input.subsections, input.snags, input.inspections)?.score ?? null;
+      // 0 for an empty site — nothing captured is zero progress, never a fabricated 100.
+      const healthScore = computeSiteHealth(input.subsections, input.snags, input.inspections).score;
       const openSnags = input.snags.filter((s) => isSnagOpen(s.status)).length;
       return toSnapshotRow({ siteId: site.id, capturedAt, summary, readiness: rd, healthScore, openSnags });
     });

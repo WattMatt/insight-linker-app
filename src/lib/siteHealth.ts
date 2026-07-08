@@ -60,7 +60,11 @@ export function factorScores(
   inspections: InspectionForHealth[],
 ): FactorScores {
   const total = subsections.length;
-  const metering = total === 0 ? 100 : Math.round((subsections.filter(isMetered).length / total) * 100);
+  // An UNPOPULATED site scores 0 across the board: the score measures progress toward a
+  // fully captured, compliant site, and nothing has been captured yet. (Empty sites once
+  // scored vacuously-100 here — 40 of 76 production sites read as perfect with no data.)
+  if (total === 0) return { metering: 0, snags: 0, inspections: 0 };
+  const metering = Math.round((subsections.filter(isMetered).length / total) * 100);
   const snagScore = snags.length === 0 ? 100 : Math.round((snags.filter(isSnagResolved).length / snags.length) * 100);
   const inspectedIds = new Set(
     inspections.filter(inspectionHasImages).map(i => i.subsection_id).filter(Boolean) as string[],
@@ -83,18 +87,16 @@ export interface SiteHealthResult { score: number; factors: FactorScores; }
 /**
  * Canonical entry point for a site's overall health.
  *
- * A site with ZERO subsections has no health score at all — every denominator is empty,
- * and an empty denominator must never fabricate a perfect 100 (empty sites were showing
- * 100% across the portal). Returns null; surfaces render an explicit "No data" state.
- * Factor-level empty scopes inside a POPULATED site remain vacuously 100 (no snags
- * genuinely is good).
+ * A site with ZERO subsections scores 0% — the score measures progress toward a fully
+ * captured, compliant site, so "nothing captured yet" is zero progress by definition
+ * (product decision 2026-07-08). It must never read as 100. Factor-level empty scopes
+ * inside a POPULATED site remain vacuously 100 (no snags genuinely is good).
  */
 export function computeSiteHealth(
   subsections: SubsectionForHealth[],
   snags: SnagForHealth[],
   inspections: InspectionForHealth[],
-): SiteHealthResult | null {
-  if (subsections.length === 0) return null;
+): SiteHealthResult {
   const factors = factorScores(subsections, snags, inspections);
   return { score: siteHealthScore(factors), factors };
 }
