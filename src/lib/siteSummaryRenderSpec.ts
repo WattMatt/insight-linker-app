@@ -20,6 +20,7 @@
  */
 
 import { ReportSection, ReportCustomization } from "@/components/pdf-editor/types";
+import { cocComplianceRate, hasValidCocStatus } from "@/lib/complianceCalculations";
 
 // ============================================================================
 // COLOR PALETTES - Exact match between preview and PDF
@@ -453,48 +454,50 @@ export function getEnabledSections(sections: ReportSection[]): ReportSection[] {
   return sortSections(sections.filter(s => s.enabled));
 }
 
+export interface CalculateMetricsInputs {
+  /** Count of is_coc_required subsections; defaults to deriving from the rows. */
+  cocRequiredCount?: number;
+  /** Open snag count; defaults to summing snagCount off the rows. */
+  openSnagCount?: number;
+  /**
+   * The unified site health number (siteHealth.ts siteHealthScore). Required — a report
+   * must always show the same Overall Health the dashboards show; there is deliberately
+   * no local fallback formula here.
+   */
+  overallHealth: number;
+}
+
 /**
  * Calculate metrics from subsection data
  */
 export function calculateMetrics(
   subsections: SubsectionData[],
-  cocRequiredCount?: number,
-  openSnagCount?: number,
-  overallHealthOverride?: number
+  inputs: CalculateMetricsInputs
 ): SiteSummaryMetrics {
   const subsectionCount = subsections.length;
   const safeDenominator = Math.max(subsections.length, 1);
   // A subsection "requires" a COC when isCocRequired is true. For legacy callers
   // that don't supply the flag, fall back to "has a coc_status" as before.
   const requiresCoc = (s: SubsectionData) => s.isCocRequired ?? (s.cocStatus !== null);
-  const isCocApproved = (s: SubsectionData) =>
-    ['Approved', 'Valid', 'Pass'].includes(s.cocStatus || '');
-  const cocRequired = cocRequiredCount ?? subsections.filter(requiresCoc).length;
+  const cocRequired = inputs.cocRequiredCount ?? subsections.filter(requiresCoc).length;
   // Numerator is required-AND-approved only, so a NOT-required subsection that
   // happens to carry an approved status can never push COC compliance over 100%.
-  const cocCompliant = subsections.filter(s => requiresCoc(s) && isCocApproved(s)).length;
+  const cocCompliant = subsections.filter(s => requiresCoc(s) && hasValidCocStatus(s.cocStatus)).length;
   const meteringInstalled = subsections.filter(s =>
     s.meteringStatus === 'Installed' || !!s.meterSerialNumber
   ).length;
-  const openSnags = openSnagCount ?? subsections.reduce((sum, s) => sum + s.snagCount, 0);
-  const compliantCount = subsections.filter(s => s.isCompliant).length;
-
-  // Prefer the unified siteHealth number (siteHealth.ts) when the caller has it,
-  // so the report matches on-screen Site Health. Fall back to the legacy COC calc.
-  const overallHealth = overallHealthOverride ?? Math.round((compliantCount / safeDenominator) * 100);
-  const cocCompliance = cocRequired > 0 ? Math.round((cocCompliant / cocRequired) * 100) : 0;
-  const meteringData = Math.round((meteringInstalled / safeDenominator) * 100);
+  const openSnags = inputs.openSnagCount ?? subsections.reduce((sum, s) => sum + s.snagCount, 0);
   const snagFree = 100 - Math.round((openSnags / safeDenominator) * 100);
-  
+
   return {
     subsectionCount,
     cocRequired,
     cocCompliant,
     meteringInstalled,
     openSnags,
-    overallHealth,
-    cocCompliance,
-    meteringData,
+    overallHealth: inputs.overallHealth,
+    cocCompliance: cocComplianceRate(cocCompliant, cocRequired),
+    meteringData: Math.round((meteringInstalled / safeDenominator) * 100),
     snagFree: Math.max(0, Math.min(100, snagFree)),
   };
 }

@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, MapPin, Eye, Search } from "lucide-react";
 import { useClientInfo } from "@/hooks/useUserRole";
+import { useSiteScores } from "@/hooks/useSiteScores";
+import { SiteHealthBadge } from "@/components/client-portal/SiteHealthBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link, useSearchParams } from "@/lib/navigation";
 import { Button } from "@/components/ui/button";
@@ -58,6 +60,8 @@ const ClientPortalSites = () => {
       return sitesWithSignedUrls;
     },
   });
+
+  const { data: siteScores, isLoading: scoresLoading } = useSiteScores(sites?.map(s => s.id));
 
   if (isLoading) {
     return (
@@ -146,6 +150,7 @@ const ClientPortalSites = () => {
                       )}
                     </div>
                   </div>
+                  <SiteHealthBadge score={siteScores?.get(site.id)} isLoading={scoresLoading} />
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">

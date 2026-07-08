@@ -268,13 +268,15 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
     const cocRequired = subsections.filter(s => s.is_coc_required).length;
     const openSnags = allSnags.filter(snag => isSnagOpen(snag.status)).length;
     // overallHealth is the unified siteHealth number (siteHealth.ts) so the
-    // production report matches the on-screen Site Health.
-    const healthFactors = factorScores(
-      subsections.map(s => ({ id: s.id, metering_status: s.metering_status, meter_serial_number: s.meter_serial_number })),
-      allSnags.map(s => ({ subsection_id: s.subsection_id, status: s.status, risk_level: s.risk_level })),
-      allInspections.map(i => ({ subsection_id: i.subsection_id, status: i.status })),
-    );
-    const metrics = calculateMetrics(subsectionData, cocRequired, openSnags, siteHealthScore(healthFactors));
+    // production report matches the on-screen Site Health. Pass the full rows:
+    // factorScores needs is_inspection_required (waivers) and json_data (photo
+    // detection) — projecting them away zeroes the inspection factor.
+    const healthFactors = factorScores(subsections, allSnags, allInspections);
+    const metrics = calculateMetrics(subsectionData, {
+      cocRequiredCount: cocRequired,
+      openSnagCount: openSnags,
+      overallHealth: siteHealthScore(healthFactors),
+    });
 
     // Calculate Fortress checklist metrics
     const checklistItems = checklistRes.data || [];

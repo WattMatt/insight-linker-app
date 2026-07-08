@@ -5,6 +5,7 @@ import {
   calculateDocumentMetrics,
   type SubsectionData,
 } from './siteSummaryRenderSpec';
+import { calculateCocComplianceStats } from './complianceCalculations';
 
 const sub = (over: Partial<SubsectionData>): SubsectionData => ({
   id: 'x',
@@ -30,16 +31,55 @@ describe('calculateMetrics — COC compliance is required-only (≤ 100%)', () =
       sub({ id: 'c', isCocRequired: false, cocStatus: 'Approved' }),  // NOT required (e.g. generator)
     ];
     // cocRequiredCount provided by caller = number of is_coc_required subsections = 2
-    const m = calculateMetrics(subs, 2);
+    const m = calculateMetrics(subs, { cocRequiredCount: 2, overallHealth: 80 });
     expect(m.cocRequired).toBe(2);
     expect(m.cocCompliant).toBe(1);       // only sub 'a'
     expect(m.cocCompliance).toBe(50);     // 1/2, never > 100 from the non-required one
   });
 
-  it('no required COCs => 0% (no divide-by-zero)', () => {
-    const m = calculateMetrics([sub({ isCocRequired: false, cocStatus: 'Approved' })], 0);
-    expect(m.cocCompliance).toBe(0);
+  it('no required COCs => vacuously 100%, matching calculateCocComplianceStats', () => {
+    const m = calculateMetrics([sub({ isCocRequired: false, cocStatus: 'Approved' })], {
+      cocRequiredCount: 0,
+      overallHealth: 80,
+    });
+    expect(m.cocCompliance).toBe(100);
   });
+
+  it('overallHealth passes through unchanged — the report shows the canonical site health', () => {
+    const m = calculateMetrics([sub({})], { overallHealth: 73 });
+    expect(m.overallHealth).toBe(73);
+  });
+});
+
+describe('cross-library COC consistency — report and dashboard can never disagree', () => {
+  const cases: Array<{ name: string; subs: SubsectionData[] }> = [
+    {
+      name: 'mixed required/approved',
+      subs: [
+        sub({ id: 'a', isCocRequired: true, cocStatus: 'Approved' }),
+        sub({ id: 'b', isCocRequired: true, cocStatus: 'Fail' }),
+        sub({ id: 'c', isCocRequired: true, cocStatus: 'Pass' }),
+        sub({ id: 'd', isCocRequired: false, cocStatus: null }),
+      ],
+    },
+    { name: 'nothing requires a COC', subs: [sub({ id: 'a', isCocRequired: false, cocStatus: null })] },
+    { name: 'empty site', subs: [] },
+  ];
+
+  for (const { name, subs } of cases) {
+    it(name, () => {
+      // Same data through both libraries: dashboard-side stats vs report-side metrics.
+      const stats = calculateCocComplianceStats(
+        subs.map(s => ({ id: s.id, is_coc_required: s.isCocRequired, coc_status: s.cocStatus })),
+      );
+      const metrics = calculateMetrics(subs, {
+        cocRequiredCount: stats.cocRequiredCount,
+        overallHealth: 100,
+      });
+      expect(metrics.cocCompliance).toBe(stats.cocComplianceRate);
+      expect(metrics.cocCompliant).toBe(stats.cocApprovedCount);
+    });
+  }
 });
 
 describe('calculateCategoryHealth — shows ALL categories (no silent truncation)', () => {

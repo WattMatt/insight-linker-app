@@ -22,6 +22,8 @@ import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { ClientPortalDocuments } from "@/components/client-portal/ClientPortalDocuments";
 import { ClientCocView } from "@/components/client-portal/ClientCocView";
 import { downloadFile } from "@/lib/fileDownload";
+import { useSiteScores } from "@/hooks/useSiteScores";
+import { SiteHealthBadge } from "@/components/client-portal/SiteHealthBadge";
 import { Site, Subsection } from "@/types/site";
 
 const ClientPortalSiteDetail = () => {
@@ -33,6 +35,7 @@ const ClientPortalSiteDetail = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string } | null>(null);
   const isMobile = useIsMobile();
+  const { data: siteScores, isLoading: scoresLoading } = useSiteScores(siteId ? [siteId] : undefined);
 
   const { data: site, isLoading: siteLoading } = useQuery({
     queryKey: ["client-site", siteId, clientInfo?.client_id],
@@ -252,6 +255,7 @@ const ClientPortalSiteDetail = () => {
                 )}
               </div>
             </div>
+            <SiteHealthBadge score={siteId ? siteScores?.get(siteId) : undefined} isLoading={scoresLoading} size="lg" />
           </div>
         </CardHeader>
       </Card>

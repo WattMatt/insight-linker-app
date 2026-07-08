@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Info } from "lucide-react";
 import { SiteOverviewCard } from "@/components/client-portal/SiteOverviewCard";
+import { isSnagOpen } from "@/lib/subsectionStatus";
+import { useSiteScores } from "@/hooks/useSiteScores";
 
 const ClientPortalDashboard = () => {
   const [searchParams] = useSearchParams();
@@ -73,9 +75,7 @@ const ClientPortalDashboard = () => {
         .select("id, status, subsection_id")
         .in("subsection_id", subsectionsData?.map(s => s.id) || []);
       
-      const openSnags = (snagsData || []).filter(s => 
-        !['Rectified', 'Closed', 'rectified'].includes(s.status)
-      ).length;
+      const openSnags = (snagsData || []).filter(s => isSnagOpen(s.status)).length;
 
       return {
         sites: sitesCount || 0,
@@ -119,7 +119,7 @@ const ClientPortalDashboard = () => {
           .in("subsection_id", allSubsectionIds);
         
         (snagsData || []).forEach(snag => {
-          if (!['Rectified', 'Closed', 'rectified'].includes(snag.status)) {
+          if (isSnagOpen(snag.status)) {
             snagsMap[snag.subsection_id] = (snagsMap[snag.subsection_id] || 0) + 1;
           }
         });
@@ -168,6 +168,8 @@ const ClientPortalDashboard = () => {
       return sitesWithUrls;
     },
   });
+
+  const { data: siteScores, isLoading: scoresLoading } = useSiteScores(sitesWithStats?.map(s => s.id));
 
   const client = clientInfo?.clients;
 
@@ -282,6 +284,8 @@ const ClientPortalDashboard = () => {
                 key={site.id}
                 site={site}
                 stats={site.stats}
+                score={siteScores?.get(site.id)}
+                scoreLoading={scoresLoading}
                 linkPrefix={`/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`}
               />
             ))}

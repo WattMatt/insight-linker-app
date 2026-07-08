@@ -461,7 +461,7 @@ export class PDFTemplateTestRunner {
   private async runMetricsCalculationTests(): Promise<void> {
     // Test: calculateMetrics produces expected values
     await this.runTest('metrics-basic', 'Basic metrics calculation is accurate', async () => {
-      const metrics = calculateMetrics(SAMPLE_SUBSECTION_DATA);
+      const metrics = calculateMetrics(SAMPLE_SUBSECTION_DATA, { overallHealth: 75 });
       
       if (metrics.subsectionCount !== 4) {
         return { status: 'fail', message: `Expected 4 subsections, got ${metrics.subsectionCount}` };
@@ -507,7 +507,7 @@ export class PDFTemplateTestRunner {
 
     // Test: KPI card value getters work
     await this.runTest('metrics-kpi-values', 'KPI card value getters work', async () => {
-      const metrics = calculateMetrics(SAMPLE_SUBSECTION_DATA);
+      const metrics = calculateMetrics(SAMPLE_SUBSECTION_DATA, { overallHealth: 75 });
       
       const results = HEALTH_METRICS_CARDS.map(card => ({
         id: card.id,

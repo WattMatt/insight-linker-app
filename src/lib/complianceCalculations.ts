@@ -63,6 +63,16 @@ export function isSubsectionCocCompliant(subsection: SubsectionForCompliance): b
 }
 
 /**
+ * COC compliance rate from counts. Shared by every surface that shows a COC percentage
+ * (compliance dashboard, site summary report) so the number can never drift between them.
+ * An empty scope (nothing requires a COC) is vacuously compliant → 100, matching the
+ * empty-denominator convention in siteHealth.ts, inspectionScore.ts and buildingCompliance.ts.
+ */
+export function cocComplianceRate(approvedCount: number, requiredCount: number): number {
+  return requiredCount > 0 ? Math.round((approvedCount / requiredCount) * 100) : 100;
+}
+
+/**
  * Calculate COC + metering compliance statistics for a set of subsections, derived purely
  * from each subsection's `coc_status` verdict. SINGLE SOURCE OF TRUTH for COC counts.
  */
@@ -82,20 +92,12 @@ export function calculateCocComplianceStats(
     s.metering_status === 'Installed' || !!s.meter_serial_number
   ).length;
 
-  const cocComplianceRate = cocRequiredCount > 0
-    ? Math.round((cocApprovedCount / cocRequiredCount) * 100)
-    : 100;
-
-  const meteringComplianceRate = cocRequiredCount > 0
-    ? Math.round((meteringInstalledCount / cocRequiredCount) * 100)
-    : 100;
-
   return {
     totalSubsections,
     cocRequiredCount,
     cocApprovedCount,
     meteringInstalledCount,
-    cocComplianceRate,
-    meteringComplianceRate,
+    cocComplianceRate: cocComplianceRate(cocApprovedCount, cocRequiredCount),
+    meteringComplianceRate: cocComplianceRate(meteringInstalledCount, cocRequiredCount),
   };
 }

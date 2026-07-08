@@ -1,6 +1,8 @@
 import { Link } from "@/lib/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SiteHealthBadge } from "@/components/client-portal/SiteHealthBadge";
+import type { SiteScore } from "@/lib/siteScores";
 import {
   Building2,
   MapPin,
@@ -23,10 +25,12 @@ interface SiteOverviewCardProps {
     site_image_url?: string;
   };
   stats: SiteStats;
+  score?: SiteScore;
+  scoreLoading?: boolean;
   linkPrefix?: string;
 }
 
-export function SiteOverviewCard({ site, stats, linkPrefix = "/client-portal/sites" }: SiteOverviewCardProps) {
+export function SiteOverviewCard({ site, stats, score, scoreLoading, linkPrefix = "/client-portal/sites" }: SiteOverviewCardProps) {
   return (
     <Link to={`${linkPrefix}/${site.id}`}>
       <Card className="h-full hover:shadow-lg transition-all duration-200 hover:border-primary/50 cursor-pointer group">
@@ -61,7 +65,10 @@ export function SiteOverviewCard({ site, stats, linkPrefix = "/client-portal/sit
                     </p>
                   )}
                 </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <SiteHealthBadge score={score} isLoading={scoreLoading} />
+                  <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
+                </div>
               </div>
               {site.site_type && (
                 <Badge variant="outline" className="mt-2 text-xs">
