@@ -15,6 +15,8 @@ import { siteSchema } from "@/lib/validation-schemas";
 import { z } from "zod";
 import { RobustImage } from "@/components/RobustImage";
 import { EmptyState } from "@/components/EmptyState";
+import { useSiteScores } from "@/hooks/useSiteScores";
+import { SiteHealthBadge } from "@/components/SiteHealthBadge";
 
 interface Site {
   id: string;
@@ -48,6 +50,7 @@ const Sites = () => {
     site_type: "",
     client_id: "",
   });
+  const { data: siteScores, isLoading: scoresLoading } = useSiteScores(sites.map(s => s.id));
 
   useEffect(() => {
     fetchData();
@@ -337,6 +340,7 @@ const Sites = () => {
                           <p className="text-xs text-muted-foreground truncate">{site.clients?.name}</p>
                         </div>
                       </div>
+                      <SiteHealthBadge score={siteScores?.get(site.id)} isLoading={scoresLoading} className="mr-1" />
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">

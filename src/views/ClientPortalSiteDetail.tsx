@@ -23,7 +23,7 @@ import { ClientPortalDocuments } from "@/components/client-portal/ClientPortalDo
 import { ClientCocView } from "@/components/client-portal/ClientCocView";
 import { downloadFile } from "@/lib/fileDownload";
 import { useSiteScores } from "@/hooks/useSiteScores";
-import { SiteHealthBadge } from "@/components/client-portal/SiteHealthBadge";
+import { SiteHealthBadge } from "@/components/SiteHealthBadge";
 import { Site, Subsection } from "@/types/site";
 
 const ClientPortalSiteDetail = () => {

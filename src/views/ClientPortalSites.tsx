@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, MapPin, Eye, Search } from "lucide-react";
 import { useClientInfo } from "@/hooks/useUserRole";
 import { useSiteScores } from "@/hooks/useSiteScores";
-import { SiteHealthBadge } from "@/components/client-portal/SiteHealthBadge";
+import { SiteHealthBadge } from "@/components/SiteHealthBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link, useSearchParams } from "@/lib/navigation";
 import { Button } from "@/components/ui/button";

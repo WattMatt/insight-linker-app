@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { Breadcrumbs } from "@/components/Breadcrumb";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useCamera } from "@/hooks/useCamera";
+import { useSiteScores } from "@/hooks/useSiteScores";
+import { SiteHealthBadge } from "@/components/SiteHealthBadge";
 
 // Data structures
 interface Client {
@@ -65,6 +67,7 @@ const ClientDetail = () => {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [deleteLogoConfirm, setDeleteLogoConfirm] = useState(false);
   const { takePicture } = useCamera();
+  const { data: siteScores, isLoading: scoresLoading } = useSiteScores(sites.map(s => s.id));
 
   useEffect(() => {
     if (clientId) {
@@ -394,7 +397,8 @@ const ClientDetail = () => {
                           )}
                         </div>
                       </div>
-                      <div className="flex gap-2 text-xs">
+                      <div className="flex items-center gap-2 text-xs">
+                        <SiteHealthBadge score={siteScores?.get(site.id)} isLoading={scoresLoading} />
                         <Badge variant="outline">{site.subsections?.length || 0} subsections</Badge>
                         <Badge variant="outline">{site.inspections?.length || 0} inspections</Badge>
                       </div>

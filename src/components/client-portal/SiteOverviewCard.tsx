@@ -1,7 +1,7 @@
 import { Link } from "@/lib/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { SiteHealthBadge } from "@/components/client-portal/SiteHealthBadge";
+import { SiteHealthBadge } from "@/components/SiteHealthBadge";
 import type { SiteScore } from "@/lib/siteScores";
 import {
   Building2,

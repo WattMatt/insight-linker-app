@@ -37,6 +37,7 @@ NOT part of this score.
 | Site summary report (preview + PDF) | live compute, passed into `calculateMetrics` |
 | Nightly trend snapshots | `/api/snapshots/capture` cron (2AM UTC) → `site_health_snapshots` |
 | Client portal (sites list, dashboard cards, site detail header) | `useSiteScores` hook |
+| Admin sites grid (`Sites.tsx`) and client detail site cards (`ClientDetail.tsx`) | `useSiteScores` hook |
 
 `useSiteScores` ([`src/hooks/useSiteScores.ts`](../src/hooks/useSiteScores.ts)) is
 snapshot-first with a live fallback, both canonical (see
@@ -50,7 +51,7 @@ snapshot-first with a live fallback, both canonical (see
 3. Sites with neither render a "—" pending badge — never a fabricated number.
 
 Rendering goes through one component,
-[`SiteHealthBadge`](../src/components/client-portal/SiteHealthBadge.tsx), banded by
+[`SiteHealthBadge`](../src/components/SiteHealthBadge.tsx), banded by
 `getHealthBand` (≥80 green, ≥50 amber, else red — same palette as the PDF reports).
 
 ## Security model
@@ -74,7 +75,7 @@ client-scoped RLS policies from migration `20251017054255`. Public share-link su
 - `src/lib/siteScores.test.ts` — snapshot-vs-live equivalence, grouping, pending states.
 - `src/lib/siteSummaryRenderSpec.test.ts` — cross-library COC consistency (report and
   dashboard literally share `cocComplianceRate`, and the tests fail if they ever drift).
-- `src/components/client-portal/SiteHealthBadge.test.tsx` — banding + pending rendering.
+- `src/components/SiteHealthBadge.test.tsx` — banding + pending rendering.
 
 When adding a new scoring surface: fetch full rows, call the `siteHealth.ts` /
 `siteScores.ts` functions (or `useSiteScores`), render with `SiteHealthBadge`, and add
