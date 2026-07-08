@@ -8,14 +8,15 @@ export interface SnapshotInput {
   capturedAt: string; // ISO yyyy-mm-dd
   summary: SiteDeliverablesSummary;
   readiness: ReadinessResult;
-  healthScore: number;
+  /** null = empty site (no subsections) — there is no health score to record. */
+  healthScore: number | null;
   openSnags: number;
 }
 
 export interface SnapshotRow {
   site_id: string;
   captured_at: string;
-  health_score: number;
+  health_score: number | null;
   completion_pct: number;
   outstanding_count: number;
   blocking_count: number;

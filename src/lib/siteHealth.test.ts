@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   isMetered, isSnagResolved, isInspectionCompleted,
-  factorScores, siteHealthScore, readiness, getHealthBand,
+  factorScores, siteHealthScore, computeSiteHealth, readiness, getHealthBand,
   DEFAULT_WEIGHTS,
 } from './siteHealth';
 
@@ -121,6 +121,25 @@ describe('getHealthBand', () => {
     expect(getHealthBand(79)).toBe('warning');
     expect(getHealthBand(50)).toBe('warning');
     expect(getHealthBand(49)).toBe('danger');
+  });
+});
+
+describe('computeSiteHealth — the canonical entry point', () => {
+  it('an EMPTY site (zero subsections) has NO score — null, never a fabricated 100', () => {
+    expect(computeSiteHealth([], [], [])).toBeNull();
+  });
+  it('a populated site scores exactly siteHealthScore(factorScores(...))', () => {
+    const subs = [sub('a', { metering_status: 'Installed' }), sub('b')];
+    const snags = [{ subsection_id: 'a', status: 'Open', risk_level: 'Low' }];
+    const insp = [withPhoto('a')];
+    const result = computeSiteHealth(subs, snags, insp);
+    expect(result).not.toBeNull();
+    expect(result!.score).toBe(siteHealthScore(factorScores(subs, snags, insp)));
+  });
+  it('factor-level empty scopes inside a populated site remain vacuously 100', () => {
+    // one subsection, metered, inspection-waived, zero snags → all factors 100 → score 100
+    const subs = [sub('a', { metering_status: 'Installed', is_inspection_required: false })];
+    expect(computeSiteHealth(subs, [], [])!.score).toBe(100);
   });
 });
 

@@ -44,7 +44,7 @@ import {
   type SnagData,
   LAYOUT,
 } from "@/lib/siteSummaryRenderSpec";
-import { factorScores, siteHealthScore } from "@/lib/siteHealth";
+import { computeSiteHealth } from "@/lib/siteHealth";
 import { renderSubsectionGrid } from "@/lib/pdfSubsectionRenderer";
 import type { SubsectionCardData } from "@/lib/subsectionCardSpec";
 import { isSnagOpen } from "@/lib/subsectionStatus";
@@ -271,11 +271,12 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
     // production report matches the on-screen Site Health. Pass the full rows:
     // factorScores needs is_inspection_required (waivers) and json_data (photo
     // detection) — projecting them away zeroes the inspection factor.
-    const healthFactors = factorScores(subsections, allSnags, allInspections);
+    // computeSiteHealth returns null for an empty site → cards render "—".
+    const health = computeSiteHealth(subsections, allSnags, allInspections);
     const metrics = calculateMetrics(subsectionData, {
       cocRequiredCount: cocRequired,
       openSnagCount: openSnags,
-      overallHealth: siteHealthScore(healthFactors),
+      overallHealth: health?.score ?? null,
     });
 
     // Calculate Fortress checklist metrics

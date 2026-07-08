@@ -63,7 +63,6 @@ describe('cross-library COC consistency — report and dashboard can never disag
       ],
     },
     { name: 'nothing requires a COC', subs: [sub({ id: 'a', isCocRequired: false, cocStatus: null })] },
-    { name: 'empty site', subs: [] },
   ];
 
   for (const { name, subs } of cases) {
@@ -80,6 +79,17 @@ describe('cross-library COC consistency — report and dashboard can never disag
       expect(metrics.cocCompliant).toBe(stats.cocApprovedCount);
     });
   }
+});
+
+describe('empty site — every rate metric is "no data", never a fabricated percentage', () => {
+  it('zero subsections => all rate metrics null, counts stay 0', () => {
+    const m = calculateMetrics([], { cocRequiredCount: 0, openSnagCount: 0, overallHealth: null });
+    expect(m.subsectionCount).toBe(0);
+    expect(m.overallHealth).toBeNull();
+    expect(m.cocCompliance).toBeNull();
+    expect(m.meteringData).toBeNull();
+    expect(m.snagFree).toBeNull();
+  });
 });
 
 describe('calculateCategoryHealth — shows ALL categories (no silent truncation)', () => {

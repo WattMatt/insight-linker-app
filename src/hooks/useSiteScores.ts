@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { buildSiteScoreMap, type LiveScoreInputs, type SiteScore } from "@/lib/siteScores";
+import { buildSiteScoreMap, isUsableSnapshotRow, type LiveScoreInputs, type SiteScore } from "@/lib/siteScores";
 
 // Snapshots older than this are ignored; a site that stale falls back to live compute,
 // so a long-dead capture job can't keep serving months-old scores as current.
@@ -24,13 +24,13 @@ export function useSiteScores(siteIds: string[] | undefined) {
         .slice(0, 10);
       const { data: snapshotRows, error: snapshotError } = await supabase
         .from("site_health_snapshots")
-        .select("site_id, health_score, captured_at")
+        .select("site_id, health_score, total_subsections, captured_at")
         .in("site_id", ids)
         .gte("captured_at", since);
       if (snapshotError) throw snapshotError;
 
       const withSnapshot = new Set(
-        (snapshotRows ?? []).filter(r => r.health_score !== null).map(r => r.site_id),
+        (snapshotRows ?? []).filter(isUsableSnapshotRow).map(r => r.site_id),
       );
       const missing = ids.filter(id => !withSnapshot.has(id));
 

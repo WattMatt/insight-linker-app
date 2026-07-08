@@ -10,7 +10,7 @@ import {
   Workflow, ListChecks, Thermometer, FileText, CalendarClock,
   ChevronRight, TrendingUp, CheckCircle2,
 } from "lucide-react";
-import { readiness, factorScores, siteHealthScore } from "@/lib/siteHealth";
+import { readiness, computeSiteHealth } from "@/lib/siteHealth";
 import { cocExpiryBuckets, snagAging } from "@/lib/kpiMetrics";
 import { snagStatusBucket } from "@/lib/subsectionStatus";
 import { buildActionHref } from "@/lib/buildActionHref";
@@ -126,8 +126,9 @@ export const ComplianceDashboard = ({
   const ds = deliverablesSummary;
   const snagsForHealth = snagRows.map((s) => ({ subsection_id: s.subsection_id ?? "", status: s.status, risk_level: s.risk_level }));
   const rd = readiness(subsections, snagsForHealth, inspections);
-  const readyPct = rd.total ? Math.round((rd.ready / rd.total) * 100) : 100;
-  const healthScore = siteHealthScore(factorScores(subsections, snagsForHealth, inspections));
+  // 0/0 is "nothing captured", not "100% ready" — an empty site must never look done.
+  const readyPct = rd.total ? Math.round((rd.ready / rd.total) * 100) : 0;
+  const health = computeSiteHealth(subsections, snagsForHealth, inspections);
 
   const counts = { open: 0, inProgress: 0, closed: 0 };
   for (const s of snagRows) counts[snagStatusBucket(s.status)]++;
@@ -154,14 +155,18 @@ export const ComplianceDashboard = ({
               <ShieldCheck className="h-4 w-4 text-muted-foreground" />
               Subsections ready
             </CardTitle>
-            <CardDescription>Operational health {healthScore}%</CardDescription>
+            <CardDescription>
+              {health ? `Operational health ${health.score}%` : "Operational health: no data — no subsections captured"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold">
                 {rd.ready}<span className="text-lg text-muted-foreground"> / {rd.total}</span>
               </span>
-              <span className="text-sm text-muted-foreground">{readyPct}% ready for handover</span>
+              <span className="text-sm text-muted-foreground">
+                {rd.total ? `${readyPct}% ready for handover` : "no subsections captured yet"}
+              </span>
             </div>
             <Progress value={readyPct} className="mt-2 h-2" />
             <div className="flex flex-wrap gap-2 mt-3">

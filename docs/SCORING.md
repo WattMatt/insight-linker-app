@@ -4,11 +4,13 @@ _Last updated: 2026-07-08._
 
 ## The canonical number
 
-A site's **health score** is computed by exactly one function pair, [`src/lib/siteHealth.ts`](../src/lib/siteHealth.ts):
+A site's **health score** is computed by exactly one canonical entry point, [`src/lib/siteHealth.ts`](../src/lib/siteHealth.ts):
 
 ```
-siteHealthScore(factorScores(subsections, snags, inspections))
+computeSiteHealth(subsections, snags, inspections)  →  { score, factors } | null
 ```
+
+(null = empty site, see convention 1; internally `siteHealthScore(factorScores(...))`).
 
 Weighted factors (defaults): **snags 40%** (resolved / total snags), **inspections 35%**
 (photo-populated / inspection-required subsections), **metering 25%** (metered / total
@@ -17,17 +19,24 @@ NOT part of this score.
 
 ### Conventions every scoring surface must follow
 
-1. **Empty scope is vacuously 100.** No snags → 100. No inspection-required subsections
-   → 100. No COC-required subsections → 100% COC compliance (`cocComplianceRate()` in
-   `complianceCalculations.ts` is the shared helper). Never render 0 for "nothing to do".
-2. **Full rows in, score out.** `factorScores` needs `is_inspection_required` (waivers)
+1. **An empty SITE has no score — ever.** A site with zero subsections has empty
+   denominators everywhere; `computeSiteHealth()` returns **null** and every surface
+   renders an explicit "No data"/"—" state. An empty site must NEVER display 100% (or
+   0%) — 40 of 76 production sites once read as a fabricated perfect 100 this way.
+   Snapshots store `health_score = NULL` for empty sites.
+2. **Inside a populated site, an empty factor scope is vacuously 100.** No snags → 100.
+   No inspection-required subsections → 100. No COC-required subsections → 100% COC
+   compliance (`cocComplianceRate()` in `complianceCalculations.ts` is the shared
+   helper). "Nothing wrong" is legitimately a perfect factor; never render 0 for
+   "nothing to do".
+3. **Full rows in, score out.** `factorScores` needs `is_inspection_required` (waivers)
    and inspections' `json_data` (photo detection). Projecting those fields away silently
    zeroes the inspection factor — pass the fetched rows through unmodified.
-3. **Snag openness** is decided only by `isSnagOpen()` / `isSnagResolved()`
+4. **Snag openness** is decided only by `isSnagOpen()` / `isSnagResolved()`
    (case-insensitive; `rectified`/`closed` are terminal). No inline status lists.
-4. **Reports never invent a health number.** `calculateMetrics()` requires
-   `overallHealth` as an input; the caller must pass the canonical score. There is
-   deliberately no fallback formula.
+5. **Reports never invent a health number.** `calculateMetrics()` requires
+   `overallHealth` as an input (null for an empty site); the caller must pass the
+   canonical `computeSiteHealth()` result. There is deliberately no fallback formula.
 
 ## Where scores come from at runtime
 

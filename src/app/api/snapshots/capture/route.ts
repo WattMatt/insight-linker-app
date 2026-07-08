@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { computeSiteDeliverables, categoryMatches, THERMAL_CATEGORY_PATTERNS, type SiteDeliverablesInput } from "@/lib/siteDeliverables";
-import { factorScores, siteHealthScore, readiness } from "@/lib/siteHealth";
+import { computeSiteHealth, readiness } from "@/lib/siteHealth";
 import { isSnagOpen } from "@/lib/subsectionStatus";
 import { toSnapshotRow } from "@/lib/snapshotMetrics";
 
@@ -83,7 +83,8 @@ export async function GET(req: Request) {
       };
       const summary = computeSiteDeliverables(input);
       const rd = readiness(input.subsections, input.snags, input.inspections);
-      const healthScore = siteHealthScore(factorScores(input.subsections, input.snags, input.inspections));
+      // null for an empty site — stored as NULL so no surface can read a fabricated 100.
+      const healthScore = computeSiteHealth(input.subsections, input.snags, input.inspections)?.score ?? null;
       const openSnags = input.snags.filter((s) => isSnagOpen(s.status)).length;
       return toSnapshotRow({ siteId: site.id, capturedAt, summary, readiness: rd, healthScore, openSnags });
     });

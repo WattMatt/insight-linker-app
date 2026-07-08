@@ -11,8 +11,7 @@
  * Pure functions, no I/O — see siteScores.test.ts. Fetching lives in useSiteScores.
  */
 import {
-  factorScores,
-  siteHealthScore,
+  computeSiteHealth,
   type SubsectionForHealth,
   type SnagForHealth,
   type InspectionForHealth,
@@ -20,7 +19,9 @@ import {
 
 export interface SiteScore {
   siteId: string;
-  healthScore: number;
+  /** null = "No data": the site has no subsections captured, so no score exists.
+   * An empty site must NEVER read as 100% (see computeSiteHealth). */
+  healthScore: number | null;
   /** Snapshot date (yyyy-mm-dd); null when the score was computed live just now. */
   capturedAt: string | null;
   source: "snapshot" | "live";
@@ -29,7 +30,14 @@ export interface SiteScore {
 export interface SnapshotScoreRow {
   site_id: string;
   health_score: number | null;
+  total_subsections: number | null;
   captured_at: string;
+}
+
+/** A snapshot row answers the score question if it carries a score OR explicitly
+ * recorded an empty site (which IS the answer: "No data"). */
+export function isUsableSnapshotRow(row: SnapshotScoreRow): boolean {
+  return row.health_score !== null || row.total_subsections === 0;
 }
 
 export interface LiveScoreInputs {
@@ -42,11 +50,11 @@ export interface LiveScoreInputs {
   inspections: Array<InspectionForHealth & { site_id?: string | null }>;
 }
 
-/** Reduce snapshot rows (any order, any date range) to the latest scored row per site. */
+/** Reduce snapshot rows (any order, any date range) to the latest usable row per site. */
 export function latestSnapshotPerSite(rows: SnapshotScoreRow[]): Map<string, SnapshotScoreRow> {
   const latest = new Map<string, SnapshotScoreRow>();
   for (const row of rows) {
-    if (row.health_score === null) continue;
+    if (!isUsableSnapshotRow(row)) continue;
     const current = latest.get(row.site_id);
     if (!current || row.captured_at > current.captured_at) latest.set(row.site_id, row);
   }
@@ -92,22 +100,21 @@ export function buildSiteScoreMap(
     if (snapshot) {
       scores.set(siteId, {
         siteId,
-        healthScore: snapshot.health_score!,
+        // A recorded empty site is "No data", whatever score an old capture stored.
+        healthScore: snapshot.total_subsections === 0 ? null : snapshot.health_score,
         capturedAt: snapshot.captured_at,
         source: "snapshot",
       });
       continue;
     }
-    if (!covered.has(siteId)) continue; // no data either way — caller renders a pending state
+    if (!covered.has(siteId)) continue; // not fetched either way — caller renders a pending state
     scores.set(siteId, {
       siteId,
-      healthScore: siteHealthScore(
-        factorScores(
-          subsBySite.get(siteId) ?? [],
-          snagsBySite.get(siteId) ?? [],
-          inspBySite.get(siteId) ?? [],
-        ),
-      ),
+      healthScore: computeSiteHealth(
+        subsBySite.get(siteId) ?? [],
+        snagsBySite.get(siteId) ?? [],
+        inspBySite.get(siteId) ?? [],
+      )?.score ?? null,
       capturedAt: null,
       source: "live",
     });

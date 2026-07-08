@@ -40,8 +40,15 @@ describe("SiteHealthBadge", () => {
     expect(screen.getByLabelText("Site score not captured yet").textContent).toContain("—");
   });
 
+  it('an EMPTY site (healthScore null) renders "No data" — never 100%', () => {
+    render(<SiteHealthBadge score={score({ healthScore: null })} />);
+    const badge = screen.getByLabelText(/No subsections captured for this site yet/);
+    expect(badge.textContent).toContain("No data");
+    expect(badge.textContent).not.toContain("%");
+  });
+
   it("shows a loading placeholder while scores resolve", () => {
     render(<SiteHealthBadge score={undefined} isLoading />);
-    expect(screen.getByLabelText("Loading site score").textContent).toContain("…");
+    expect(screen.getByLabelText(/Loading site score/).textContent).toContain("…");
   });
 });

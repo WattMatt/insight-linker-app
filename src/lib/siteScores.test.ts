@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { buildSiteScoreMap, latestSnapshotPerSite, type SnapshotScoreRow } from './siteScores';
 import { factorScores, siteHealthScore } from './siteHealth';
 
-const snap = (site_id: string, captured_at: string, health_score: number | null): SnapshotScoreRow =>
-  ({ site_id, captured_at, health_score });
+const snap = (site_id: string, captured_at: string, health_score: number | null, total_subsections = 5): SnapshotScoreRow =>
+  ({ site_id, captured_at, health_score, total_subsections });
 
 const noLive = { coveredSiteIds: [], subsections: [], snags: [], inspections: [] };
 
@@ -19,13 +19,21 @@ describe('latestSnapshotPerSite', () => {
     expect(latest.get('b')?.health_score).toBe(55);
   });
 
-  it('ignores rows without a health score so they cannot mask an older scored row', () => {
+  it('ignores unscored rows for POPULATED sites so they cannot mask an older scored row', () => {
     const latest = latestSnapshotPerSite([
       snap('a', '2026-07-06', 70),
-      snap('a', '2026-07-07', null),
+      snap('a', '2026-07-07', null, 5), // populated but scoreless — carries no answer
     ]);
     expect(latest.get('a')?.health_score).toBe(70);
     expect(latest.get('a')?.captured_at).toBe('2026-07-06');
+  });
+
+  it('an EMPTY-site row (total_subsections=0) IS the latest answer — it means "No data"', () => {
+    const latest = latestSnapshotPerSite([
+      snap('a', '2026-07-06', 70, 5),
+      snap('a', '2026-07-07', null, 0), // site emptied / recorded empty — newer answer wins
+    ]);
+    expect(latest.get('a')?.captured_at).toBe('2026-07-07');
   });
 });
 
@@ -64,12 +72,19 @@ describe('buildSiteScoreMap', () => {
     });
   });
 
-  it('a covered site with zero rows scores 100 (empty-scope convention)', () => {
+  it('a covered EMPTY site is "No data" (null) — an empty site must NEVER score 100', () => {
     const scores = buildSiteScoreMap(['new-site'], [], {
       coveredSiteIds: ['new-site'], subsections: [], snags: [], inspections: [],
     });
-    expect(scores.get('new-site')?.healthScore).toBe(100);
+    expect(scores.get('new-site')?.healthScore).toBeNull();
     expect(scores.get('new-site')?.source).toBe('live');
+  });
+
+  it('a legacy snapshot that stored 100 for an empty site is served as "No data", not 100', () => {
+    // Defends against pre-backfill rows: total_subsections=0 overrides any stored score.
+    const scores = buildSiteScoreMap(['a'], [snap('a', '2026-07-07', 100, 0)], noLive);
+    expect(scores.get('a')?.healthScore).toBeNull();
+    expect(scores.get('a')?.source).toBe('snapshot');
   });
 
   it('an uncovered site with no snapshot is absent — callers render a pending state, never a fake number', () => {

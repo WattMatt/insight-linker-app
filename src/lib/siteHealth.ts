@@ -78,6 +78,27 @@ export function siteHealthScore(factors: FactorScores, weights: HealthWeights = 
   );
 }
 
+export interface SiteHealthResult { score: number; factors: FactorScores; }
+
+/**
+ * Canonical entry point for a site's overall health.
+ *
+ * A site with ZERO subsections has no health score at all — every denominator is empty,
+ * and an empty denominator must never fabricate a perfect 100 (empty sites were showing
+ * 100% across the portal). Returns null; surfaces render an explicit "No data" state.
+ * Factor-level empty scopes inside a POPULATED site remain vacuously 100 (no snags
+ * genuinely is good).
+ */
+export function computeSiteHealth(
+  subsections: SubsectionForHealth[],
+  snags: SnagForHealth[],
+  inspections: InspectionForHealth[],
+): SiteHealthResult | null {
+  if (subsections.length === 0) return null;
+  const factors = factorScores(subsections, snags, inspections);
+  return { score: siteHealthScore(factors), factors };
+}
+
 export function readiness(
   subsections: SubsectionForHealth[],
   snags: SnagForHealth[],
