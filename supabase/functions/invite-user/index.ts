@@ -16,6 +16,156 @@ interface InviteUserRequest {
   temporaryPassword?: string;
   clientId?: string;
   siteIds?: string[];
+  // When true, the initial password is delivered to the user in a branded email
+  // (with a forced-change-on-first-login notice) instead of being returned to the
+  // admin to relay by hand. Requires `temporaryPassword` to be present — the admin
+  // UI generates it with src/lib/auth/initialInvite.ts:generateInitialPassword().
+  deliverByEmail?: boolean;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Branded "your account is ready" email carrying the one-time initial password.
+ * Mirrors the invite/reset templates below (same table layout + brand header) so
+ * all three transactional emails look consistent. The password is shown in a
+ * monospace box and paired with a prominent must-change-on-first-login notice.
+ */
+function renderInitialPasswordEmailHtml(params: {
+  companyName: string;
+  logoUrl?: string | null;
+  fullName: string;
+  role: string;
+  email: string;
+  password: string;
+  loginUrl: string;
+}): string {
+  const { companyName, logoUrl, fullName, role, email, password, loginUrl } = params;
+  const brand = escapeHtml(companyName);
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your ${brand} account is ready</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #e4e4e7;">
+              ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${brand}" style="max-height: 60px; max-width: 200px;">` : `<h1 style="margin: 0; color: #18181b; font-size: 24px; font-weight: 700;">${brand}</h1>`}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 16px; color: #18181b; font-size: 20px; font-weight: 600;">
+                Welcome, ${escapeHtml(fullName)}!
+              </h2>
+              <p style="margin: 0 0 24px; color: #52525b; font-size: 16px; line-height: 1.6;">
+                An account has been created for you on <strong>${brand}</strong> as a
+                <strong style="color: #2563eb;">${escapeHtml(role)}</strong>. Use the details below to sign in.
+              </p>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin: 0 0 24px; background-color: #f8fafc; border: 1px solid #e4e4e7; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <p style="margin: 0 0 6px; color: #71717a; font-size: 13px;">Email</p>
+                    <p style="margin: 0 0 16px; color: #18181b; font-size: 15px; font-weight: 600;">${escapeHtml(email)}</p>
+                    <p style="margin: 0 0 6px; color: #71717a; font-size: 13px;">Temporary password</p>
+                    <p style="margin: 0; color: #18181b; font-size: 18px; font-weight: 700; font-family: 'SF Mono', Menlo, Consolas, monospace; letter-spacing: 1px;">${escapeHtml(password)}</p>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center">
+                    <a href="${escapeHtml(loginUrl)}" style="display: inline-block; padding: 14px 32px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px;">
+                      Sign in
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="margin-top: 32px; padding: 16px; background-color: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.5;">
+                  <strong>For your security</strong>, you'll be asked to choose your own password the first time you sign in. This temporary password stops working once you do.
+                </p>
+              </div>
+
+              <p style="margin: 24px 0 0; color: #71717a; font-size: 14px; line-height: 1.6;">
+                If the button doesn't work, go to:
+              </p>
+              <p style="margin: 8px 0 0; word-break: break-all;">
+                <a href="${escapeHtml(loginUrl)}" style="color: #2563eb; font-size: 14px;">${escapeHtml(loginUrl)}</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 24px 40px; background-color: #fafafa; border-top: 1px solid #e4e4e7; border-radius: 0 0 12px 12px;">
+              <p style="margin: 0; color: #71717a; font-size: 12px; text-align: center;">
+                This account was created by ${brand}. If you weren't expecting it, please contact your administrator.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+}
+
+/**
+ * Fetch branding and send the initial-password email. Throws on send failure so
+ * the caller can surface it (a user who never receives credentials is a failed
+ * invite, not a silent success).
+ */
+async function sendInitialPasswordEmail(
+  supabase: ReturnType<typeof createClient>,
+  params: { email: string; fullName: string; role: string; password: string; origin: string },
+): Promise<void> {
+  const { data: settings } = await supabase
+    .from('settings')
+    .select('company_name, company_logo_url')
+    .single();
+
+  const companyName = settings?.company_name || 'WM Compliance';
+  const logoUrl = settings?.company_logo_url as string | undefined;
+
+  const html = renderInitialPasswordEmailHtml({
+    companyName,
+    logoUrl,
+    fullName: params.fullName,
+    role: params.role,
+    email: params.email,
+    password: params.password,
+    loginUrl: `${params.origin}/auth/login`,
+  });
+
+  const { error: emailError } = await resend.emails.send({
+    from: `${companyName} <noreply@watsonmattheus.com>`,
+    to: [params.email],
+    subject: `Your ${companyName} account is ready`,
+    html,
+  });
+
+  if (emailError) {
+    console.error('Initial-password email error:', emailError);
+    throw new Error(`Failed to email login details: ${emailError.message}`);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -53,7 +203,13 @@ Deno.serve(async (req) => {
       throw new Error('Only admins can invite users');
     }
 
-    const { email, fullName, role, isResend, temporaryPassword, clientId, siteIds }: InviteUserRequest = await req.json();
+    const { email, fullName, role, isResend, temporaryPassword, clientId, siteIds, deliverByEmail }: InviteUserRequest = await req.json();
+
+    // Emailing credentials requires a password to email. Fail loud rather than
+    // silently create an account the user can never reach.
+    if (deliverByEmail && !temporaryPassword) {
+      throw new Error('deliverByEmail requires an initial password to be provided');
+    }
 
     console.log(isResend ? 'Resending invite to:' : 'Inviting user:', email, 'with role:', role);
     
@@ -177,10 +333,33 @@ Deno.serve(async (req) => {
         console.log(`Updated user site assignments to ${siteIds.length} site(s)`);
       }
 
-      // If using temporary password, skip email invitation
+      // Temporary password path.
       if (temporaryPassword) {
+        if (deliverByEmail) {
+          // Email the credentials to the user (never echo the plaintext back to
+          // the admin — one delivery channel, not two).
+          await sendInitialPasswordEmail(supabase, {
+            email,
+            fullName,
+            role,
+            password: temporaryPassword,
+            origin,
+          });
+          console.log('User updated with temporary password - login details emailed');
+          return new Response(
+            JSON.stringify({
+              success: true,
+              userId: userId,
+              isNewUser: false,
+              passwordEmailed: true,
+              message: 'Login details emailed to the user. They must change the password on first login.',
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+          );
+        }
+
+        // Legacy path: admin relays the password out-of-band.
         console.log('User updated with temporary password - skipping email');
-        
         return new Response(
           JSON.stringify({
             success: true,
@@ -340,16 +519,37 @@ Deno.serve(async (req) => {
       }
     }
 
-    // If using temporary password, skip email invitation
+    // Temporary password path.
     if (temporaryPassword) {
+      if (deliverByEmail) {
+        await sendInitialPasswordEmail(supabase, {
+          email,
+          fullName,
+          role,
+          password: temporaryPassword,
+          origin,
+        });
+        console.log('User created with temporary password - login details emailed');
+        return new Response(
+          JSON.stringify({
+            success: true,
+            userId: userId,
+            isNewUser,
+            passwordEmailed: true,
+            message: 'User created. Login details emailed. They must change the password on first login.',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+        );
+      }
+
+      // Legacy path: admin relays the password out-of-band.
       console.log('User created with temporary password - skipping email invitation');
-      
       return new Response(
         JSON.stringify({
           success: true,
           userId: userId,
           isNewUser,
-          message: isNewUser 
+          message: isNewUser
             ? `User created successfully. Temporary password: ${temporaryPassword}. User must change password on first login.`
             : 'User updated successfully.',
           temporaryPassword: temporaryPassword,
@@ -387,11 +587,11 @@ Deno.serve(async (req) => {
     // Send branded invite email via Resend
     const { data: companySettings } = await supabase
       .from('settings')
-      .select('company_name, logo_url')
+      .select('company_name, company_logo_url')
       .single();
 
     const companyName = companySettings?.company_name || 'WM Compliance';
-    const logoUrl = companySettings?.logo_url;
+    const logoUrl = companySettings?.company_logo_url;
 
     const emailHtml = `
 <!DOCTYPE html>

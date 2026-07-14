@@ -1,0 +1,79 @@
+<!--
+  Supabase "Reset Password" (recovery) email template — code-first.
+
+  WHY: src/views/auth/ForgotPassword.tsx is OTP-first — it shows an "enter the
+  6-digit code" screen and calls verifyOtp({ type: "recovery" }). That only works
+  if THIS template renders {{ .Token }} (the 6-digit code). The Supabase default
+  template ships a link only ({{ .ConfirmationURL }}), so no code ever arrives and
+  the user is stuck on the code screen. This template leads with the code and keeps
+  the link as a secondary fallback.
+
+  Supabase template variables used: {{ .Token }} (6-digit code), {{ .ConfirmationURL }} (fallback link).
+  Paste into: Dashboard → Authentication → Emails → "Reset Password" → Message body.
+  Suggested subject: "Your WM Compliance password reset code"
+-->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset your password</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #e4e4e7;">
+              <h1 style="margin: 0; color: #18181b; font-size: 24px; font-weight: 700;">WM Compliance</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 16px; color: #18181b; font-size: 20px; font-weight: 600;">
+                Password reset
+              </h2>
+              <p style="margin: 0 0 24px; color: #52525b; font-size: 16px; line-height: 1.6;">
+                Enter this 6-digit code in the app to reset your password:
+              </p>
+
+              <!-- The code -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin: 0 0 24px;">
+                <tr>
+                  <td align="center" style="padding: 20px; background-color: #f8fafc; border: 1px solid #e4e4e7; border-radius: 8px;">
+                    <span style="color: #18181b; font-size: 34px; font-weight: 700; font-family: 'SF Mono', Menlo, Consolas, monospace; letter-spacing: 10px;">{{ .Token }}</span>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0 0 32px; color: #71717a; font-size: 14px; line-height: 1.6;">
+                This code expires in 1 hour. If you didn't request a password reset, you can safely ignore this email — your password won't change.
+              </p>
+
+              <!-- Fallback link -->
+              <p style="margin: 0 0 8px; color: #71717a; font-size: 14px; line-height: 1.6;">
+                Prefer a link? You can also
+                <a href="{{ .ConfirmationURL }}" style="color: #2563eb;">reset your password here</a>
+                — though the code above is more reliable if your email provider scans links.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 40px; background-color: #fafafa; border-top: 1px solid #e4e4e7; border-radius: 0 0 12px 12px;">
+              <p style="margin: 0; color: #71717a; font-size: 12px; text-align: center;">
+                This email was sent by WM Compliance. For security, this code expires in 1 hour.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -54,3 +54,4 @@ supabase/.branches/
 
 # Brainstorm visual-companion artifacts
 .superpowers/
+.env*.local

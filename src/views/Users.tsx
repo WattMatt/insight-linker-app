@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
+import { generateInitialPassword } from "@/lib/auth/initialInvite";
 import { ListPagination } from "@/components/ListPagination";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,9 @@ const Users = () => {
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([]);
   const [temporaryPassword, setTemporaryPassword] = useState("");
+  // When true, the invite emails a generated initial password to the user
+  // (forced-change on first login) instead of sending a magic-link invite.
+  const [sendCredentialsByEmail, setSendCredentialsByEmail] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [editRole, setEditRole] = useState<"Admin" | "Moderator" | "User" | "Contractor" | "Client">("User");
   const [editStatus, setEditStatus] = useState<"Active" | "Inactive">("Active");
@@ -295,7 +299,7 @@ const Users = () => {
 
   // Invite user mutation
   const inviteMutation = useMutation({
-    mutationFn: async (userData: { email: string; fullName: string; role: string; temporaryPassword?: string; clientId?: string; siteIds?: string[] }) => {
+    mutationFn: async (userData: { email: string; fullName: string; role: string; temporaryPassword?: string; deliverByEmail?: boolean; clientId?: string; siteIds?: string[] }) => {
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: {
           email: userData.email,
@@ -303,6 +307,7 @@ const Users = () => {
           role: userData.role,
           isResend: false,
           temporaryPassword: userData.temporaryPassword,
+          deliverByEmail: userData.deliverByEmail,
           clientId: userData.clientId,
           siteIds: userData.siteIds,
         },
@@ -310,11 +315,13 @@ const Users = () => {
 
       if (error) throw error;
       if (!data.success) throw new Error(data.error || 'Failed to invite user');
-      
+
       return data;
     },
     onSuccess: (data) => {
-      if (data.temporaryPassword) {
+      if (data.passwordEmailed) {
+        toast.success("User created — login details emailed. They'll change the password on first login.");
+      } else if (data.temporaryPassword) {
         toast.success(
           `User created! Temporary password: ${data.temporaryPassword}`,
           { duration: 10000 }
@@ -329,6 +336,7 @@ const Users = () => {
       setSelectedClientId("");
       setSelectedSiteIds([]);
       setTemporaryPassword("");
+      setSendCredentialsByEmail(false);
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (error: any) => {
@@ -653,11 +661,18 @@ const Users = () => {
       return;
     }
     
-    inviteMutation.mutate({ 
-      email, 
-      fullName, 
+    // When emailing credentials, the user needs an initial password to receive.
+    // Use the admin-typed one if present, otherwise generate a strong one.
+    const initialPassword = sendCredentialsByEmail
+      ? (temporaryPassword || generateInitialPassword())
+      : (temporaryPassword || undefined);
+
+    inviteMutation.mutate({
+      email,
+      fullName,
       role,
-      temporaryPassword: temporaryPassword || undefined,
+      temporaryPassword: initialPassword,
+      deliverByEmail: sendCredentialsByEmail || undefined,
       clientId: role === "Client" ? selectedClientId : undefined,
       siteIds: role === "Contractor" ? selectedSiteIds : undefined
     });
@@ -797,7 +812,7 @@ const Users = () => {
                   <Input
                     id="temporaryPassword"
                     type="text"
-                    placeholder="Leave blank to send email invite"
+                    placeholder={sendCredentialsByEmail ? "Leave blank to auto-generate" : "Leave blank to send email invite"}
                     value={temporaryPassword}
                     onChange={(e) => setTemporaryPassword(e.target.value)}
                     minLength={6}
@@ -805,6 +820,25 @@ const Users = () => {
                   <p className="text-xs text-muted-foreground">
                     If set, user can login immediately and will be required to change password on first login.
                   </p>
+                </div>
+                <div className="flex items-start gap-2 rounded-md border border-border p-3">
+                  <input
+                    id="sendCredentialsByEmail"
+                    type="checkbox"
+                    className="mt-1 h-4 w-4"
+                    checked={sendCredentialsByEmail}
+                    onChange={(e) => setSendCredentialsByEmail(e.target.checked)}
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="sendCredentialsByEmail" className="cursor-pointer">
+                      Email login details to the user
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Sends a branded email with their email address and an initial password
+                      (auto-generated if left blank above). They must change it on first login.
+                      Leave unchecked to send a passwordless invite link instead.
+                    </p>
+                  </div>
                 </div>
               </div>
               <DialogFooter>
