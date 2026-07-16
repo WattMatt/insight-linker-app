@@ -352,7 +352,9 @@ const InspectionDetail = () => {
     }
 
     try {
-      const { error } = await supabase
+      // .select() so we can verify the row actually changed: a signed-out/expired session
+      // makes RLS filter the update into a zero-row "success" — that must never toast success.
+      const { data, error } = await supabase
         .from('snags')
         .update({
           title: editingSnag.title,
@@ -362,9 +364,14 @@ const InspectionDetail = () => {
           risk_level: editingSnag.risk_level || null,
           estimated_cost: editingSnag.estimated_cost ? parseFloat(editingSnag.estimated_cost) : null
         })
-        .eq('id', editingSnag.id);
+        .eq('id', editingSnag.id)
+        .select('id');
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        toast.error("Snag NOT saved — your session may have expired. Log in again, then retry.");
+        return;
+      }
 
       toast.success("Snag updated successfully");
       setSnagDialogOpen(false);
@@ -386,12 +393,19 @@ const InspectionDetail = () => {
     const newStatus = currentStatus === 'Open' ? 'Closed' : 'Open';
 
     try {
-      const { error } = await supabase
+      // Verify a row actually changed — see handleUpdateSnag. This exact call once lost a
+      // whole afternoon of snag closures to an expired session that kept toasting success.
+      const { data, error } = await supabase
         .from('snags')
         .update({ status: newStatus })
-        .eq('id', snagId);
+        .eq('id', snagId)
+        .select('id, status');
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        toast.error("Snag NOT saved — your session may have expired. Log in again, then retry.");
+        return;
+      }
 
       toast.success(`Snag ${newStatus.toLowerCase()} successfully`);
       fetchSnags();
@@ -405,12 +419,17 @@ const InspectionDetail = () => {
     if (!confirm("Are you sure you want to delete this snag?")) return;
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('snags')
         .delete()
-        .eq('id', snagId);
+        .eq('id', snagId)
+        .select('id');
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        toast.error("Snag NOT deleted — your session may have expired. Log in again, then retry.");
+        return;
+      }
 
       toast.success("Snag deleted successfully");
       fetchSnags();

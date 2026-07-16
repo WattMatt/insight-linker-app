@@ -10,7 +10,7 @@ import {
   Workflow, ListChecks, Thermometer, FileText, CalendarClock,
   ChevronRight, TrendingUp, CheckCircle2,
 } from "lucide-react";
-import { readiness, computeSiteHealth } from "@/lib/siteHealth";
+import { readiness, computeSiteHealth, healthBreakdown, subsectionReadiness, getHealthBand } from "@/lib/siteHealth";
 import { cocExpiryBuckets, snagAging } from "@/lib/kpiMetrics";
 import { snagStatusBucket } from "@/lib/subsectionStatus";
 import { buildActionHref } from "@/lib/buildActionHref";
@@ -130,6 +130,30 @@ export const ComplianceDashboard = ({
   const readyPct = rd.total ? Math.round((rd.ready / rd.total) * 100) : 0;
   const health = computeSiteHealth(subsections, snagsForHealth, inspections);
 
+  // Breakdown of the health score + per-subsection outstanding items (same inputs as the score,
+  // so the rows always reconcile with the headline %).
+  const breakdown = healthBreakdown(subsections, snagsForHealth, inspections);
+  const subRows = subsectionReadiness(subsections, snagsForHealth, inspections);
+  const nameById = new Map(subsections.map((s) => [s.id, s.name]));
+  const outstanding = subRows
+    .filter((r) => r.openSnags > 0 || !r.inspected || !r.metered)
+    .sort((a, b) =>
+      Number(b.blocked) - Number(a.blocked) || b.openSnags - a.openSnags ||
+      Number(!b.inspected) - Number(!a.inspected) || Number(!b.metered) - Number(!a.metered))
+    .map((r) => ({ row: r, name: nameById.get(r.id) ?? "—" }));
+  const fmtPts = (p: number) => {
+    const r1 = Math.round(p * 10) / 10;
+    return Number.isInteger(r1) ? String(r1) : r1.toFixed(1);
+  };
+  const bk = Object.fromEntries(breakdown.map((f) => [f.key, f]));
+  const gaps: string[] = [];
+  const snagGap = bk.snags.total - bk.snags.done;
+  if (snagGap > 0) gaps.push(`resolve ${snagGap} snag${snagGap === 1 ? "" : "s"} (+${fmtPts(bk.snags.maxPoints - bk.snags.points)} pts)`);
+  const inspGap = bk.inspections.total - bk.inspections.done;
+  if (inspGap > 0) gaps.push(`add photos to ${inspGap} inspection${inspGap === 1 ? "" : "s"} (+${fmtPts(bk.inspections.maxPoints - bk.inspections.points)} pts)`);
+  const meterGap = bk.metering.total - bk.metering.done;
+  if (meterGap > 0) gaps.push(`meter ${meterGap} subsection${meterGap === 1 ? "" : "s"} (+${fmtPts(bk.metering.maxPoints - bk.metering.points)} pts)`);
+
   const counts = { open: 0, inProgress: 0, closed: 0 };
   for (const s of snagRows) counts[snagStatusBucket(s.status)]++;
   const totalSnags = counts.open + counts.inProgress + counts.closed;
@@ -208,6 +232,85 @@ export const ComplianceDashboard = ({
           </CardContent>
         </Card>
       </div>
+
+      {/* Health breakdown: what the % is made of + what's outstanding per subsection */}
+      {rd.total > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <Gauge className="h-4 w-4 text-muted-foreground" />
+              Operational health breakdown
+            </CardTitle>
+            <CardDescription>
+              {health.score}% — weighted from snags (40%), inspections (35%) and metering (25%).
+              COC &amp; documents count under Handover completion, not this score.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="space-y-3">
+                {breakdown.map((f) => {
+                  const band = getHealthBand(f.factor);
+                  const barColor = band === "success" ? "bg-green-500" : band === "warning" ? "bg-yellow-500" : "bg-red-500";
+                  return (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => goCategory(f.key)}
+                      className="w-full text-left group"
+                    >
+                      <div className="flex items-baseline justify-between gap-2 mb-1">
+                        <span className="text-sm group-hover:underline">{f.label}</span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {f.done}/{f.total} · <span className="font-medium text-foreground">{fmtPts(f.points)}</span>/{f.maxPoints} pts
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div className={`h-full ${barColor}`} style={{ width: `${f.factor}%` }} />
+                      </div>
+                    </button>
+                  );
+                })}
+                <p className="text-xs text-muted-foreground pt-1">
+                  {gaps.length ? `To reach 100%: ${gaps.join(", ")}.` : "All factors complete — 100%."}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Outstanding by subsection — click to open</p>
+                {loading ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : outstanding.length === 0 ? (
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />Nothing outstanding
+                  </p>
+                ) : (
+                  <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                    {outstanding.map(({ row, name }) => (
+                      <button
+                        key={row.id}
+                        type="button"
+                        onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${row.id}?tab=overview`)}
+                        className="w-full flex items-center justify-between gap-2 rounded-md border border-transparent bg-muted/40 px-3 py-1.5 text-left hover:border-border transition-colors"
+                      >
+                        <span className="text-sm truncate">{name}</span>
+                        <span className="flex gap-1 shrink-0">
+                          {row.openSnags > 0 && (
+                            <Badge variant={row.blocked ? "destructive" : "secondary"} className="text-xs">
+                              {row.openSnags} snag{row.openSnags !== 1 ? "s" : ""}
+                            </Badge>
+                          )}
+                          {!row.inspected && <Badge variant="secondary" className="text-xs">inspection</Badge>}
+                          {!row.metered && <Badge variant="destructive" className="text-xs">metering</Badge>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Deliverables grid */}
       <div>
