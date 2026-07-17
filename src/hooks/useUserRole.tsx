@@ -58,10 +58,16 @@ export const useUserRole = () => {
 };
 
 export const useClientInfo = (previewClientId?: string) => {
-  const { data: userRole } = useUserRole();
-  
+  const { data: userRole, isPending: roleIsPending } = useUserRole();
+
   return useQuery({
-    queryKey: ["user-client-info", previewClientId],
+    // The role is part of the key: the queryFn branches on it, so a result
+    // computed before the role resolved must not be served once it has.
+    queryKey: ["user-client-info", previewClientId ?? null, userRole ?? null],
+    // Wait for the role query to settle (isPending covers its disabled phase
+    // before the session's userId lands) — otherwise an admin preview would
+    // run the normal-client branch and cache null.
+    enabled: !roleIsPending,
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
