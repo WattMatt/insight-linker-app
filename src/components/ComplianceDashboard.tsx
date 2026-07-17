@@ -10,7 +10,8 @@ import {
   Workflow, ListChecks, Thermometer, FileText, CalendarClock,
   ChevronRight, TrendingUp, CheckCircle2,
 } from "lucide-react";
-import { readiness, computeSiteHealth, healthBreakdown, subsectionReadiness, getHealthBand } from "@/lib/siteHealth";
+import { readiness, computeSiteHealth, healthBreakdown, subsectionReadiness } from "@/lib/siteHealth";
+import { HealthFactorRows, describeHealthGaps } from "@/components/HealthFactorRows";
 import { cocExpiryBuckets, snagAging } from "@/lib/kpiMetrics";
 import { snagStatusBucket } from "@/lib/subsectionStatus";
 import { buildActionHref } from "@/lib/buildActionHref";
@@ -141,18 +142,7 @@ export const ComplianceDashboard = ({
       Number(b.blocked) - Number(a.blocked) || b.openSnags - a.openSnags ||
       Number(!b.inspected) - Number(!a.inspected) || Number(!b.metered) - Number(!a.metered))
     .map((r) => ({ row: r, name: nameById.get(r.id) ?? "—" }));
-  const fmtPts = (p: number) => {
-    const r1 = Math.round(p * 10) / 10;
-    return Number.isInteger(r1) ? String(r1) : r1.toFixed(1);
-  };
-  const bk = Object.fromEntries(breakdown.map((f) => [f.key, f]));
-  const gaps: string[] = [];
-  const snagGap = bk.snags.total - bk.snags.done;
-  if (snagGap > 0) gaps.push(`resolve ${snagGap} snag${snagGap === 1 ? "" : "s"} (+${fmtPts(bk.snags.maxPoints - bk.snags.points)} pts)`);
-  const inspGap = bk.inspections.total - bk.inspections.done;
-  if (inspGap > 0) gaps.push(`add photos to ${inspGap} inspection${inspGap === 1 ? "" : "s"} (+${fmtPts(bk.inspections.maxPoints - bk.inspections.points)} pts)`);
-  const meterGap = bk.metering.total - bk.metering.done;
-  if (meterGap > 0) gaps.push(`meter ${meterGap} subsection${meterGap === 1 ? "" : "s"} (+${fmtPts(bk.metering.maxPoints - bk.metering.points)} pts)`);
+  const gaps = describeHealthGaps(breakdown);
 
   const counts = { open: 0, inProgress: 0, closed: 0 };
   for (const s of snagRows) counts[snagStatusBucket(s.status)]++;
@@ -249,28 +239,7 @@ export const ComplianceDashboard = ({
           <CardContent>
             <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-3">
-                {breakdown.map((f) => {
-                  const band = getHealthBand(f.factor);
-                  const barColor = band === "success" ? "bg-green-500" : band === "warning" ? "bg-yellow-500" : "bg-red-500";
-                  return (
-                    <button
-                      key={f.key}
-                      type="button"
-                      onClick={() => goCategory(f.key)}
-                      className="w-full text-left group"
-                    >
-                      <div className="flex items-baseline justify-between gap-2 mb-1">
-                        <span className="text-sm group-hover:underline">{f.label}</span>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {f.done}/{f.total} · <span className="font-medium text-foreground">{fmtPts(f.points)}</span>/{f.maxPoints} pts
-                        </span>
-                      </div>
-                      <div className="h-2 rounded-full bg-muted overflow-hidden">
-                        <div className={`h-full ${barColor}`} style={{ width: `${f.factor}%` }} />
-                      </div>
-                    </button>
-                  );
-                })}
+                <HealthFactorRows breakdown={breakdown} onFactorClick={goCategory} />
                 <p className="text-xs text-muted-foreground pt-1">
                   {gaps.length ? `To reach 100%: ${gaps.join(", ")}.` : "All factors complete — 100%."}
                 </p>
