@@ -1,6 +1,6 @@
 import withPWAInit from "@ducanh2912/next-pwa";
 import { fileURLToPath } from "url";
-import { dirname } from "path";
+import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -148,6 +148,14 @@ const nextConfig = {
       ...config.resolve.alias,
       canvas: false,
     };
+    // pdfjs-dist's pdf.mjs declares top-level `var __webpack_exports__`, which
+    // shadows the dev runtime's parameter inside next dev's eval-wrapped
+    // modules and crashes with "Object.defineProperty called on non-object".
+    // Applies to every pdfjs-dist copy (root and react-pdf's nested one).
+    config.module.rules.push({
+      test: /[\\/]pdfjs-dist[\\/]build[\\/][^\\/]*\.mjs$/,
+      loader: join(__dirname, 'pdfjs-shadow-fix-loader.cjs'),
+    });
     return config;
   },
 };
