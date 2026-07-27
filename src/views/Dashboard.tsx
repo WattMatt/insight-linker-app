@@ -128,7 +128,7 @@ const Dashboard = () => {
           .in("risk_level", ["High", "Critical"])
           .order("created_at", { ascending: false })
           .limit(10),
-        supabase.from('qr_scans').select('*', { count: 'exact', head: true })
+        supabase.from('qr_scans').select('id', { count: 'exact', head: true })
           .gte('scanned_at', new Date(Date.now() - 30 * 86400000).toISOString()),
       ]);
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { formatDistanceToNow } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,25 +16,11 @@ interface SubsectionScanRow {
     lastScannedAt: string | null;
 }
 
-// Tiny relative-time helper — no dependency, just enough granularity for a scan-activity table.
-function formatRelativeTime(iso: string): string {
-    const diffMs = Date.now() - new Date(iso).getTime();
-    const minutes = Math.floor(diffMs / 60000);
-    if (minutes < 1) return "just now";
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 30) return `${days}d ago`;
-    const months = Math.floor(days / 30);
-    if (months < 12) return `${months}mo ago`;
-    const years = Math.floor(months / 12);
-    return `${years}y ago`;
-}
-
 export const QRScanActivity: React.FC<QRScanActivityProps> = ({ subsections }) => {
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState<SubsectionScanRow[]>([]);
+    const [scansCapped, setScansCapped] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const ids = subsections.map((s) => s.id);
@@ -48,38 +35,31 @@ export const QRScanActivity: React.FC<QRScanActivityProps> = ({ subsections }) =
 
         const fetchScanActivity = async () => {
             setLoading(true);
+            setError(null);
             try {
                 const since = new Date(Date.now() - 30 * 86400000).toISOString();
 
-                const { data: recent } = await supabase
+                const { data: recent, error: fetchError } = await supabase
                     .from('qr_scans')
                     .select('subsection_id, scanned_at')
                     .in('subsection_id', ids)
                     .gte('scanned_at', since)
                     .order('scanned_at', { ascending: false });
 
-                const { data: lastScans } = await supabase
-                    .from('qr_scans')
-                    .select('subsection_id, scanned_at')
-                    .in('subsection_id', ids)
-                    .order('scanned_at', { ascending: false })
-                    .limit(1000);
+                if (fetchError) throw fetchError;
 
                 if (cancelled) return;
 
-                // 30d count per subsection
+                // 30d count per subsection, and last scan per subsection — derived from the
+                // same 30d-windowed rows, ordered desc, so the first occurrence per
+                // subsection_id is both the count source and the most recent scan.
                 const count30dBySubsection = new Map<string, number>();
+                const lastScanBySubsection = new Map<string, string>();
                 for (const scan of recent || []) {
                     count30dBySubsection.set(
                         scan.subsection_id,
                         (count30dBySubsection.get(scan.subsection_id) || 0) + 1
                     );
-                }
-
-                // Last scan per subsection — lastScans is ordered desc, so the first
-                // occurrence per subsection_id is the most recent scan.
-                const lastScanBySubsection = new Map<string, string>();
-                for (const scan of lastScans || []) {
                     if (!lastScanBySubsection.has(scan.subsection_id)) {
                         lastScanBySubsection.set(scan.subsection_id, scan.scanned_at);
                     }
@@ -92,7 +72,7 @@ export const QRScanActivity: React.FC<QRScanActivityProps> = ({ subsections }) =
                     lastScannedAt: lastScanBySubsection.get(s.id) || null,
                 }));
 
-                // Never-scanned rows sort last; otherwise most-recently-scanned first.
+                // No-scan rows sort last; otherwise most-recently-scanned first.
                 nextRows.sort((a, b) => {
                     if (!a.lastScannedAt && !b.lastScannedAt) return a.name.localeCompare(b.name);
                     if (!a.lastScannedAt) return 1;
@@ -101,9 +81,15 @@ export const QRScanActivity: React.FC<QRScanActivityProps> = ({ subsections }) =
                 });
 
                 setRows(nextRows);
-            } catch (error) {
-                console.error("Error fetching QR scan activity:", error);
-                if (!cancelled) setRows([]);
+                // PostgREST caps unbounded selects at 1000 rows by default — a full page
+                // means the true 30d count may be higher than what we can see.
+                setScansCapped((recent || []).length === 1000);
+            } catch (err) {
+                console.error("Error fetching QR scan activity:", err);
+                if (!cancelled) {
+                    setRows([]);
+                    setError("Couldn't load scan activity");
+                }
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -117,9 +103,10 @@ export const QRScanActivity: React.FC<QRScanActivityProps> = ({ subsections }) =
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [subsections.map((s) => s.id).join(",")]);
 
-    const totalScans30d = rows.reduce((sum, r) => sum + r.count30d, 0);
+    const totalScans30dCount = rows.reduce((sum, r) => sum + r.count30d, 0);
+    const totalScans30d = scansCapped ? "1000+" : String(totalScans30dCount);
     const subsectionsScanned30d = rows.filter((r) => r.count30d > 0).length;
-    const neverScanned = rows.filter((r) => !r.lastScannedAt).length;
+    const noScans30d = rows.filter((r) => !r.lastScannedAt).length;
 
     return (
         <Card>
@@ -132,6 +119,8 @@ export const QRScanActivity: React.FC<QRScanActivityProps> = ({ subsections }) =
             <CardContent>
                 {loading ? (
                     <div className="text-sm text-muted-foreground py-8 text-center">Loading…</div>
+                ) : error ? (
+                    <div className="text-sm text-destructive py-8 text-center">{error}</div>
                 ) : (
                     <>
                         <div className="flex flex-wrap gap-6 mb-6">
@@ -144,8 +133,8 @@ export const QRScanActivity: React.FC<QRScanActivityProps> = ({ subsections }) =
                                 <div className="text-xs text-muted-foreground">Subsections scanned 30d</div>
                             </div>
                             <div>
-                                <div className="text-2xl font-bold">{neverScanned}</div>
-                                <div className="text-xs text-muted-foreground">Never scanned</div>
+                                <div className="text-2xl font-bold">{noScans30d}</div>
+                                <div className="text-xs text-muted-foreground">No scans in 30d</div>
                             </div>
                         </div>
 
@@ -170,10 +159,10 @@ export const QRScanActivity: React.FC<QRScanActivityProps> = ({ subsections }) =
                                                 <td className="py-2 pr-4">{row.count30d}</td>
                                                 <td className="py-2">
                                                     {row.lastScannedAt ? (
-                                                        formatRelativeTime(row.lastScannedAt)
+                                                        formatDistanceToNow(new Date(row.lastScannedAt), { addSuffix: true })
                                                     ) : (
-                                                        <Badge variant="destructive" className="opacity-70">
-                                                            Never scanned
+                                                        <Badge variant="outline" className="text-muted-foreground">
+                                                            No scans · 30d
                                                         </Badge>
                                                     )}
                                                 </td>

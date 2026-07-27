@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,23 +16,6 @@ interface QRScanEntry {
       name: string;
     } | null;
   } | null;
-}
-
-// Tiny relative-time helper — no dependency, just enough granularity for a scan-activity table.
-// Mirrors src/components/site/QRScanActivity.tsx so both views read scan recency the same way.
-function formatRelativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  const years = Math.floor(months / 12);
-  return `${years}y ago`;
 }
 
 const QRActivity = () => {
@@ -66,9 +50,11 @@ const QRActivity = () => {
   const totalScansCapped = scans.length === 500;
   const totalScansLabel = totalScansCapped ? "500+" : String(scans.length);
   const distinctSubsections = new Set(scans.map((s) => s.subsection_id)).size;
+  const distinctSubsectionsLabel = totalScansCapped ? `${distinctSubsections}+` : String(distinctSubsections);
   const distinctSites = new Set(
     scans.map((s) => s.subsections?.site_id).filter((id): id is string => Boolean(id))
   ).size;
+  const distinctSitesLabel = totalScansCapped ? `${distinctSites}+` : String(distinctSites);
 
   if (loading) {
     return (
@@ -107,7 +93,7 @@ const QRActivity = () => {
             <Layers className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{distinctSubsections}</div>
+            <div className="text-2xl font-bold">{distinctSubsectionsLabel}</div>
           </CardContent>
         </Card>
 
@@ -117,7 +103,7 @@ const QRActivity = () => {
             <MapPin className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{distinctSites}</div>
+            <div className="text-2xl font-bold">{distinctSitesLabel}</div>
           </CardContent>
         </Card>
       </div>
@@ -154,7 +140,7 @@ const QRActivity = () => {
                     <tr key={`${scan.subsection_id}-${scan.scanned_at}-${index}`} className="border-b last:border-0">
                       <td className="py-2 pr-4">{scan.subsections?.sites?.name || "—"}</td>
                       <td className="py-2 pr-4">{scan.subsections?.name || "—"}</td>
-                      <td className="py-2 pr-4">{formatRelativeTime(scan.scanned_at)}</td>
+                      <td className="py-2 pr-4">{formatDistanceToNow(new Date(scan.scanned_at), { addSuffix: true })}</td>
                       <td className="py-2">
                         {scan.source === "redirect" ? (
                           <Badge variant="secondary">Scan</Badge>
