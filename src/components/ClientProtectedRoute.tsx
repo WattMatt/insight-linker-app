@@ -1,4 +1,4 @@
-import { Navigate, useSearchParams } from "@/lib/navigation";
+import { Navigate, useSearchParams, useLocation } from "@/lib/navigation";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuthSession } from "@/components/auth/useAuthSession";
 import { useOnboardingStatus } from "@/components/auth/useOnboardingStatus";
@@ -9,11 +9,15 @@ const ClientProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, isLoading: sessionLoading } = useAuthSession();
   const { data: userRole, isLoading: roleLoading } = useUserRole();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const previewClientId = searchParams.get("preview");
   const { data: onboardingStatus, refetch } = useOnboardingStatus(!!session);
 
   if (sessionLoading || roleLoading) return <AuthLoading variant="skeleton" />;
-  if (!session) return <Navigate to="/auth/login" replace />;
+  if (!session) {
+    const next = encodeURIComponent(location.pathname + (location.search || ""));
+    return <Navigate to={`/auth/login?next=${next}`} replace />;
+  }
   // Admin preview path — render children without role match (so admins can
   // visit a Client portal as another user).
   if (userRole === "Admin" && previewClientId) return <>{children}</>;

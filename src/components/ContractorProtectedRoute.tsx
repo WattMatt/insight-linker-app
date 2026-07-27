@@ -15,7 +15,10 @@ const ContractorProtectedRoute = ({ children }: { children: React.ReactNode }) =
   const { data: onboardingStatus, refetch } = useOnboardingStatus(!!session);
 
   if (sessionLoading || roleLoading) return <AuthLoading variant="skeleton" />;
-  if (!session) return <Navigate to="/auth/login" replace />;
+  if (!session) {
+    const next = encodeURIComponent(location.pathname + (location.search || ""));
+    return <Navigate to={`/auth/login?next=${next}`} replace />;
+  }
   if (userRole === "Admin" && previewSiteId) return <>{children}</>;
   if (userRole !== "Contractor") return <Navigate to="/dashboard" replace />;
   if (!location.pathname.startsWith("/contractor")) return <Navigate to="/contractor" replace />;
