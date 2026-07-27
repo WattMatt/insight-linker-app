@@ -44,13 +44,13 @@ export async function uploadCocCertificate(opts: { subsectionId: string; cocCate
 }
 
 /** Insert a COC certificate document row from an already-stored file (no upload). */
-export async function insertCocCertificateDoc(opts: { subsectionId: string; cocCategoryId: string; fileName: string; fileUrl: string; fileSize: number | null; cocNumber: string | null }): Promise<{ id: string }> {
+export async function insertCocCertificateDoc(opts: { subsectionId: string; cocCategoryId: string; fileName: string; fileUrl: string; fileSize: number | null; cocNumber: string | null; cocStatus?: "Pass" | "Fail" | "Pending" }): Promise<{ id: string }> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
   const { data: row, error } = await supabase.from("subsection_documents").insert({
     subsection_id: opts.subsectionId, category_id: opts.cocCategoryId, file_name: opts.fileName,
     file_url: opts.fileUrl, file_size: opts.fileSize, uploaded_by: user.id,
-    coc_number: opts.cocNumber, coc_status: "Pending",
+    coc_number: opts.cocNumber, coc_status: opts.cocStatus ?? "Pending",
   }).select("id").single();
   if (error || !row) throw new Error(`Save failed: ${error?.message}`);
   return { id: row.id };
