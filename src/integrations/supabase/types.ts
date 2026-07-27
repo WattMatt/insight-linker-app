@@ -3100,6 +3100,7 @@ export type Database = {
         }[]
       }
       get_public_portfolio: { Args: { p_token: string }; Returns: Json }
+      get_public_site_register: { Args: { p_site_id: string }; Returns: Json }
       get_public_site_review: {
         Args: { p_site_id: string; p_token: string }
         Returns: Json
