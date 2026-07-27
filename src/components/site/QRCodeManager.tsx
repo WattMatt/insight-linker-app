@@ -10,7 +10,7 @@ import { qrRedirectUrl } from "@/lib/qrBaseUrl";
 import JSZip from 'jszip';
 import { generatePdfBlob, DEFAULT_STYLES } from "@/lib/pdfMakeUtils";
 
-interface QRAnalyticsProps {
+interface QRCodeManagerProps {
     site: Site;
     subsections: Subsection[];
     companyLogo: string | null;
@@ -21,7 +21,7 @@ interface QRAnalyticsProps {
     fetchSiteData: () => void;
 }
 
-export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
+export const QRCodeManager: React.FC<QRCodeManagerProps> = ({
     site,
     subsections,
     companyLogo,

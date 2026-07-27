@@ -12,7 +12,7 @@ import { Site, Subsection, SiteStats } from "@/types/site";
 import { SiteComplianceChecklist } from "@/components/site/SiteComplianceChecklist";
 import { SubsectionList } from "@/components/site/SubsectionList";
 import { SiteDocuments as SiteDocumentsComponent } from "@/components/site/SiteDocuments";
-import { QRAnalytics } from "@/components/site/QRAnalytics";
+import { QRCodeManager } from "@/components/site/QRCodeManager";
 import { SiteReports } from "@/components/site/SiteReports";
 import { SiteEditDialog } from "@/components/site/SiteEditDialog";
 import { DocumentDialogs } from "@/components/site/DocumentDialogs";
@@ -838,7 +838,7 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="qr-analytics">
-          <QRAnalytics site={site} subsections={subsections} companyLogo={companyLogo} generatingAll={generatingAll} setGeneratingAll={setGeneratingAll} downloadingAll={downloadingAll} setDownloadingAll={setDownloadingAll} fetchSiteData={fetchSiteData} />
+          <QRCodeManager site={site} subsections={subsections} companyLogo={companyLogo} generatingAll={generatingAll} setGeneratingAll={setGeneratingAll} downloadingAll={downloadingAll} setDownloadingAll={setDownloadingAll} fetchSiteData={fetchSiteData} />
         </TabsContent>
 
         <TabsContent value="fortress-checklist">
