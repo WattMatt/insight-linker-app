@@ -106,7 +106,6 @@ export function CocMeteringTab({
             evaluationDocuments={getSupabaseEvaluationDocuments()}
             deletingDocumentId={deletingDocumentId}
             uploadingFile={uploadingFile}
-            onSaved={() => { fetchSupabaseDocuments(); refetchSubsection(); }}
             setPreviewDocument={setPreviewDocument}
             handleDownloadDocument={handleDownloadDocument}
             setDeleteDocumentId={setDeleteDocumentId}

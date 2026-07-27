@@ -1,12 +1,7 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Eye, Download, Trash2, Check, Loader2, Upload } from "lucide-react";
-import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import { toCocDoc, groupCocDocuments, cocDocFails, CocDoc, CocType } from "@/lib/cocHierarchy";
+import { Eye, Download, Trash2, Loader2, Upload } from "lucide-react";
+import { toCocDoc, groupCocDocuments, CocDoc } from "@/lib/cocHierarchy";
 import type { SupabaseDocument } from "@/views/subsection-detail/types";
 
 interface Props {
@@ -14,7 +9,6 @@ interface Props {
   evaluationDocuments: SupabaseDocument[];
   deletingDocumentId: string | null;
   uploadingFile: boolean;
-  onSaved: () => void; // call fetchSupabaseDocuments + refetchSubsection
   setPreviewDocument: (doc: { file_name: string; file_url: string } | null) => void;
   handleDownloadDocument: (url: string, fileName: string) => void;
   setDeleteDocumentId: (id: string | null) => void;
@@ -23,177 +17,74 @@ interface Props {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+function StatusBadge({ d }: { d: CocDoc }) {
+  if (d.cocStatus === "Fail") return <Badge variant="destructive" className="text-xs">Fail</Badge>;
+  if (d.cocStatus === "Pass") return <Badge variant="default" className="text-xs">Pass</Badge>;
+  return <Badge variant="secondary" className="text-xs">Awaiting verification</Badge>;
+}
+
+function DocActions({ raw, p }: { raw: SupabaseDocument; p: Props }) {
+  return (
+    <div className="flex items-center gap-1">
+      <Button size="sm" variant="ghost" onClick={() => p.setPreviewDocument({ file_name: raw.file_name, file_url: raw.file_url })} title="Preview document"><Eye className="h-4 w-4" /></Button>
+      <Button size="sm" variant="ghost" onClick={() => p.handleDownloadDocument(raw.file_url, raw.file_name)} title="Download document"><Download className="h-4 w-4" /></Button>
+      <Button size="sm" variant="ghost" onClick={() => p.setDeleteDocumentId(raw.id)} disabled={p.deletingDocumentId === raw.id}>
+        {p.deletingDocumentId === raw.id ? <Loader2 className="h-4 w-4 animate-spin text-destructive" /> : <Trash2 className="h-4 w-4 text-destructive" />}
+      </Button>
+    </div>
+  );
+}
+
 function CocRow({ raw, isInitial, ...p }: { raw: SupabaseDocument; isInitial: boolean } & Props) {
   const d: CocDoc = toCocDoc(raw);
-  const [type, setType] = useState<CocType>(d.cocType);
-  const [number, setNumber] = useState(d.cocNumber ?? "");
-  const [issue, setIssue] = useState(d.cocIssueDate ?? "");
-  const [expiry, setExpiry] = useState(d.cocExpiryDate ?? "");
-  const [status, setStatus] = useState<"Pass" | "Fail" | "Pending">(d.cocStatus === "Missing" ? "Pending" : d.cocStatus);
-  const [saving, setSaving] = useState(false);
-  const failing = cocDocFails({ ...d, cocStatus: status, cocExpiryDate: expiry || null }, today());
-
-  // "Needs save" = no verdict recorded yet, OR an edited field differs from what's stored.
-  // Once saved (onSaved refetches), the persisted props match the row again -> shows "Saved".
-  const norm = (v?: string | null) => (v ?? "").trim();
-  const verdictRecorded = ["Pass", "Fail", "Approved", "Valid", "Failed", "Rejected"].includes(d.cocStatus ?? "");
-  const fieldsChanged =
-    type !== d.cocType ||
-    norm(number) !== norm(d.cocNumber) ||
-    norm(issue) !== norm(d.cocIssueDate) ||
-    norm(expiry) !== norm(d.cocExpiryDate) ||
-    status !== (d.cocStatus === "Missing" ? "Pending" : d.cocStatus);
-  const needsSave = !verdictRecorded || fieldsChanged;
-
-  const save = async () => {
-    setSaving(true);
-    const { error } = await supabase.from("subsection_documents").update({
-      coc_type: type, coc_number: number.trim() || null,
-      coc_issue_date: issue || null, coc_expiry_date: expiry || null, coc_status: status,
-    }).eq("id", raw.id);
-    setSaving(false);
-    if (error) { toast.error(`Failed to save COC: ${error.message}`); return; }
-    toast.success("COC saved");
-    p.onSaved();
-  };
+  const meta = [
+    d.cocNumber ? `No. ${d.cocNumber}` : "No cert number",
+    d.cocIssueDate ? `Issued ${d.cocIssueDate}` : null,
+    d.cocExpiryDate ? `Expires ${d.cocExpiryDate}` : null,
+  ].filter(Boolean).join(" · ");
+  const evalDoc = p.evaluationDocuments.find(e => e.parent_document_id === raw.id);
 
   return (
     <div className="flex flex-col gap-2 p-3 bg-muted/40 rounded-md">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
-          <Badge variant={isInitial ? "default" : "outline"} className="text-xs">{isInitial ? "Initial" : type}</Badge>
+          <Badge variant={isInitial ? "default" : "outline"} className="text-xs">{isInitial ? "Initial" : d.cocType}</Badge>
           <span className="text-sm font-medium truncate">{raw.file_name}</span>
         </div>
         <div className="flex items-center gap-1">
-          <Badge variant={failing ? "destructive" : status === "Pass" ? "default" : "secondary"} className="text-xs">
-            {failing ? "Fail" : status}
-          </Badge>
-          <Button size="sm" variant="ghost" onClick={() => p.setPreviewDocument({ file_name: raw.file_name, file_url: raw.file_url })} title="Preview document"><Eye className="h-4 w-4" /></Button>
-          <Button size="sm" variant="ghost" onClick={() => p.handleDownloadDocument(raw.file_url, raw.file_name)} title="Download document"><Download className="h-4 w-4" /></Button>
-          <Button size="sm" variant="ghost" onClick={() => p.setDeleteDocumentId(raw.id)} disabled={p.deletingDocumentId === raw.id}>
-            {p.deletingDocumentId === raw.id ? <Loader2 className="h-4 w-4 animate-spin text-destructive" /> : <Trash2 className="h-4 w-4 text-destructive" />}
-          </Button>
+          <StatusBadge d={d} />
+          <DocActions raw={raw} p={p} />
         </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
-        <div>
-          <label className="text-xs text-muted-foreground">Type</label>
-          <Select value={type} onValueChange={(v) => setType(v as CocType)}>
-            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Initial">Initial</SelectItem>
-              <SelectItem value="Supplementary">Supplementary</SelectItem>
-              <SelectItem value="Temporary">Temporary</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div><label className="text-xs text-muted-foreground">COC number</label><Input className="h-8" value={number} onChange={(e) => setNumber(e.target.value)} /></div>
-        <div><label className="text-xs text-muted-foreground">Issue</label><Input className="h-8" type="date" value={issue} onChange={(e) => setIssue(e.target.value)} /></div>
-        <div><label className="text-xs text-muted-foreground">Expiry</label><Input className="h-8" type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} /></div>
-        <div>
-          <label className="text-xs text-muted-foreground">Verdict</label>
-          <Select value={status} onValueChange={(v) => setStatus(v as "Pass" | "Fail" | "Pending")}>
-            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Pending">Pending</SelectItem>
-              <SelectItem value="Pass">Pass</SelectItem>
-              <SelectItem value="Fail">Fail</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      {/* Evaluation report (supporting documentation — does not gate compliance) */}
-      {(() => {
-        const evalDoc = p.evaluationDocuments.find(e => e.parent_document_id === raw.id);
-        if (evalDoc) {
-          return (
-            <div className="rounded-md border bg-background px-3 py-2 space-y-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-xs font-medium text-muted-foreground">Evaluation report</span>
-                <div className="flex items-center gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => p.setPreviewDocument({ file_name: evalDoc.file_name, file_url: evalDoc.file_url })} title="Preview evaluation report"><Eye className="h-4 w-4" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => p.handleDownloadDocument(evalDoc.file_url, evalDoc.file_name)} title="Download evaluation report"><Download className="h-4 w-4" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => p.setDeleteDocumentId(evalDoc.id)} disabled={p.deletingDocumentId === evalDoc.id}>
-                    {p.deletingDocumentId === evalDoc.id ? <Loader2 className="h-4 w-4 animate-spin text-destructive" /> : <Trash2 className="h-4 w-4 text-destructive" />}
-                  </Button>
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-sm truncate">{evalDoc.file_name}</span>
-                <EvalVerdict raw={evalDoc} onSaved={p.onSaved} />
-              </div>
-            </div>
-          );
-        }
-        return (
-          <div className="rounded-md border border-dashed bg-background px-3 py-2">
-            <label className="flex items-center justify-between gap-2 cursor-pointer">
-              <span className="text-xs text-muted-foreground">No evaluation report yet</span>
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-                <Upload className="h-4 w-4" /> Upload evaluation report
-              </span>
-              <input
-                type="file"
-                className="hidden"
-                accept=".html,.htm,.pdf,.doc,.docx,.jpg,.jpeg,.png"
-                disabled={p.uploadingFile}
-                onChange={async (e) => {
-                  const f = e.target.files?.[0];
-                  if (f) { await p.onUploadEvaluationReport({ id: raw.id, coc_number: number.trim() || d.cocNumber || null }, f); }
-                  e.target.value = "";
-                }}
-              />
-            </label>
+      <p className="text-xs text-muted-foreground">{meta} — verdict comes from the imported verification register.</p>
+      {evalDoc ? (
+        <div className="rounded-md border bg-background px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
+          <div className="min-w-0">
+            <span className="text-xs font-medium text-muted-foreground">Evaluation report</span>
+            <p className="text-sm truncate">{evalDoc.file_name}</p>
           </div>
-        );
-      })()}
-      <div className="flex justify-end">
-        {needsSave ? (
-          <Button size="sm" onClick={save} disabled={saving}>
-            {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}Save
-          </Button>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-            <Check className="h-4 w-4" /> Saved
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function EvalVerdict({ raw, onSaved }: { raw: SupabaseDocument; onSaved: () => void }) {
-  const initial = ((): "Pass" | "Fail" | "Pending" => {
-    const s = (raw.coc_status ?? "").toLowerCase();
-    if (s === "pass" || s === "approved" || s === "valid") return "Pass";
-    if (s === "fail" || s === "failed" || s === "rejected") return "Fail";
-    return "Pending";
-  })();
-  const [status, setStatus] = useState<"Pass" | "Fail" | "Pending">(initial);
-  const [saving, setSaving] = useState(false);
-  const changed = status !== initial;
-  const save = async () => {
-    setSaving(true);
-    const { error } = await supabase.from("subsection_documents").update({ coc_status: status }).eq("id", raw.id);
-    setSaving(false);
-    if (error) { toast.error(`Failed to save: ${error.message}`); return; }
-    toast.success("Evaluation verdict saved");
-    onSaved();
-  };
-  return (
-    <div className="flex items-center gap-2">
-      <Select value={status} onValueChange={(v) => setStatus(v as "Pass" | "Fail" | "Pending")}>
-        <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="Pending">Pending</SelectItem>
-          <SelectItem value="Pass">Pass</SelectItem>
-          <SelectItem value="Fail">Fail</SelectItem>
-        </SelectContent>
-      </Select>
-      {changed ? (
-        <Button size="sm" onClick={save} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}</Button>
+          <DocActions raw={evalDoc} p={p} />
+        </div>
       ) : (
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600"><Check className="h-4 w-4" /> Saved</span>
+        <div className="rounded-md border border-dashed bg-background px-3 py-2">
+          <label className="flex items-center justify-between gap-2 cursor-pointer">
+            <span className="text-xs text-muted-foreground">No evaluation report yet</span>
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+              <Upload className="h-4 w-4" /> Upload evaluation report
+            </span>
+            <input
+              type="file"
+              className="hidden"
+              accept=".html,.htm,.pdf,.doc,.docx,.jpg,.jpeg,.png"
+              disabled={p.uploadingFile}
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (f) { await p.onUploadEvaluationReport({ id: raw.id, coc_number: d.cocNumber }, f); }
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
       )}
     </div>
   );
