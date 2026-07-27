@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, FileText, Eye, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { PublicVerdictCard } from "@/components/public/PublicVerdictCard";
+import type { PublicVerdict } from "@/lib/publicVerdict";
 
 // get_public_subsection returns only these subsection fields (deliberate
 // data-minimization — no COC/metering on the public landing).
@@ -55,6 +57,7 @@ const PublicSubsection = () => {
   const [siteData, setSiteData] = useState<SiteData | null>(null);
   const [documents, setDocuments] = useState<DocumentCategory[]>([]);
   const [snags, setSnags] = useState<SnagData[]>([]);
+  const [verdict, setVerdict] = useState<PublicVerdict | null>(null);
   const [loading, setLoading] = useState(true);
   const [companySettings, setCompanySettings] = useState<{company_name: string; company_logo_url?: string} | null>(null);
 
@@ -103,6 +106,7 @@ const PublicSubsection = () => {
 
       setDocuments(transformedDocs);
       setSnags(payload.snags || []);
+      setVerdict((payload.verdict as PublicVerdict) ?? null);
     } catch (error) {
       console.error("Error fetching public data:", error);
     } finally {
@@ -285,6 +289,8 @@ const PublicSubsection = () => {
             </div>
           </CardContent>
         </Card>
+
+        <PublicVerdictCard verdict={verdict} />
 
         {/* Subsection Document Categories */}
         {documents.map((category, idx) => (
