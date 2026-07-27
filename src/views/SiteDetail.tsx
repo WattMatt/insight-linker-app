@@ -13,6 +13,7 @@ import { SiteComplianceChecklist } from "@/components/site/SiteComplianceCheckli
 import { SubsectionList } from "@/components/site/SubsectionList";
 import { SiteDocuments as SiteDocumentsComponent } from "@/components/site/SiteDocuments";
 import { QRCodeManager } from "@/components/site/QRCodeManager";
+import { QRScanActivity } from "@/components/site/QRScanActivity";
 import { SiteReports } from "@/components/site/SiteReports";
 import { SiteEditDialog } from "@/components/site/SiteEditDialog";
 import { DocumentDialogs } from "@/components/site/DocumentDialogs";
@@ -837,7 +838,8 @@ const SiteDetail = () => {
           <SiteCocTab siteId={siteId} siteName={site.name} clientName={site.clients?.name ?? null} siteAddress={site.address ?? null} siteKpis={siteKpis} companyLogo={companyLogo} />
         </TabsContent>
 
-        <TabsContent value="qr-analytics">
+        <TabsContent value="qr-analytics" className="space-y-6">
+          <QRScanActivity subsections={subsections} />
           <QRCodeManager site={site} subsections={subsections} companyLogo={companyLogo} generatingAll={generatingAll} setGeneratingAll={setGeneratingAll} downloadingAll={downloadingAll} setDownloadingAll={setDownloadingAll} fetchSiteData={fetchSiteData} />
         </TabsContent>
 
