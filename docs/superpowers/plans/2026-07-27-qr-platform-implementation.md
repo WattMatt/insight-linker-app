@@ -126,7 +126,7 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $
           'issue_date', s.coc_issue_date,
           'expiry_date', (SELECT MAX(sd.coc_expiry_date) FROM subsection_documents sd
                           WHERE sd.subsection_id = s.id AND sd.coc_expiry_date IS NOT NULL),
-          'reviewed_at', s.coc_reviewed_at
+          -- reviewed_at removed in Task 2 quality review (zero writers)
         ) ELSE NULL END
         FROM subsections s WHERE s.id = p_subsection_id)
     )
@@ -438,8 +438,11 @@ import { presentVerdict, type PublicVerdict } from "./publicVerdict";
 
 const base: PublicVerdict = {
   coc_required: true, status: "Pass", cert_number: "C-123",
-  issue_date: "2026-03-14", expiry_date: null, reviewed_at: "2026-03-15",
+  issue_date: "2026-03-14", expiry_date: null,
 };
+// NOTE (review correction 2026-07-27): reviewed_at was removed from the public
+// contract during Task 2's quality review — subsections.coc_reviewed_at has zero
+// writers. The RPC does not return it and the card does not render it.
 const today = new Date("2026-07-27T00:00:00Z");
 
 describe("presentVerdict", () => {
@@ -496,7 +499,6 @@ export interface PublicVerdict {
   cert_number: string | null;
   issue_date: string | null;
   expiry_date: string | null;
-  reviewed_at: string | null;
 }
 
 export type VerdictKind = "pass" | "pass-expiring" | "fail" | "pending" | "missing" | "none";
@@ -579,7 +581,6 @@ export const PublicVerdictCard = ({ verdict }: { verdict: PublicVerdict | null }
         {verdict?.cert_number && <p>COC No. {verdict.cert_number}</p>}
         {verdict?.issue_date && <p>Issued {new Date(verdict.issue_date).toLocaleDateString()}</p>}
         {verdict?.expiry_date && <p>Expiry date {new Date(verdict.expiry_date).toLocaleDateString()}</p>}
-        {verdict?.reviewed_at && <p>Verified {new Date(verdict.reviewed_at).toLocaleDateString()}</p>}
       </div>
     </div>
   );
