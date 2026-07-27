@@ -182,6 +182,11 @@ export default function Login() {
     }
 
     recordAuthEvent("login", { method: "magic_link" });
+    const needsChange = data.user?.user_metadata?.requires_password_change;
+    if (needsChange) {
+      navigate("/auth/reset-password");
+      return;
+    }
     toast.success("Signed in");
     const next = safeNext(searchParams.get("next"));
     if (next) {

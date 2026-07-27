@@ -21,4 +21,15 @@ describe("safeNext", () => {
     expect(safeNext("/dashboardevil")).toBeNull();
     expect(safeNext("/contractorx/foo")).toBeNull();
   });
+  it("rejects dot-segment traversal that escapes the allow-list", () => {
+    expect(safeNext("/dashboard/../../settings")).toBeNull();
+    expect(safeNext("/contractor/../../../settings")).toBeNull();
+  });
+  it("rejects backslash and encoded-slash tricks", () => {
+    expect(safeNext("/\\evil.example")).toBeNull();
+    expect(safeNext("%2F%2Fevil.example")).toBeNull();
+  });
+  it("normalizes harmless internal dot-segments to a clean allow-listed path", () => {
+    expect(safeNext("/dashboard/./")).toBe("/dashboard/");
+  });
 });
