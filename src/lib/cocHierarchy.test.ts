@@ -37,12 +37,12 @@ describe('normalizeCocDocStatus', () => {
   });
 });
 
-describe('cocDocFails', () => {
+describe('cocDocFails (register-truth: expiry is display-only)', () => {
   it('Fail fails', () => expect(cocDocFails(doc({ cocStatus: 'Fail' }), today)).toBe(true));
   it('Pass with future expiry does not fail', () =>
     expect(cocDocFails(doc({ cocStatus: 'Pass', cocExpiryDate: '2027-01-01' }), today)).toBe(false));
-  it('Pass with past expiry fails', () =>
-    expect(cocDocFails(doc({ cocStatus: 'Pass', cocExpiryDate: '2025-01-01' }), today)).toBe(true));
+  it('Pass with past expiry does NOT fail — expiry no longer drives status', () =>
+    expect(cocDocFails(doc({ cocStatus: 'Pass', cocExpiryDate: '2025-01-01' }), today)).toBe(false));
   it('Pass with no expiry does not fail', () =>
     expect(cocDocFails(doc({ cocStatus: 'Pass' }), today)).toBe(false));
   it('Pending does not fail', () => expect(cocDocFails(doc({ cocStatus: 'Pending' }), today)).toBe(false));
@@ -52,8 +52,8 @@ describe('rollupStatus', () => {
   it('no docs => Missing', () => expect(rollupStatus([], today)).toBe('Missing'));
   it('any fail => Fail', () =>
     expect(rollupStatus([doc({ cocStatus: 'Pass' }), doc({ cocStatus: 'Fail' })], today)).toBe('Fail'));
-  it('expired pass => Fail', () =>
-    expect(rollupStatus([doc({ cocStatus: 'Pass', cocExpiryDate: '2025-01-01' })], today)).toBe('Fail'));
+  it('expired pass still rolls up as Pass (re-verification, not expiry, invalidates)', () =>
+    expect(rollupStatus([doc({ cocStatus: 'Pass', cocExpiryDate: '2025-01-01' })], today)).toBe('Pass'));
   it('pass with no fail => Pass', () =>
     expect(rollupStatus([doc({ cocStatus: 'Pass' }), doc({ cocStatus: 'Pending' })], today)).toBe('Pass'));
   it('only pending => Pending', () =>
