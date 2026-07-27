@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Download, FileText, Eye, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PublicVerdictCard } from "@/components/public/PublicVerdictCard";
-import type { PublicVerdict } from "@/lib/publicVerdict";
+import { PublicIssueReportDialog } from "@/components/public/PublicIssueReportDialog";
+import { presentVerdict, type PublicVerdict } from "@/lib/publicVerdict";
 import { useAuthSession } from "@/components/auth/useAuthSession";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -275,6 +276,18 @@ const PublicSubsection = () => {
 
       {/* Main content */}
       <div className="container mx-auto px-4 py-6 max-w-4xl">
+        <div className="flex justify-end mb-4">
+          <PublicIssueReportDialog
+            subsectionId={subsectionId ?? ""}
+            trigger={
+              <Button variant="outline" size="sm">
+                <AlertTriangle className="h-4 w-4 mr-1.5" />
+                Report an issue
+              </Button>
+            }
+          />
+        </div>
+
         {/* Status Summary Card - matching SubsectionDetail layout */}
         <Card className="mb-6 shadow-sm">
           <CardHeader className="pb-4">
@@ -356,6 +369,20 @@ const PublicSubsection = () => {
         </Card>
 
         <PublicVerdictCard verdict={verdict} />
+
+        {presentVerdict(verdict, new Date()).kind === "fail" && (
+          <div className="flex justify-center mb-6 -mt-3">
+            <PublicIssueReportDialog
+              subsectionId={subsectionId ?? ""}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <AlertTriangle className="h-4 w-4 mr-1.5" />
+                  Report an issue
+                </Button>
+              }
+            />
+          </div>
+        )}
 
         <RoleBanner session={session} userRole={userRole} siteData={siteData} subsectionId={subsectionId} navigate={navigate} />
 
