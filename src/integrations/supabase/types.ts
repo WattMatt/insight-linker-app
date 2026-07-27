@@ -2340,6 +2340,7 @@ export type Database = {
           notes: string | null
           photos: Json | null
           project_id: string | null
+          reported_channel: string
           rectification_notes: string | null
           rectification_photos: Json | null
           rectified_at: string | null
@@ -2370,6 +2371,7 @@ export type Database = {
           notes?: string | null
           photos?: Json | null
           project_id?: string | null
+          reported_channel?: string
           rectification_notes?: string | null
           rectification_photos?: Json | null
           rectified_at?: string | null
@@ -2400,6 +2402,7 @@ export type Database = {
           notes?: string | null
           photos?: Json | null
           project_id?: string | null
+          reported_channel?: string
           rectification_notes?: string | null
           rectification_photos?: Json | null
           rectified_at?: string | null
@@ -2576,6 +2579,7 @@ export type Database = {
           metering_status: string | null
           name: string
           qr_code_url: string | null
+          qr_disabled: boolean
           site_id: string
           tenant_name: string | null
           updated_at: string
@@ -2605,6 +2609,7 @@ export type Database = {
           metering_status?: string | null
           name: string
           qr_code_url?: string | null
+          qr_disabled?: boolean
           site_id: string
           tenant_name?: string | null
           updated_at?: string
@@ -2634,6 +2639,7 @@ export type Database = {
           metering_status?: string | null
           name?: string
           qr_code_url?: string | null
+          qr_disabled?: boolean
           site_id?: string
           tenant_name?: string | null
           updated_at?: string
