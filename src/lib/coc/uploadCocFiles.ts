@@ -23,26 +23,6 @@ export async function findOrCreateCategory(subsectionId: string, name: string): 
   return data;
 }
 
-/** Upload a COC certificate into a subsection's COC category (per-COC folder, number extracted). */
-export async function uploadCocCertificate(opts: { subsectionId: string; cocCategoryId: string; file: File }): Promise<{ id: string; cocNumber: string | null }> {
-  const { subsectionId, cocCategoryId, file } = opts;
-  validate(file);
-  const cocNumber = extractCocNumber(file.name);
-  const ts = Date.now();
-  const folderKey = sanitize(cocNumber || `${ts}`);
-  const path = `${subsectionId}/COC/${folderKey}/${ts}-${sanitize(file.name)}`;
-  const { data: up, error: upErr } = await supabase.storage.from("documents").upload(path, file);
-  if (upErr || !up?.path) throw new Error(`Upload failed: ${upErr?.message ?? "no path"}`);
-  const { data: urlData } = supabase.storage.from("documents").getPublicUrl(up.path);
-  try {
-    const { id } = await insertCocCertificateDoc({ subsectionId, cocCategoryId, fileName: file.name, fileUrl: urlData.publicUrl, fileSize: file.size, cocNumber });
-    return { id, cocNumber };
-  } catch (e) {
-    await supabase.storage.from("documents").remove([up.path]);
-    throw e;
-  }
-}
-
 /** Insert a COC certificate document row from an already-stored file (no upload). */
 export async function insertCocCertificateDoc(opts: { subsectionId: string; cocCategoryId: string; fileName: string; fileUrl: string; fileSize: number | null; cocNumber: string | null; cocStatus?: "Pass" | "Fail" | "Pending" }): Promise<{ id: string }> {
   const { data: { user } } = await supabase.auth.getUser();
