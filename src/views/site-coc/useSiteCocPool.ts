@@ -85,10 +85,15 @@ export function useSiteCocPool(siteId: string | undefined, onAssigned: () => voi
     setBusy(true);
     try {
       let n = 0;
+      const failed: string[] = [];
       for (const f of files) {
         try { await assignPoolFile(siteId, f, subsectionId, f.detected_kind === "eval" ? "eval" : "coc"); n++; }
-        catch (e) { if (process.env.NODE_ENV === "development") console.error("batch assign failed", f.file_name, e); }
+        catch (e) {
+          failed.push(f.file_name);
+          if (process.env.NODE_ENV === "development") console.error("batch assign failed", f.file_name, e);
+        }
       }
+      if (failed.length) toast.error(`Failed to assign: ${failed.join(", ")}`, { duration: 8000 });
       toast.success(`Assigned ${n}/${files.length} file(s).`);
       await refetch();
       onAssigned();
