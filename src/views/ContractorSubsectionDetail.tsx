@@ -64,7 +64,9 @@ const ContractorSubsectionDetail = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case "Pass":
       case "Valid":
+      case "Approved":
       case "Completed":
         return "bg-green-500/10 text-green-700 border-green-500/20";
       case "In Progress":
@@ -72,6 +74,9 @@ const ContractorSubsectionDetail = () => {
       case "Pending":
       case "Expiring Soon":
         return "bg-yellow-500/10 text-yellow-700 border-yellow-500/20";
+      case "Fail":
+      case "Failed":
+      case "Rejected":
       case "Missing":
       case "Expired":
         return "bg-red-500/10 text-red-700 border-red-500/20";

@@ -61,7 +61,7 @@ describe('computeSiteDeliverables — counts', () => {
     expect(d.outstandingItems).toHaveLength(2);
   });
 
-  it('coc: a recorded verdict (Pass OR Fail) counts as done; only Missing/Pending stay outstanding', () => {
+  it('coc: only a verified Pass counts as done; Missing/Pending/Failed stay outstanding (register-truth 2026-07-25)', () => {
     const s = computeSiteDeliverables(baseInput({
       subsections: [
         { id: 'a', name: 'A', is_coc_required: true, coc_status: 'Pass' },
@@ -72,15 +72,15 @@ describe('computeSiteDeliverables — counts', () => {
       ],
     }));
     const d = get(s, 'coc');
-    expect(d.done).toBe(2);   // Pass + Fail are both "assessed"
+    expect(d.done).toBe(1);   // only the verified Pass
     expect(d.total).toBe(4);  // 4 required (c is not_required)
     expect(d.status).toBe('outstanding');
-    expect(d.outstandingItems.map(i => i.subsectionId).sort()).toEqual(['m', 'p']);
+    expect(d.outstandingItems.map(i => i.subsectionId).sort()).toEqual(['b', 'm', 'p']);
 
-    const allAssessed = computeSiteDeliverables(baseInput({
+    const failed = computeSiteDeliverables(baseInput({
       subsections: [{ id: 'a', name: 'A', is_coc_required: true, coc_status: 'Fail' }],
     }));
-    expect(get(allAssessed, 'coc').status).toBe('complete'); // a recorded Fail clears the item
+    expect(get(failed, 'coc').status).toBe('outstanding'); // a Fail keeps "Review COC" open
 
     const none = computeSiteDeliverables(baseInput({
       subsections: [{ id: 'a', name: 'A', is_coc_required: false, coc_status: null }],
@@ -207,8 +207,8 @@ describe('computeSiteDeliverables — inspection-not-applicable', () => {
   });
 });
 
-describe('computeSiteDeliverables — outstanding COC copy distinguishes missing vs pending', () => {
-  it('labels Missing and Pending differently; an assessed Fail is NOT outstanding', () => {
+describe('computeSiteDeliverables — outstanding COC copy distinguishes missing vs pending vs failed', () => {
+  it('labels Missing, Pending and Failed differently; a Fail stays outstanding', () => {
     const s = computeSiteDeliverables(baseInput({
       subsections: [
         { id: 'm', name: 'M', is_coc_required: true, coc_status: 'Missing' },
@@ -217,12 +217,14 @@ describe('computeSiteDeliverables — outstanding COC copy distinguishes missing
       ],
     }));
     const items = get(s, 'coc').outstandingItems;
-    expect(items.map(i => i.subsectionId).sort()).toEqual(['m', 'p']); // 'f' assessed -> done
+    expect(items.map(i => i.subsectionId).sort()).toEqual(['f', 'm', 'p']);
     const byId = Object.fromEntries(items.map(i => [i.subsectionId, i]));
     expect(byId['m'].label).toContain('COC missing');
-    expect(byId['m'].actionLabel).toBe('Set COC');
-    expect(byId['p'].label).toContain('COC awaiting verdict');
-    expect(byId['p'].actionLabel).toBe('Verify COC');
+    expect(byId['m'].actionLabel).toBe('Upload COC');
+    expect(byId['p'].label).toContain('COC awaiting verification');
+    expect(byId['p'].actionLabel).toBe('View COC');
+    expect(byId['f'].label).toContain('COC failed');
+    expect(byId['f'].actionLabel).toBe('Review COC');
   });
 });
 
