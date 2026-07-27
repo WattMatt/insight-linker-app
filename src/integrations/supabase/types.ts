@@ -1765,6 +1765,7 @@ export type Database = {
           ip_address: string | null
           scanned_at: string
           scanned_by: string | null
+          source: string
           subsection_id: string
           user_agent: string | null
         }
@@ -1774,6 +1775,7 @@ export type Database = {
           ip_address?: string | null
           scanned_at?: string
           scanned_by?: string | null
+          source?: string
           subsection_id: string
           user_agent?: string | null
         }
@@ -1783,6 +1785,7 @@ export type Database = {
           ip_address?: string | null
           scanned_at?: string
           scanned_by?: string | null
+          source?: string
           subsection_id?: string
           user_agent?: string | null
         }
