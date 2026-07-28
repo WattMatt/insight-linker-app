@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
-import { qrRedirectUrl } from "@/lib/qrBaseUrl";
+import QRCode from "qrcode";
+import { qrRedirectUrl, qrSiteRedirectUrl } from "@/lib/qrBaseUrl";
 import { isCocCertificateCategory, toCocDoc, buildCocCardLines } from "@/lib/cocHierarchy";
 import { matchAssetForSubsection } from "@/lib/report/subsectionAssetMatch";
 import { computeSubsectionVerdict } from "@/lib/subsectionCompliance";
@@ -569,6 +570,24 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
       if (clientLogo) logoDataUrl = clientLogo;
     }
 
+    // Site-level verification QR for the report cover — encodes the STABLE
+    // qr-redirect endpoint (same indirection as the subsection QR codes above),
+    // so it survives a frontend domain change. See src/lib/qrBaseUrl.ts.
+    let siteQrCodeDataUrl: string | null = null;
+    try {
+      siteQrCodeDataUrl = await QRCode.toDataURL(qrSiteRedirectUrl(siteId), {
+        width: 500,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF',
+        },
+        errorCorrectionLevel: 'H',
+      });
+    } catch (error) {
+      console.error('Failed to generate site QR code:', error);
+    }
+
     // Use unified PDF engine for generation
     const result = await generateReport({
       type: 'site-summary',
@@ -585,6 +604,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
         accentColor: customization.accentColor || 'blue',
         reportDate: new Date(),
         siteAddress: site?.address || undefined,
+        qrCodeDataUrl: siteQrCodeDataUrl,
       },
       options: {
         includeCoverPage: true,

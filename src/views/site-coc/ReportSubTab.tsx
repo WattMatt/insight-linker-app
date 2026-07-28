@@ -10,6 +10,8 @@ import { buildCocReportModel } from "@/lib/siteCoc/cocReportModel";
 import type { SiteKpiBlock } from "@/lib/siteCoc/reportKpis";
 import { buildSiteCocReportDocDef } from "@/lib/siteCoc/siteCocReport";
 import { imageUrlToBase64 } from "@/lib/pdfBranding";
+import QRCode from "qrcode";
+import { qrSiteRedirectUrl } from "@/lib/qrBaseUrl";
 import type { CocScheduleRow, CocCertRow, CocBatch, SubsectionOption } from "./useSiteCoc";
 
 interface SavedReport { id: string; file_name: string; file_url: string; created_at: string; }
@@ -45,7 +47,17 @@ export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, 
     setGenerating(true);
     try {
       const logoDataUrl = companyLogo ? await imageUrlToBase64(companyLogo).catch(() => null) : null;
-      const blob = await generatePdfBlob(buildSiteCocReportDocDef(buildModel(), logoDataUrl));
+      // Site-level verification QR for the report header — same stable qr-redirect
+      // indirection as the Site Summary Report cover. See src/lib/qrBaseUrl.ts.
+      const qrCodeDataUrl = siteId
+        ? await QRCode.toDataURL(qrSiteRedirectUrl(siteId), {
+            width: 500,
+            margin: 1,
+            color: { dark: '#000000', light: '#FFFFFF' },
+            errorCorrectionLevel: 'H',
+          }).catch(() => null)
+        : null;
+      const blob = await generatePdfBlob(buildSiteCocReportDocDef(buildModel(), logoDataUrl, qrCodeDataUrl));
       const url = URL.createObjectURL(blob);
       setPreview({ url, name: `${siteName} - Site COC Report - ${new Date().toISOString().slice(0, 10)}.pdf`, blob, isObjectUrl: true });
     } catch (e: any) {

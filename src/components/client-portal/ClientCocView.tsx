@@ -19,6 +19,8 @@ import { buildCocReportModel } from "@/lib/siteCoc/cocReportModel";
 import { buildSiteCocReportDocDef } from "@/lib/siteCoc/siteCocReport";
 import { generatePdfBlob } from "@/lib/pdfMakeConfig";
 import { downloadBlob } from "@/lib/fileDownload";
+import QRCode from "qrcode";
+import { qrSiteRedirectUrl } from "@/lib/qrBaseUrl";
 
 interface ClientCocViewProps {
   siteId: string;
@@ -94,7 +96,15 @@ export function ClientCocView({ siteId, siteName, onPreview }: ClientCocViewProp
           coc_required: r.coc_required, files_count: r.files_count, status: r.status, notes: r.notes,
         })),
       });
-      const blob = await generatePdfBlob(buildSiteCocReportDocDef(model, null));
+      // Site-level verification QR for the report header — same stable qr-redirect
+      // indirection as the Site Summary Report cover. See src/lib/qrBaseUrl.ts.
+      const qrCodeDataUrl = await QRCode.toDataURL(qrSiteRedirectUrl(siteId), {
+        width: 500,
+        margin: 1,
+        color: { dark: '#000000', light: '#FFFFFF' },
+        errorCorrectionLevel: 'H',
+      }).catch(() => null);
+      const blob = await generatePdfBlob(buildSiteCocReportDocDef(model, null, qrCodeDataUrl));
       await downloadBlob(blob, `${siteName} - Site COC Report - ${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (e: any) {
       if (process.env.NODE_ENV === "development") console.error("Client COC report failed:", e);
