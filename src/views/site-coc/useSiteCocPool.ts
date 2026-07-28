@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { extractCocNumber } from "@/lib/cocFilename";
-import { classifyCocFile } from "@/lib/siteCoc/routeUpload";
 import { assignPoolFile } from "@/lib/coc/assignPoolFile";
+import { uploadFileToPool } from "@/lib/coc/poolUpload";
 import { reassignPendingPoolFiles } from "@/lib/coc/reassignPool";
 import { mapWithConcurrency, summarizeUpload, type FileOutcome } from "@/lib/siteCoc/uploadQueue";
 
@@ -12,7 +11,6 @@ export interface PoolFile {
   detected_cert_no: string | null; detected_kind: string | null; status: string;
   reason: string | null; candidate_ids: string[] | null;
 }
-const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9.-]/g, "_");
 const UPLOAD_CONCURRENCY = 5;
 
 export function useSiteCocPool(siteId: string | undefined, onAssigned: () => void) {
@@ -35,23 +33,12 @@ export function useSiteCocPool(siteId: string | undefined, onAssigned: () => voi
     setBusy(true);
     setProgress({ done: 0, total: files.length });
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       const result = await mapWithConcurrency<File, FileOutcome>(
         files, UPLOAD_CONCURRENCY,
         async (file): Promise<FileOutcome> => {
           try {
-            const ts = Date.now();
-            const path = `${siteId}/_pool/${ts}-${sanitize(file.name)}`;
-            const { data: up, error: upErr } = await supabase.storage.from("documents").upload(path, file);
-            if (upErr || !up?.path) return { name: file.name, state: "failed", error: upErr?.message ?? "upload error" };
-            const { data: urlData } = supabase.storage.from("documents").getPublicUrl(up.path);
-            const detected = extractCocNumber(file.name);
-            const { data: row, error } = await supabase.from("coc_file_pool").insert({
-              site_id: siteId, file_name: file.name, file_url: urlData.publicUrl, file_size: file.size,
-              detected_cert_no: detected, detected_kind: classifyCocFile(file.name), uploaded_by: user?.id ?? null,
-            }).select("id").single();
-            if (error || !row) return { name: file.name, state: "failed", error: error?.message ?? "insert error" };
-            return { name: file.name, state: "uploaded", poolId: row.id, detectedCertNo: detected };
+            const { poolId, detectedCertNo } = await uploadFileToPool(siteId, file);
+            return { name: file.name, state: "uploaded", poolId, detectedCertNo };
           } catch (e: any) {
             return { name: file.name, state: "failed", error: e?.message ?? "error" };
           }
@@ -98,10 +85,15 @@ export function useSiteCocPool(siteId: string | undefined, onAssigned: () => voi
     setBusy(true);
     try {
       let n = 0;
+      const failed: string[] = [];
       for (const f of files) {
         try { await assignPoolFile(siteId, f, subsectionId, f.detected_kind === "eval" ? "eval" : "coc"); n++; }
-        catch (e) { if (process.env.NODE_ENV === "development") console.error("batch assign failed", f.file_name, e); }
+        catch (e) {
+          failed.push(f.file_name);
+          if (process.env.NODE_ENV === "development") console.error("batch assign failed", f.file_name, e);
+        }
       }
+      if (failed.length) toast.error(`Failed to assign: ${failed.join(", ")}`, { duration: 8000 });
       toast.success(`Assigned ${n}/${files.length} file(s).`);
       await refetch();
       onAssigned();

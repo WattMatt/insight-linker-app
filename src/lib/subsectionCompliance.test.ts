@@ -28,9 +28,9 @@ describe("computeSubsectionVerdict", () => {
     const v = computeSubsectionVerdict({ ...base, cocDocs: [doc({ cocType: "Initial", cocStatus: "Fail" })] });
     expect(v.documentation).toBe(false);
   });
-  it("Initial Pass but expired => documentation fails", () => {
+  it("Initial Pass with past expiry still passes (register-truth: expiry is display-only)", () => {
     const v = computeSubsectionVerdict({ ...base, cocDocs: [doc({ cocType: "Initial", cocStatus: "Pass", cocExpiryDate: "2020-01-01" })] });
-    expect(v.documentation).toBe(false);
+    expect(v.documentation).toBe(true);
   });
   it("only a Supplementary (no Initial) => documentation fails", () => {
     const v = computeSubsectionVerdict({ ...base, cocDocs: [doc({ cocType: "Supplementary", cocStatus: "Pass" })] });

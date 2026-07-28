@@ -221,6 +221,7 @@ const SubsectionDetail = () => {
           <CocMeteringTab
             subsection={subsection}
             subsectionId={hook.subsectionId}
+            siteId={hook.siteId}
             supabaseDocuments={hook.supabaseDocuments}
             documentCategories={hook.documentCategories}
             deletingDocumentId={hook.deletingDocumentId}

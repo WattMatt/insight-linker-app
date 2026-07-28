@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { parseDbSchedule, parseCertificateDetail, parseVerification, mergeCertificates } from "@/lib/siteCoc/parseWorkbooks";
 import { assembleScheduleRows, assembleCertificateRows, summarize } from "@/lib/siteCoc/ingest";
 import { applyPriorMatches } from "@/lib/siteCoc/reimport";
+import { docStatusFromVerdict } from "@/lib/siteCoc/verdictMap";
 import { reassignPendingPoolFiles } from "@/lib/coc/reassignPool";
 import { normCert, normShop } from "@/lib/siteCoc/normalize";
 import type { SubsectionLite } from "@/lib/siteCoc/types";
@@ -73,9 +74,9 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
         const { error } = await supabase.from("coc_db_schedule").insert(schedRows);
         if (error) throw error;
       }
-      let newCerts: { id: string; subsection_id: string | null; cert_no_norm: string }[] = [];
+      let newCerts: { id: string; subsection_id: string | null; cert_no_norm: string; verdict: string | null }[] = [];
       if (certRows.length) {
-        const { data, error } = await supabase.from("coc_certificates").insert(certRows).select("id, subsection_id, cert_no_norm");
+        const { data, error } = await supabase.from("coc_certificates").insert(certRows).select("id, subsection_id, cert_no_norm, verdict");
         if (error) throw error;
         newCerts = (data ?? []) as typeof newCerts;
       }
@@ -88,6 +89,7 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
       // Re-link surviving uploaded documents to the new cert rows (re-import would otherwise drop the
       // coc_document_id / eval_document_id attachments). Match by subsection + normalised cert number.
       const matchedSubIds = Array.from(new Set(newCerts.filter(c => c.subsection_id).map(c => c.subsection_id))) as string[];
+      let stamped = 0;
       if (matchedSubIds.length) {
         const { data: docs } = await supabase
           .from("subsection_documents")
@@ -112,6 +114,14 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
               ...(evalDoc ? { eval_document_id: evalDoc } : {}),
             }).eq("id", c.id);
           }
+          // Register-truth: the new batch's verdict overwrites the attached COC
+          // document's status (fires the DB rollup -> subsections.coc_status).
+          if (cocDoc) {
+            await supabase.from("subsection_documents")
+              .update({ coc_status: docStatusFromVerdict(c.verdict) })
+              .eq("id", cocDoc);
+            stamped++;
+          }
         }
       }
 
@@ -128,7 +138,7 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
       // Newly-imported certs may now place pool files that were waiting on the schedule.
       await reassignPendingPoolFiles(siteId);
 
-      toast.success(`Imported ${summary.certs_imported} certificates across ${summary.shops_imported} shops (${summary.unmatched_count} unmatched).`);
+      toast.success(`Imported ${summary.certs_imported} certificates across ${summary.shops_imported} shops (${summary.unmatched_count} unmatched). Re-stamped ${stamped} attached document(s) from the new verdicts.`);
       onDone();
     } catch (e: any) {
       if (process.env.NODE_ENV === "development") console.error("Site COC import failed:", e);

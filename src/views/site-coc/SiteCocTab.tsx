@@ -25,6 +25,7 @@ export function SiteCocTab({ siteId, siteName, clientName, siteAddress, siteKpis
   const [schedFile, setSchedFile] = useState<File | null>(null);
   const [verifFile, setVerifFile] = useState<File | null>(null);
   const [rerunning, setRerunning] = useState(false);
+  const [tab, setTab] = useState("schedule");
 
   const counts = liveMatchCounts(schedule);
 
@@ -75,20 +76,20 @@ export function SiteCocTab({ siteId, siteName, clientName, siteAddress, siteKpis
         </CardContent>
       </Card>
 
-      <SiteCocLoadCard pool={pool} />
+      <SiteCocLoadCard pool={pool} hasImport={!!batch} />
 
-      <Tabs defaultValue="schedule">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
           <TabsTrigger value="certificates">Certificates</TabsTrigger>
           <TabsTrigger value="verification">Verification</TabsTrigger>
-          <TabsTrigger value="assign">Assign{pool.pending.length ? ` (${pool.pending.length})` : ""}</TabsTrigger>
+          <TabsTrigger value="assign">Exceptions{pool.pending.length ? ` (${pool.pending.length})` : ""}</TabsTrigger>
           <TabsTrigger value="report">Report</TabsTrigger>
         </TabsList>
         <TabsContent value="schedule"><Card><CardContent className="pt-4">{loading ? "Loading…" : <ScheduleSubTab rows={schedule} subsections={subsections} onResolve={resolveShop} />}</CardContent></Card></TabsContent>
         <TabsContent value="certificates"><Card><CardContent className="pt-4">{loading ? "Loading…" : <CertificatesSubTab rows={certificates} />}</CardContent></Card></TabsContent>
         <TabsContent value="verification"><Card><CardContent className="pt-4">{loading ? "Loading…" : <VerificationSubTab rows={certificates} />}</CardContent></Card></TabsContent>
-        <TabsContent value="assign"><Card><CardContent className="pt-4"><AssignSubTab pending={pool.pending} subsections={subsections} onAssign={(f, s) => pool.assignManual(f, s, f.detected_kind === "eval" ? "eval" : "coc")} onAssignMany={pool.assignManyTo} onReassign={pool.reassign} busy={pool.busy} /></CardContent></Card></TabsContent>
+        <TabsContent value="assign"><Card><CardContent className="pt-4"><AssignSubTab pending={pool.pending} subsections={subsections} onAssign={(f, s) => pool.assignManual(f, s, f.detected_kind === "eval" ? "eval" : "coc")} onAssignMany={pool.assignManyTo} onReassign={pool.reassign} onUpdateCertNo={pool.updateCertNo} onGoToSchedule={() => setTab("schedule")} hasImport={!!batch} busy={pool.busy} /></CardContent></Card></TabsContent>
         <TabsContent value="report"><Card><CardContent className="pt-4"><ReportSubTab siteId={siteId} siteName={siteName} schedule={schedule} certificates={certificates} batch={batch} subsections={subsections} clientName={clientName} siteAddress={siteAddress} siteKpis={siteKpis} companyLogo={companyLogo} /></CardContent></Card></TabsContent>
       </Tabs>
     </div>
