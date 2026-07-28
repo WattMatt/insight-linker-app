@@ -17,7 +17,7 @@ export async function buildStickerSheetBlob(siteName: string, subsections: Stick
   const rows: any[] = [];
   for (let i = 0; i < svgs.length; i += 3) {
     rows.push({
-      columns: svgs.slice(i, i + 3).map((svg) => ({ svg, width: 165, margin: [0, 0, 8, 12] })),
+      columns: svgs.slice(i, i + 3).map((svg) => ({ svg, width: 165, margin: [0, 0, 0, 12] })),
       columnGap: 8,
     });
   }

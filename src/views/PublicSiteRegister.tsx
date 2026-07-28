@@ -124,24 +124,24 @@ const PublicSiteRegister = () => {
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
               <div className="rounded-lg border p-4 text-center bg-green-500/10 border-green-300">
-                <p className="text-2xl font-bold text-green-600">{counts.pass}</p>
+                <p className="text-2xl font-bold text-green-600">{counts?.pass ?? 0}</p>
                 <p className="text-xs text-muted-foreground mt-1">Compliant</p>
               </div>
               <div className="rounded-lg border p-4 text-center bg-red-500/10 border-red-300">
-                <p className="text-2xl font-bold text-red-600">{counts.fail}</p>
+                <p className="text-2xl font-bold text-red-600">{counts?.fail ?? 0}</p>
                 <p className="text-xs text-muted-foreground mt-1">Not compliant</p>
               </div>
               <div className="rounded-lg border p-4 text-center bg-muted">
-                <p className="text-2xl font-bold text-muted-foreground">{counts.pending}</p>
+                <p className="text-2xl font-bold text-muted-foreground">{counts?.pending ?? 0}</p>
                 <p className="text-xs text-muted-foreground mt-1">Pending</p>
               </div>
               <div className="rounded-lg border p-4 text-center bg-muted">
-                <p className="text-2xl font-bold text-muted-foreground">{counts.missing}</p>
+                <p className="text-2xl font-bold text-muted-foreground">{counts?.missing ?? 0}</p>
                 <p className="text-xs text-muted-foreground mt-1">No COC yet</p>
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              COC-required subsections: {counts.required}
+              COC-required subsections: {counts?.required ?? 0}
             </p>
           </CardContent>
         </Card>

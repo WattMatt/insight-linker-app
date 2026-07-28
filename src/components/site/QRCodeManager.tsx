@@ -226,9 +226,11 @@ export const QRCodeManager: React.FC<QRCodeManagerProps> = ({
 
             const content = await zip.generateAsync({ type: 'blob' });
             const link = document.createElement('a');
-            link.href = URL.createObjectURL(content);
+            const href = URL.createObjectURL(content);
+            link.href = href;
             link.download = `${site.name}-All-QR-Codes.zip`.replace(/[^a-zA-Z0-9.-]/g, '_');
             link.click();
+            URL.revokeObjectURL(href);
 
             toast.success("All QR codes and PDF downloaded!");
         } catch (error) {
@@ -249,9 +251,11 @@ export const QRCodeManager: React.FC<QRCodeManagerProps> = ({
             );
 
             const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
+            const href = URL.createObjectURL(blob);
+            link.href = href;
             link.download = `${site.name}-Sticker-Sheet.pdf`.replace(/[^a-zA-Z0-9.-]/g, '_');
             link.click();
+            URL.revokeObjectURL(href);
 
             toast.success("Sticker sheet PDF downloaded!");
         } catch (error) {

@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   CaptchaTurnstile,
+  CAPTCHA_ENABLED,
   type CaptchaTurnstileHandle,
 } from "@/components/CaptchaTurnstile";
 
@@ -60,12 +61,12 @@ export function PublicIssueReportDialog({ subsectionId, trigger }: Props) {
   }
 
   async function handleSubmit() {
-    if (!title.trim() || !captchaToken) return;
+    if (!title.trim() || (CAPTCHA_ENABLED && !captchaToken)) return;
 
     setSubmitting(true);
     try {
       const formData = new FormData();
-      formData.append("turnstile_token", captchaToken);
+      if (captchaToken) formData.append("turnstile_token", captchaToken);
       formData.append("subsection_id", subsectionId);
       formData.append("title", title);
       formData.append("description", description);
@@ -74,7 +75,7 @@ export function PublicIssueReportDialog({ subsectionId, trigger }: Props) {
       }
 
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/report-issue`,
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL || ""}/functions/v1/report-issue`,
         {
           method: "POST",
           body: formData,
@@ -156,7 +157,7 @@ export function PublicIssueReportDialog({ subsectionId, trigger }: Props) {
         <DialogFooter>
           <Button
             onClick={handleSubmit}
-            disabled={!title.trim() || !captchaToken || submitting}
+            disabled={!title.trim() || (CAPTCHA_ENABLED && !captchaToken) || submitting}
           >
             {submitting ? "Submitting..." : "Submit report"}
           </Button>

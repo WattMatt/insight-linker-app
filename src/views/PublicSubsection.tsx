@@ -124,13 +124,15 @@ const PublicSubsection = () => {
   useEffect(() => {
     if (!session || !subsectionId || presenceLogged.current) return;
     presenceLogged.current = true;
-    supabase.from('qr_scans').insert({
-      subsection_id: subsectionId,
-      scanned_by: session.user.id,
-      source: 'landing',
-    }).then(({ error }) => {
+    Promise.resolve(
+      supabase.from('qr_scans').insert({
+        subsection_id: subsectionId,
+        scanned_by: session.user.id,
+        source: 'landing',
+      }),
+    ).then(({ error }) => {
       if (error) console.error('presence log failed (non-blocking):', error);
-    });
+    }).catch((e) => console.error('presence log failed (non-blocking):', e));
   }, [session, subsectionId]);
 
   const fetchPublicData = async () => {
