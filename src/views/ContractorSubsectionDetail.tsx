@@ -1,19 +1,29 @@
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "@/lib/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, ClipboardList } from "lucide-react";
+import { Calendar, ClipboardList, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import ContractorPortalLayout from "@/components/ContractorPortalLayout";
 import { Breadcrumbs } from "@/components/Breadcrumb";
+import { toast } from "sonner";
+import { poolRouteFile } from "@/lib/coc/poolUpload";
 
 const ContractorSubsectionDetail = () => {
   const { subsectionId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const previewSiteId = searchParams.get("preview");
+  const queryClient = useQueryClient();
+
+  const [uploading, setUploading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const uploadCardRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: subsection, isLoading: subsectionLoading } = useQuery({
     queryKey: ["contractor-subsection", subsectionId],
@@ -61,6 +71,41 @@ const ContractorSubsectionDetail = () => {
     },
     enabled: !!subsectionId && !!subsection,
   });
+
+  useEffect(() => {
+    if (searchParams.get("tab") === "upload" && uploadCardRef.current) {
+      const card = uploadCardRef.current;
+      requestAnimationFrame(() => {
+        card.scrollIntoView({ behavior: "smooth" });
+      });
+    }
+  }, [subsection, searchParams]);
+
+  const handleCocUpload = async () => {
+    if (!subsection || selectedFiles.length === 0) return;
+    const siteId = (subsection as any).site_id as string;
+    setUploading(true);
+    try {
+      for (const file of selectedFiles) {
+        try {
+          const result = await poolRouteFile(siteId, file);
+          if (result.assignedSubsectionId) {
+            toast.success(`${file.name}: assigned`);
+          } else {
+            toast.info(`${file.name}: ${result.reason ?? "pending review"}`);
+          }
+        } catch (error) {
+          if (process.env.NODE_ENV === "development") console.error(file.name, error);
+          toast.error(`${file.name}: ${error instanceof Error ? error.message : "upload failed"}`);
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ["contractor-subsection", subsectionId] });
+    } finally {
+      setSelectedFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setUploading(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -170,6 +215,33 @@ const ContractorSubsectionDetail = () => {
             </div>
           </CardContent>
         </Card>
+
+        {subsection?.is_coc_required && (
+          <Card ref={uploadCardRef}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Upload COC
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.html,.doc,.docx,.jpg,.jpeg,.png"
+                disabled={uploading}
+                onChange={(e) => setSelectedFiles(e.target.files ? Array.from(e.target.files) : [])}
+              />
+              <Button
+                onClick={handleCocUpload}
+                disabled={uploading || selectedFiles.length === 0}
+              >
+                {uploading ? "Uploading..." : "Upload"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
