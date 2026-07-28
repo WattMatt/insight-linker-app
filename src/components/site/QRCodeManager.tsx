@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Download, QrCode } from "lucide-react";
+import { RefreshCw, Download, QrCode, Printer } from "lucide-react";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { Subsection, Site } from "@/types/site";
 import { toast } from "sonner";
@@ -9,6 +9,7 @@ import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { qrRedirectUrl } from "@/lib/qrBaseUrl";
 import JSZip from 'jszip';
 import { generatePdfBlob, DEFAULT_STYLES } from "@/lib/pdfMakeUtils";
+import { buildStickerSheetBlob } from "@/lib/qrStickerSheet";
 
 interface QRCodeManagerProps {
     site: Site;
@@ -31,6 +32,8 @@ export const QRCodeManager: React.FC<QRCodeManagerProps> = ({
     setDownloadingAll,
     fetchSiteData
 }) => {
+    const [printingSheet, setPrintingSheet] = useState(false);
+
     const handleGenerateAll = async () => {
         setGeneratingAll(true);
         toast.info("Regenerating QR codes for all subsections...");
@@ -236,6 +239,29 @@ export const QRCodeManager: React.FC<QRCodeManagerProps> = ({
         }
     };
 
+    const handlePrintStickerSheet = async () => {
+        setPrintingSheet(true);
+
+        try {
+            const blob = await buildStickerSheetBlob(
+                site.name,
+                subsections.map((s) => ({ id: s.id, name: s.name }))
+            );
+
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${site.name}-Sticker-Sheet.pdf`.replace(/[^a-zA-Z0-9.-]/g, '_');
+            link.click();
+
+            toast.success("Sticker sheet PDF downloaded!");
+        } catch (error) {
+            console.error('Error generating sticker sheet:', error);
+            toast.error("Failed to generate sticker sheet");
+        } finally {
+            setPrintingSheet(false);
+        }
+    };
+
     return (
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -260,6 +286,14 @@ export const QRCodeManager: React.FC<QRCodeManagerProps> = ({
                     >
                         <Download className="h-4 w-4 mr-2" />
                         {downloadingAll ? "Generating..." : `Download All (${subsections.length})`}
+                    </Button>
+                    <Button
+                        onClick={handlePrintStickerSheet}
+                        disabled={printingSheet || subsections.length === 0}
+                        variant="outline"
+                    >
+                        <Printer className="h-4 w-4 mr-2" />
+                        {printingSheet ? "Generating..." : "Print sticker sheet"}
                     </Button>
                 </div>
             </CardHeader>
