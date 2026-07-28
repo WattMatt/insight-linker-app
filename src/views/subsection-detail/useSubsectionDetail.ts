@@ -478,12 +478,18 @@ export function useSubsectionDetail() {
     if (!editFormData.name.trim()) { toast.error("Subsection name is required"); return; }
     if (!editFormData.category) { toast.error("Please select a category"); return; }
 
+    // Capture the pre-edit name before the update lands, so we can tell whether
+    // the rename actually changed anything (subsection state isn't refreshed
+    // until fetchSubsectionData() runs below).
+    const previousName = subsection?.name;
+    const newName = editFormData.name.trim();
+
     try {
       setSaving(true);
       const { error } = await supabase
         .from('subsections')
         .update({
-          name: editFormData.name.trim(),
+          name: newName,
           tenant_name: editFormData.tenant_name?.trim() || null,
           category: editFormData.category,
           is_coc_required: editFormData.is_coc_required
@@ -493,6 +499,21 @@ export function useSubsectionDetail() {
       if (error) throw error;
       toast.success("Subsection updated successfully");
       setIsEditDialogOpen(false);
+
+      // Name changed — the stored QR PNG's rasterized label is now stale (the
+      // scan target is id-based and still resolves fine). Regenerate it the
+      // same way the create path does, fire-and-forget.
+      if (newName !== previousName && siteData?.siteName) {
+        generateAndUploadQRCode({
+          subsectionId,
+          siteName: siteData.siteName,
+          subsectionName: newName,
+          logoUrl: companyLogo || undefined
+        }).catch((err) => {
+          if (process.env.NODE_ENV === 'development') console.error('Failed to regenerate QR code:', err);
+        });
+      }
+
       await fetchSubsectionData();
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error updating subsection:", error);
