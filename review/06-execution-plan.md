@@ -49,7 +49,7 @@ Ten of the nineteen prerequisites are read-only queries against production. **Th
 | P-03 | Live probe of the two repair-function URLs (only the prod functions hostname is needed; `fix-inspection-photos` is `verify_jwt=false`) | R-01 |
 | P-06 | Establish `DOCBUILDER_*` state: `supabase secrets list`; `templates/index.ts:348` is a live oracle — an unauthenticated GET 503s iff the token is unset | R-09 |
 | P-17 | **Add the database and Deno CI jobs R-18 did not ship** (see §E) | R-03, R-07, R-08, R-12 |
-| P-18 | Two written adjudications before parallel sessions start: (a) who owns `useOfflineInspections.ts:44-47` and `useOfflineSubsections.ts:119-121` — R-05 or R-06; (b) **which item defines the staff predicate** — `is_staff()` belongs to R-14, but R-07 rewrites 36 policies first and needs one now | R-05, R-06, R-07, R-14 |
+| P-18 | ~~Two written adjudications~~ — **RESOLVED 2026-07-30, see `07-adjudications.md`.** (a) R-05 owns both offline hooks in full; R-06 drops to five files. (b) R-07 creates `public.is_staff()` in the same migration as the 36 policy changes; R-14 adopts rather than creates it and shrinks to M/med | R-05, R-06, R-07, R-14 — **unblocked** |
 
 ---
 
@@ -109,6 +109,7 @@ Fourteen further hazards were found. The ones that change what you do:
 6. **`types.ts` was never regenerated**, so the type ratchet can go red on a correct change: R-04 drops `temp_import` while R-11/R-12/R-14/R-16 all add columns. Regeneration must ride in the same commit as each — and it needs a database.
 7. **R-02's unsynced-work count stays incomplete until R-05 extends it** to the new dead-letter store. A device holding only dead-lettered work would pass R-02's guard, log out, and lose it — F-07 again in a narrower window. Book the extension inside R-05.
 8. **R-20 is authorised by tests that do not cover what it changes.** Its release condition is "once R-18 and R-19 prove what still runs", but no test touches `src/views`, and R-20's `src/lib/data` adoption lands in nine view/hook files. Add view coverage before, not after.
+9. **Nine tables would be left with zero policies if R-07 drops without replacing** (raised by the P-18(b) adjudication): `inspection_subsections`, `qr_codes`, `site_document_categories`, `site_marking_checklist`, `coc_compliance_photos`, `offline_photos`, `inspection_items`, `inspection_signatures`, `floor_plan_pin_comments`. RLS-enabled with no policy is deny-all — a drop-only migration stops the admin application. Five of the nine lost their Admin policies in the migration that created the blanket, so the blanket is currently their only policy. **R-07's staging apply must assert a non-empty policy set per affected table before promotion.** Of the 36 policies: 17 are pure drops, 4 embed staff as a disjunct, 15 need a staff predicate outright.
 
 ---
 
@@ -123,11 +124,11 @@ Fourteen further hazards were found. The ones that change what you do:
 ## F. The task list
 
 **Now — no code, blocks everything:**
-1. Run the ten production read queries in §A1 as one session.
+1. Run the ten production read queries in §A1 as one session — **the script is ready at `review/prereq-queries.sql`** (16 bare SELECTs, no DDL/DML, one block per prerequisite, each annotated with what a concerning result looks like). Q3 is a CLI command, not SQL.
 2. Provision `CRON_SECRET` (P-05); stand up a staging/branch database (P-14).
 3. Decide P-13 (credential rotation authority), P-16 (R-02's logout trade-off).
-4. Engineer: probe the two function URLs (P-03), establish `DOCBUILDER_*` state (P-06), write the two adjudications (P-18), add the missing CI database job (P-17, after R-03).
-5. Commit the completed work on `review/ungated-fixes`.
+4. Engineer: probe the two function URLs (P-03), establish `DOCBUILDER_*` state (P-06), add the missing CI database job (P-17, after R-03). ~~Write the two adjudications (P-18)~~ — **done, `07-adjudications.md`**.
+5. ~~Commit the completed work on `review/ungated-fixes`~~ — **done**, five intent-named commits.
 
 **Then, in order:** Batch 1 (R-01, R-02, R-03, R-04) → Batch 2 (R-05, R-06) → Batch 3 (R-07, R-08, R-09, R-12) → Batch 4 (R-10, R-11, R-13, R-16) → Batch 5 (R-14) → Batch 6 (R-20), signing each item's gate as its session starts.
 
