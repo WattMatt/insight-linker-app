@@ -19,7 +19,15 @@ export default defineConfig({
     environmentOptions: { jsdom: { url: 'http://localhost:3000' } },
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    // supabase/** is listed ahead of the files existing so an edge-function test is
+    // picked up the moment one is written rather than silently never running; the
+    // tree carries none today. tsconfig.json excludes supabase/, so those tests are
+    // outside the type-error ratchet.
+    include: [
+      'src/**/*.test.{ts,tsx}',
+      'supabase/**/*.test.{ts,tsx}',
+      'scripts/**/*.test.{ts,tsx}',
+    ],
   },
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },

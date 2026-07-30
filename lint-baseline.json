@@ -1,0 +1,6 @@
+{
+  "maxErrors": 74,
+  "command": "eslint . -f json  (severity-2 messages only)",
+  "enforcedBy": "npm run lint:ratchet",
+  "note": "A ceiling, never a target. Lower it whenever the real count drops; never raise it. Warnings are outside the ratchet on purpose — eslint.config.mjs downgrades a large legacy backlog to warn, and gating on those would freeze the backlog instead of shrinking the errors that matter. At 0, make `npm run lint` itself the gate."
+}

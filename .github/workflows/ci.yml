@@ -1,0 +1,81 @@
+name: CI
+
+# Everything here runs against the checked-out tree and nothing else. No Supabase
+# credentials are read and none may be added: there is no `supabase start`, no
+# `supabase db reset`, no migration apply and no seed step. In particular
+# supabase/seeds/fortress_abaqulusi_seed.sql contains real named individuals and
+# must never be loaded by an automated job. A database job, when one is added, gets
+# a throwaway local instance and its own fixture data — never that file, never a
+# hosted project, never production.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  static:
+    name: Lint and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # Both checks run advisory-then-ratchet. The tree carries a recorded backlog of
+      # 74 lint errors and 80 type errors, so neither command can fail the build yet;
+      # the full diagnostic list still belongs in the log. The ratchets are the gate:
+      # they fail only on a regression past the recorded ceiling. When a baseline
+      # reaches 0, drop its continue-on-error — and for types, drop
+      # typescript.ignoreBuildErrors from next.config.mjs at the same time.
+      - name: Lint (advisory)
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Lint-error ratchet
+        run: npm run lint:ratchet
+
+      - name: Type-check (advisory)
+        continue-on-error: true
+        run: npm run typecheck
+
+      - name: Type-error ratchet
+        run: npm run typecheck:ratchet
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    # Pinned here and nowhere else. GitHub runners are UTC; the deployment and every
+    # date a user reads are UTC+2, and a local-date bug is invisible at UTC — a date
+    # built from local parts and serialised with toISOString() lands on the previous
+    # day at a positive offset and on the correct day at UTC. Pinning to the operating
+    # timezone is what makes those assertions mean anything.
+    env:
+      TZ: Africa/Johannesburg
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Vitest
+        run: npm run test

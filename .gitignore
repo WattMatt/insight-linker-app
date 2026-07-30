@@ -8,9 +8,14 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-node_modules 2/
 dist
 dist-ssr
+
+# Finder/iCloud duplicate-file artifacts ("Dashboard 2.tsx", "node_modules 2/").
+# tsconfig.json excludes the same shapes, so they can never inflate the type-error
+# ratchet — and deleting them can never be mistaken for fixing type errors.
+* 2.*
+* 2/
 
 # Next.js
 .next/
