@@ -9,11 +9,17 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // Page through a table so a >1000-row table is never silently truncated (capture must be exact).
+// Every page is ordered by id: without a total order Postgres may return a row on two pages
+// or on none, which would silently skew the persisted snapshot.
 async function fetchAll(supabase: SupabaseClient, table: string, columns: string): Promise<any[]> {
   const rows: any[] = [];
   const size = 1000;
   for (let from = 0; ; from += size) {
-    const { data, error } = await supabase.from(table).select(columns).range(from, from + size - 1);
+    const { data, error } = await supabase
+      .from(table)
+      .select(columns)
+      .order("id", { ascending: true })
+      .range(from, from + size - 1);
     if (error) throw error;
     rows.push(...(data ?? []));
     if (!data || data.length < size) break;
