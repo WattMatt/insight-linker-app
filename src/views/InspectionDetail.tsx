@@ -1600,7 +1600,7 @@ const InspectionDetail = () => {
 
       const result = await renameInspectionImages(
         inspectionId!,
-        siteData.siteName || 'unknown-client',
+        siteData.clientName || 'unknown-client',
         siteData.siteName || 'unknown-site',
         subsectionData.name || 'unknown-subsection',
         inspection.jsonData
@@ -2215,7 +2215,7 @@ const InspectionDetail = () => {
               subsectionId={subsectionId}
               siteLogoUrl={siteData?.siteImageUrl || siteData?.clientLogoUrl || null}
               inspectionId={inspectionId}
-              clientName={siteData?.siteName}
+              clientName={siteData?.clientName}
               snags={snags}
             />
           )}

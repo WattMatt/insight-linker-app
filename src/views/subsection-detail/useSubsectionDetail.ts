@@ -17,6 +17,20 @@ import type {
   EditFormData,
 } from "./types";
 
+/**
+ * Flattens the joined category name onto each document row as `category`. The COC filters
+ * downstream (OverviewTab's verdict inputs) match on the category NAME, not on
+ * category_id, so the name has to travel with the row or those filters can never match.
+ */
+export function flattenDocumentCategory(
+  rows: Array<Record<string, unknown> & { document_categories?: { name: string } | null }>
+): Array<SupabaseDocument & { category: string }> {
+  return rows.map(({ document_categories, ...rest }) => ({
+    ...(rest as unknown as SupabaseDocument),
+    category: document_categories?.name ?? '',
+  }));
+}
+
 export function useSubsectionDetail() {
   const { clientId, siteId, subsectionId } = useParams();
   const navigate = useNavigate();
@@ -130,12 +144,12 @@ export function useSubsectionDetail() {
     try {
       const { data, error } = await supabase
         .from('subsection_documents')
-        .select('id, file_name, file_url, category_id, uploaded_at, coc_number, coc_issue_date, coc_expiry_date, coc_type, coc_status, parent_document_id')
+        .select('id, file_name, file_url, category_id, uploaded_at, coc_number, coc_issue_date, coc_expiry_date, coc_type, coc_status, parent_document_id, document_categories(name)')
         .eq('subsection_id', subsectionId)
         .order('uploaded_at', { ascending: false });
 
       if (error) throw error;
-      setSupabaseDocuments(data || []);
+      setSupabaseDocuments(flattenDocumentCategory((data as any) || []));
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error fetching Supabase documents:", error);
     }

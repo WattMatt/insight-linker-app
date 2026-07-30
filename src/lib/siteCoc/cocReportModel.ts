@@ -108,7 +108,9 @@ export function buildCocReportModel(input: BuildInput): CocReportModel {
 
   const noCoc = tenants.filter(t => t.noCoc);
   const failed = tenants.filter(t => t.certs.some(c => c.verdictKind === "fail"));
-  const clear = tenants.filter(t => !t.noCoc && !t.certs.some(c => c.verdictKind === "fail")).length;
+  // "Clear" is reported to the client as Pass, so only an outright pass may count:
+  // review / cv / pending tenants are unresolved, not clear.
+  const clear = tenants.filter(t => t.coverage.verdictKind === "pass").length;
   const issuesFailed = failed.flatMap(t => t.certs.filter(c => c.verdictKind === "fail").map(c => ({ name: t.name, certNo: c.certNo, failedRules: c.failedRules })));
 
   const pct = (n: number) => required.length ? Math.round((n / required.length) * 100) : 0;
