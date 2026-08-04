@@ -77,6 +77,41 @@ interface PendingInvite {
   created_at: string;
 }
 
+// Roles the invite dialog offers. Client and Contractor additionally need a client or
+// site assignment, which only the dialog collects — see the pending-invites table.
+const INVITE_ROLES = ["Admin", "Moderator", "User", "Contractor", "Client"] as const;
+
+type InviteRole = (typeof INVITE_ROLES)[number];
+
+/**
+ * supabase-js replaces the message of every non-2xx Edge Function reply with the fixed
+ * string "Edge Function returned a non-2xx status code" and leaves the untouched
+ * Response on `error.context` — the function's own `{ success: false, error }` body is
+ * the only place the real reason survives. `context` is absent for network-level
+ * failures and its body reads only once, so nothing here may throw: this runs on a
+ * failure path, where a second error would bury the first.
+ */
+export const readInvokeError = async (error: unknown, fallback: string): Promise<Error> => {
+  const failure = error as { message?: string; context?: Response } | null | undefined;
+  const context = failure?.context;
+
+  try {
+    if (context && typeof context.text === "function") {
+      // clone() leaves the caller's body unread; it throws once the body is consumed,
+      // which the catch below absorbs.
+      const source = typeof context.clone === "function" ? context.clone() : context;
+      const body = JSON.parse(await source.text()) as { error?: unknown } | null;
+      if (typeof body?.error === "string" && body.error.trim()) {
+        return new Error(body.error);
+      }
+    }
+  } catch {
+    // Absent, non-JSON, or already-consumed body — keep the original message.
+  }
+
+  return new Error(failure?.message || fallback);
+};
+
 const Users = () => {
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -116,6 +151,9 @@ const Users = () => {
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [rlsPoliciesOpen, setRlsPoliciesOpen] = useState(false);
   const [rlsPoliciesUser, setRlsPoliciesUser] = useState<UserProfile | null>(null);
+  // Role chosen per pending invite, keyed by invite id. Starts empty on purpose:
+  // pending_user_invites carries no role, and picking one is the admin's call.
+  const [pendingRoles, setPendingRoles] = useState<Record<string, InviteRole>>({});
   const queryClient = useQueryClient();
 
   // Fetch pending invites
@@ -257,12 +295,12 @@ const Users = () => {
 
   // Send invite to pending user
   const sendInviteMutation = useMutation({
-    mutationFn: async (invite: PendingInvite) => {
+    mutationFn: async ({ invite, role }: { invite: PendingInvite; role: InviteRole }) => {
       const { data, error } = await supabase.functions.invoke('invite-user', {
-        body: { email: invite.email, fullName: invite.full_name || '' }
+        body: { email: invite.email, fullName: invite.full_name || '', role }
       });
-      
-      if (error) throw error;
+
+      if (error) throw await readInvokeError(error, 'Failed to send invite');
       if (!data.success) {
         throw new Error(data.error || 'Failed to send invite');
       }
@@ -313,7 +351,7 @@ const Users = () => {
         },
       });
 
-      if (error) throw error;
+      if (error) throw await readInvokeError(error, 'Failed to invite user');
       if (!data.success) throw new Error(data.error || 'Failed to invite user');
 
       return data;
@@ -382,9 +420,9 @@ const Users = () => {
         },
       });
 
-      if (error) throw error;
+      if (error) throw await readInvokeError(error, 'Failed to resend invitation');
       if (!data.success) throw new Error(data.error || 'Failed to resend invitation');
-      
+
       return data;
     },
     onSuccess: (data) => {
@@ -522,8 +560,8 @@ const Users = () => {
       const { data, error } = await supabase.functions.invoke('delete-user', {
         body: { userId }
       });
-      
-      if (error) throw error;
+
+      if (error) throw await readInvokeError(error, 'Failed to delete user');
       if (!data.success) {
         throw new Error(data.error || 'Failed to delete user');
       }
@@ -743,11 +781,11 @@ const Users = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Admin">Admin</SelectItem>
-                      <SelectItem value="Moderator">Moderator</SelectItem>
-                      <SelectItem value="User">User</SelectItem>
-                      <SelectItem value="Contractor">Contractor</SelectItem>
-                      <SelectItem value="Client">Client</SelectItem>
+                      {INVITE_ROLES.map((inviteRole) => (
+                        <SelectItem key={inviteRole} value={inviteRole}>
+                          {inviteRole}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -873,6 +911,7 @@ const Users = () => {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -880,50 +919,94 @@ const Users = () => {
               <TableBody>
                 {pendingLoading ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center">
+                    <TableCell colSpan={5} className="text-center">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : (
-                  pendingInvites.map((invite) => (
-                    <TableRow key={invite.id}>
-                      <TableCell className="font-medium">
-                        {invite.full_name || 'N/A'}
-                      </TableCell>
-                      <TableCell>{invite.email}</TableCell>
-                      <TableCell>
-                        {invite.invited_at ? (
-                          <span className="text-sm text-muted-foreground">
-                            Invited {new Date(invite.invited_at).toLocaleDateString()}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-amber-600 font-medium">
-                            Not Invited
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => sendInviteMutation.mutate(invite)}
-                            disabled={!!invite.invited_at || sendInviteMutation.isPending}
+                  pendingInvites.map((invite) => {
+                    const pendingRole = pendingRoles[invite.id];
+                    // Client and Contractor invites also need a client or site
+                    // assignment; this row has nowhere to collect one, so they are
+                    // sent from the Invite User dialog instead.
+                    const needsAssignment = pendingRole === "Client" || pendingRole === "Contractor";
+
+                    return (
+                      <TableRow key={invite.id}>
+                        <TableCell className="font-medium">
+                          {invite.full_name || 'N/A'}
+                        </TableCell>
+                        <TableCell>{invite.email}</TableCell>
+                        <TableCell>
+                          <Select
+                            value={pendingRole ?? ""}
+                            onValueChange={(value: InviteRole) =>
+                              setPendingRoles({ ...pendingRoles, [invite.id]: value })
+                            }
                           >
-                            <Send className="mr-2 h-3 w-3" />
-                            {invite.invited_at ? 'Resend' : 'Send Invite'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => deletePendingInviteMutation.mutate(invite.id)}
-                            disabled={deletePendingInviteMutation.isPending}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                            <SelectTrigger className="w-[150px]">
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {INVITE_ROLES.map((inviteRole) => (
+                                <SelectItem key={inviteRole} value={inviteRole}>
+                                  {inviteRole}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {needsAssignment && (
+                            <p className="text-xs text-muted-foreground mt-1 max-w-[220px]">
+                              {pendingRole === "Client"
+                                ? "Client users must be assigned to a client — invite them from Invite User above."
+                                : "Contractors must be assigned to sites — invite them from Invite User above."}
+                            </p>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {invite.invited_at ? (
+                            <span className="text-sm text-muted-foreground">
+                              Invited {new Date(invite.invited_at).toLocaleDateString()}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-amber-600 font-medium">
+                              Not Invited
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                if (pendingRole) {
+                                  sendInviteMutation.mutate({ invite, role: pendingRole });
+                                }
+                              }}
+                              disabled={
+                                !pendingRole ||
+                                needsAssignment ||
+                                !!invite.invited_at ||
+                                sendInviteMutation.isPending
+                              }
+                              title={!pendingRole ? "Choose a role for this user first" : undefined}
+                            >
+                              <Send className="mr-2 h-3 w-3" />
+                              {invite.invited_at ? 'Resend' : 'Send Invite'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => deletePendingInviteMutation.mutate(invite.id)}
+                              disabled={deletePendingInviteMutation.isPending}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -1200,11 +1283,11 @@ const Users = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Admin">Admin</SelectItem>
-                      <SelectItem value="Moderator">Moderator</SelectItem>
-                      <SelectItem value="User">User</SelectItem>
-                      <SelectItem value="Contractor">Contractor</SelectItem>
-                      <SelectItem value="Client">Client</SelectItem>
+                      {INVITE_ROLES.map((inviteRole) => (
+                        <SelectItem key={inviteRole} value={inviteRole}>
+                          {inviteRole}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
