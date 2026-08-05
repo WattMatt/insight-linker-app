@@ -12,13 +12,16 @@ import { Camera, ArrowRight, ArrowLeft, CheckCircle2, User, Zap, Shield, Clipboa
 import { useUserRole } from "@/hooks/useUserRole";
 
 interface OnboardingWizardProps {
-  open: boolean;
+  /** Dialog mode only (legacy overlay gate). Ignored when fullPage is set. */
+  open?: boolean;
   onComplete: () => void;
+  /** Render as a full-page card (the /onboarding route, STANDARD D2) instead of a Dialog. */
+  fullPage?: boolean;
 }
 
 const STEPS = ["Welcome", "Profile", "Photo", "Overview"];
 
-export function OnboardingWizard({ open, onComplete }: OnboardingWizardProps) {
+export function OnboardingWizard({ open, onComplete, fullPage = false }: OnboardingWizardProps) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -153,22 +156,15 @@ export function OnboardingWizard({ open, onComplete }: OnboardingWizardProps) {
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent className="sm:max-w-lg [&>button]:hidden" onPointerDownOutside={(e) => e.preventDefault()}>
-        <DialogHeader>
-          <DialogTitle className="text-xl">
-            {step === 0 && "Welcome! 🎉"}
-            {step === 1 && "Complete Your Profile"}
-            {step === 2 && "Add a Profile Photo"}
-            {step === 3 && "You're All Set!"}
-          </DialogTitle>
-          <DialogDescription>
-            Step {step + 1} of {STEPS.length}
-          </DialogDescription>
-        </DialogHeader>
+  const title =
+    step === 0 ? "Welcome! 🎉"
+    : step === 1 ? "Complete Your Profile"
+    : step === 2 ? "Add a Profile Photo"
+    : "You're All Set!";
 
-        {/* Progress */}
+  const body = (
+    <>
+      {/* Progress */}
         <div className="flex gap-1.5">
           {STEPS.map((_, i) => (
             <div
@@ -243,6 +239,16 @@ export function OnboardingWizard({ open, onComplete }: OnboardingWizardProps) {
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
                   placeholder="Your company name"
+                />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="ob-bio">Bio</Label>
+                <Textarea
+                  id="ob-bio"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  placeholder="A short intro — your background, specialities, or anything your team should know"
+                  rows={3}
                 />
               </div>
             </div>
@@ -324,6 +330,37 @@ export function OnboardingWizard({ open, onComplete }: OnboardingWizardProps) {
             </Button>
           )}
         </div>
+    </>
+  );
+
+  // Full-page mode — hosted by the dedicated /onboarding route (STANDARD D2).
+  if (fullPage) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="w-full max-w-lg space-y-4 rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
+          <div className="space-y-1.5">
+            <h1 className="text-xl font-semibold">{title}</h1>
+            <p className="text-sm text-muted-foreground">
+              Step {step + 1} of {STEPS.length}
+            </p>
+          </div>
+          {body}
+        </div>
+      </div>
+    );
+  }
+
+  // Legacy dialog mode (deprecated OnboardingGate overlay).
+  return (
+    <Dialog open={!!open} onOpenChange={() => {}}>
+      <DialogContent className="sm:max-w-lg [&>button]:hidden" onPointerDownOutside={(e) => e.preventDefault()}>
+        <DialogHeader>
+          <DialogTitle className="text-xl">{title}</DialogTitle>
+          <DialogDescription>
+            Step {step + 1} of {STEPS.length}
+          </DialogDescription>
+        </DialogHeader>
+        {body}
       </DialogContent>
     </Dialog>
   );

@@ -24,7 +24,9 @@ import { LoadingState } from "@/components/LoadingState";
 // to the old URL shape:
 //
 //   /auth?type=invite&access_token=...   — invite link from invite-user fn
-//   /auth?type=recovery&token=...        — recovery link from send-password-reset
+//   /auth?type=recovery&token=...        — legacy recovery-link shape (the
+//     retired send-password-reset fn emitted these; resets now go through
+//     supabase.auth.resetPasswordForEmail in ForgotPassword.tsx)
 //
 // Plus the SDK auth state events (PASSWORD_RECOVERY) that can arrive on this
 // page when Supabase auto-handles a recovery callback.

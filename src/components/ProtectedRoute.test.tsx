@@ -7,15 +7,26 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 
 // The access-control chain end to end: the real useAuthSession → useUserRole →
-// ProtectedRoute, with only the Supabase client and the Next router shim stubbed.
+// useOnboardingStatus → ProtectedRoute, with only the Supabase client and the
+// Next router shim stubbed.
 // Cases where the guard admits a user it arguably should not are named "…today" —
 // they record current behaviour so an inversion to a positive allowlist has proof.
-const { auth, roleRow } = vi.hoisted(() => ({
-  auth: { session: null as { user: { id: string } } | null, pending: false },
+const { auth, roleRow, onboardingRow } = vi.hoisted(() => ({
+  auth: {
+    session: null as {
+      user: { id: string; user_metadata?: Record<string, unknown> };
+    } | null,
+    pending: false,
+  },
   roleRow: {
     data: null as { role: string } | null,
     error: null as { message: string } | null,
     gate: null as Promise<void> | null,
+  },
+  onboardingRow: {
+    data: null as { onboarding_completed: boolean } | null,
+    error: null as { message: string; code?: string } | null,
+    inserted: [] as unknown[],
   },
 }));
 
@@ -29,6 +40,8 @@ vi.mock("@/integrations/supabase/client", () => ({
       getUser: () => Promise.resolve({ data: { user: auth.session?.user ?? null } }),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
     },
+    // auth-audit (used by the onboarding self-heal) fires log-auth-event.
+    functions: { invoke: () => Promise.resolve({ data: { success: true }, error: null }) },
     from: () => ({
       select: () => ({
         eq: () => ({
@@ -37,10 +50,20 @@ vi.mock("@/integrations/supabase/client", () => ({
             if (roleRow.gate) await roleRow.gate;
             return { data: roleRow.data, error: roleRow.error };
           },
-          // profiles (onboarding) — always complete, so OnboardingGate is a pass-through
-          single: () => Promise.resolve({ data: { onboarding_completed: true }, error: null }),
+          // profiles (onboarding status)
+          single: () =>
+            Promise.resolve(
+              onboardingRow.error
+                ? { data: null, error: onboardingRow.error }
+                : { data: onboardingRow.data, error: null },
+            ),
         }),
       }),
+      // profiles self-heal INSERT (missing-row failure mode, STANDARD D4)
+      insert: (row: unknown) => {
+        onboardingRow.inserted.push(row);
+        return Promise.resolve({ error: null });
+      },
     }),
   },
 }));
@@ -99,6 +122,9 @@ describe("ProtectedRoute", () => {
     roleRow.data = { role: "Admin" };
     roleRow.error = null;
     roleRow.gate = null;
+    onboardingRow.data = { onboarding_completed: true };
+    onboardingRow.error = null;
+    onboardingRow.inserted = [];
   });
 
   it("shows the auth loader while the session is still resolving", async () => {
@@ -163,6 +189,45 @@ describe("ProtectedRoute", () => {
     await act(async () => { release(); });
 
     await waitFor(() => expect(contentShown()).toBe(true));
+  });
+
+  it("redirects a user who must change their password to /auth/set-password", async () => {
+    auth.session = {
+      user: { id: "user-1", user_metadata: { requires_password_change: true } },
+    };
+    renderGuard();
+    await waitForDecision();
+
+    expect(redirectTarget()).toBe("/auth/set-password");
+    expect(contentShown()).toBe(false);
+  });
+
+  it("redirects an un-onboarded user to the dedicated /onboarding route", async () => {
+    onboardingRow.data = { onboarding_completed: false };
+    renderGuard();
+
+    await waitFor(() => expect(redirectTarget()).toBe("/onboarding"));
+    expect(contentShown()).toBe(false);
+  });
+
+  it("does not redirect to /onboarding when the status lookup errors (fail safe)", async () => {
+    onboardingRow.error = { message: "permission denied for table profiles", code: "42501" };
+    renderGuard();
+    await waitForDecision();
+    await settle();
+
+    expect(contentShown()).toBe(true);
+    expect(redirectTarget()).toBeNull();
+  });
+
+  it("self-heals a missing profiles row (PGRST116) and routes into onboarding", async () => {
+    onboardingRow.data = null;
+    onboardingRow.error = { message: "JSON object requested, 0 rows returned", code: "PGRST116" };
+    renderGuard();
+
+    await waitFor(() => expect(redirectTarget()).toBe("/onboarding"));
+    expect(onboardingRow.inserted).toEqual([{ id: "user-1", email: "" }]);
+    expect(contentShown()).toBe(false);
   });
 
   it("admits a signed-in user with NO user_roles row into the protected shell today", async () => {

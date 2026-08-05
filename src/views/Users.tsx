@@ -304,6 +304,18 @@ const Users = () => {
       if (!data.success) {
         throw new Error(data.error || 'Failed to send invite');
       }
+
+      // Stamp invited_at on the pending row (was never written before, so the
+      // list could not distinguish Send from Resend). Non-fatal: the invite
+      // has already gone out, so a failed stamp must not surface as an error.
+      const { error: stampError } = await supabase
+        .from("pending_user_invites")
+        .update({ invited_at: new Date().toISOString() })
+        .eq("id", invite.id);
+      if (stampError && process.env.NODE_ENV === "development") {
+        console.warn("[users] failed to stamp pending_user_invites.invited_at", stampError);
+      }
+
       return data;
     },
     onSuccess: () => {
