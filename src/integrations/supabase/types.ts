@@ -605,6 +605,7 @@ export type Database = {
           label: string | null
           last_accessed_at: string | null
           link_type: string
+          managing_agency_id: string | null
           site_id: string | null
           subsection_id: string | null
         }
@@ -620,6 +621,7 @@ export type Database = {
           label?: string | null
           last_accessed_at?: string | null
           link_type?: string
+          managing_agency_id?: string | null
           site_id?: string | null
           subsection_id?: string | null
         }
@@ -635,10 +637,18 @@ export type Database = {
           label?: string | null
           last_accessed_at?: string | null
           link_type?: string
+          managing_agency_id?: string | null
           site_id?: string | null
           subsection_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "client_access_links_agency_matches_client_fkey"
+            columns: ["managing_agency_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "managing_agencies"
+            referencedColumns: ["id", "client_id"]
+          },
           {
             foreignKeyName: "client_access_links_client_id_fkey"
             columns: ["client_id"]
@@ -1463,6 +1473,35 @@ export type Database = {
         }
         Relationships: []
       }
+      managing_agencies: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "managing_agencies_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       offline_photos: {
         Row: {
           captured_at: string
@@ -2271,6 +2310,7 @@ export type Database = {
           created_by: string | null
           firebase_id: string | null
           id: string
+          managing_agency_id: string | null
           name: string
           nominated_max_demand: string | null
           site_image_url: string | null
@@ -2289,6 +2329,7 @@ export type Database = {
           created_by?: string | null
           firebase_id?: string | null
           id?: string
+          managing_agency_id?: string | null
           name: string
           nominated_max_demand?: string | null
           site_image_url?: string | null
@@ -2307,6 +2348,7 @@ export type Database = {
           created_by?: string | null
           firebase_id?: string | null
           id?: string
+          managing_agency_id?: string | null
           name?: string
           nominated_max_demand?: string | null
           site_image_url?: string | null
@@ -2315,6 +2357,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sites_agency_matches_client_fkey"
+            columns: ["managing_agency_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "managing_agencies"
+            referencedColumns: ["id", "client_id"]
+          },
           {
             foreignKeyName: "sites_client_id_fkey"
             columns: ["client_id"]
@@ -2756,25 +2805,35 @@ export type Database = {
           client_id: string
           created_at: string | null
           id: string
+          managing_agency_id: string | null
           user_id: string
         }
         Insert: {
           client_id: string
           created_at?: string | null
           id?: string
+          managing_agency_id?: string | null
           user_id: string
         }
         Update: {
           client_id?: string
           created_at?: string | null
           id?: string
+          managing_agency_id?: string | null
           user_id?: string
         }
         Relationships: [
           {
+            foreignKeyName: "user_clients_agency_matches_client_fkey"
+            columns: ["managing_agency_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "managing_agencies"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
             foreignKeyName: "user_clients_client_id_fkey"
             columns: ["client_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },

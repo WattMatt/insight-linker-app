@@ -26,6 +26,9 @@ interface InviteUserRequest {
   isResend?: boolean;
   temporaryPassword?: string;
   clientId?: string;
+  // Optional agency scope for Client-role users: when set, the user only sees
+  // that agency's slice of the client's portfolio. Must belong to clientId.
+  managingAgencyId?: string;
   siteIds?: string[];
   // When true, the initial password is delivered to the user in a branded email
   // (with a forced-change-on-first-login notice) instead of being returned to the
@@ -275,7 +278,7 @@ Deno.serve(async (req) => {
       throw new Error(`Only admins can invite users - your role is ${roleData.role}.`);
     }
 
-    const { email, fullName, role, isResend, temporaryPassword, clientId, siteIds, deliverByEmail }: InviteUserRequest = await req.json();
+    const { email, fullName, role, isResend, temporaryPassword, clientId, managingAgencyId, siteIds, deliverByEmail }: InviteUserRequest = await req.json();
 
     // The role reaches user_metadata and the user_roles insert unchecked, so an
     // absent or unknown one is rejected here. Never substitute a default: which
@@ -308,6 +311,28 @@ Deno.serve(async (req) => {
     // Validate siteIds for Contractor role
     if (role === 'Contractor' && (!siteIds || siteIds.length === 0)) {
       throw new Error('At least one site must be assigned for Contractor role users - select their sites, then send the invite again.');
+    }
+
+    // An agency scope only means something for Client-role users, and it must
+    // belong to the chosen client — the DB's composite FK would reject a
+    // mismatch anyway, but failing here gives the admin an actionable message.
+    if (managingAgencyId && role !== 'Client') {
+      throw new Error(`A managing agency was supplied for a ${role} invite - agency scoping only applies to Client role users.`);
+    }
+    if (role === 'Client' && managingAgencyId) {
+      const { data: agency, error: agencyError } = await supabase
+        .from('managing_agencies')
+        .select('id, name')
+        .eq('id', managingAgencyId)
+        .eq('client_id', clientId)
+        .maybeSingle();
+      if (agencyError) {
+        throw new Error(`Could not verify the managing agency: ${agencyError.message}. Re-pick the agency and send the invite again.`);
+      }
+      if (!agency) {
+        throw new Error('The selected managing agency does not belong to the selected client - re-pick the agency and send the invite again.');
+      }
+      console.log('Invite scoped to managing agency:', agency.name);
     }
 
     // Validate temporary password if provided
@@ -389,12 +414,12 @@ Deno.serve(async (req) => {
         if (existingMapping) {
           await supabase
             .from('user_clients')
-            .update({ client_id: clientId })
+            .update({ client_id: clientId, managing_agency_id: managingAgencyId ?? null })
             .eq('user_id', userId);
         } else {
           await supabase
             .from('user_clients')
-            .insert({ user_id: userId, client_id: clientId });
+            .insert({ user_id: userId, client_id: clientId, managing_agency_id: managingAgencyId ?? null });
         }
       }
 
@@ -583,6 +608,7 @@ Deno.serve(async (req) => {
           .insert({
             user_id: userId,
             client_id: clientId,
+            managing_agency_id: managingAgencyId ?? null,
           });
 
         if (clientMappingError) {

@@ -90,6 +90,7 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
     linkType: "site" as "site" | "client",
     selectedSiteId: siteId || "",
     selectedClientId: clientId || "",
+    selectedAgencyId: "",
     expiresIn: "never" as "never" | "7d" | "30d" | "90d"
   });
 
@@ -152,6 +153,22 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
   const targetMissing =
     formData.linkType === "site" ? !resolvedSiteId : !resolvedClientId;
 
+  // Managing agencies of the portfolio link's client. Optional narrowing: an
+  // agency-scoped link only exposes that agency's slice of the portfolio.
+  const { data: linkClientAgencies } = useQuery({
+    queryKey: ["agencies-for-links", resolvedClientId],
+    enabled: formData.linkType === "client" && !!resolvedClientId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("managing_agencies")
+        .select("id, name")
+        .eq("client_id", resolvedClientId!)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // Create access link mutation
   const createLinkMutation = useMutation({
     mutationFn: async () => {
@@ -180,6 +197,10 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
           link_type: formData.linkType,
           site_id: resolvedSiteId,
           client_id: resolvedClientId,
+          managing_agency_id:
+            formData.linkType === "client" && formData.selectedAgencyId
+              ? formData.selectedAgencyId
+              : null,
           expires_at: expiresAt,
           created_by: user.user?.id,
         })
@@ -197,6 +218,7 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
         linkType: "site",
         selectedSiteId: siteId || "",
         selectedClientId: clientId || "",
+        selectedAgencyId: "",
         expiresIn: "never"
       });
 
@@ -307,8 +329,8 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
                       <Label>Link Type</Label>
                       <Select
                         value={formData.linkType}
-                        onValueChange={(v: "site" | "client") => 
-                          setFormData(prev => ({ ...prev, linkType: v }))
+                        onValueChange={(v: "site" | "client") =>
+                          setFormData(prev => ({ ...prev, linkType: v, selectedAgencyId: "" }))
                         }
                       >
                         <SelectTrigger>
@@ -349,8 +371,8 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
                         <Label>Select Client</Label>
                         <Select
                           value={formData.selectedClientId}
-                          onValueChange={(v) => 
-                            setFormData(prev => ({ ...prev, selectedClientId: v }))
+                          onValueChange={(v) =>
+                            setFormData(prev => ({ ...prev, selectedClientId: v, selectedAgencyId: "" }))
                           }
                         >
                           <SelectTrigger>
@@ -367,6 +389,33 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
                       </div>
                     )}
                   </>
+                )}
+
+                {formData.linkType === "client" && (linkClientAgencies?.length ?? 0) > 0 && (
+                  <div className="space-y-2">
+                    <Label>Managing Agency (optional)</Label>
+                    <Select
+                      value={formData.selectedAgencyId || "all"}
+                      onValueChange={(v) =>
+                        setFormData(prev => ({ ...prev, selectedAgencyId: v === "all" ? "" : v }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Entire portfolio</SelectItem>
+                        {linkClientAgencies?.map((agency) => (
+                          <SelectItem key={agency.id} value={agency.id}>
+                            {agency.name} only
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      An agency-scoped link only shows that agency's sites.
+                    </p>
+                  </div>
                 )}
 
                 <div className="space-y-2">

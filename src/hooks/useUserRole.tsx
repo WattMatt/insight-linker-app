@@ -81,21 +81,37 @@ export const useClientInfo = (previewClientId?: string) => {
           .single();
 
         if (error) throw error;
+        // Admin preview is always fund-level: the whole portfolio, no agency scope.
         return {
           client_id: client.id,
           clients: client,
+          managing_agency_id: null as string | null,
+          managing_agency_name: null as string | null,
         };
       }
 
-      // Normal client user flow
+      // Normal client user flow. A non-null managing_agency_id narrows this
+      // user to that agency's slice of the portfolio (RLS enforces it; the
+      // client-side filters mirror it for defense in depth).
       const { data: mapping, error: mappingError } = await supabase
         .from("user_clients")
-        .select("client_id, clients(id, name, logo_url, company_name)")
+        .select("client_id, managing_agency_id, clients(id, name, logo_url, company_name), managing_agencies(id, name)")
         .eq("user_id", user.id)
         .maybeSingle();
 
       if (mappingError) throw mappingError;
-      return mapping;
+      if (!mapping) return null;
+      if (process.env.NODE_ENV === "development") {
+        console.info(
+          `[client-info] scope resolved: client=${mapping.client_id} agency=${mapping.managing_agency_id ?? "fund-level"}`,
+        );
+      }
+      return {
+        client_id: mapping.client_id,
+        clients: mapping.clients,
+        managing_agency_id: mapping.managing_agency_id,
+        managing_agency_name: mapping.managing_agencies?.name ?? null,
+      };
     },
   });
 };

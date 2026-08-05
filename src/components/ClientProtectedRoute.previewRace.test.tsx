@@ -28,6 +28,7 @@ vi.mock("@/components/auth/OnboardingGate", () => ({
 vi.mock("@/lib/navigation", () => ({
   Navigate: ({ to }: { to: string }) => <div data-testid="navigate">{to}</div>,
   useSearchParams: () => [new URLSearchParams("preview=client-1"), () => {}],
+  useLocation: () => ({ pathname: "/client-portal", search: "?preview=client-1" }),
 }));
 
 import ClientProtectedRoute from "./ClientProtectedRoute";

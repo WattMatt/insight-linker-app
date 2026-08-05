@@ -119,6 +119,7 @@ const Users = () => {
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<"Admin" | "Moderator" | "User" | "Contractor" | "Client">("User");
   const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [selectedAgencyId, setSelectedAgencyId] = useState<string>("");
   const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([]);
   const [temporaryPassword, setTemporaryPassword] = useState("");
   // When true, the invite emails a generated initial password to the user
@@ -177,6 +178,22 @@ const Users = () => {
       const { data, error } = await supabase
         .from("clients")
         .select("*")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Managing agencies of the client picked in the invite dialog. Optional
+  // scope: a Client user with an agency sees only that agency's sites.
+  const { data: inviteClientAgencies } = useQuery({
+    queryKey: ["client-agencies", selectedClientId],
+    enabled: !!selectedClientId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("managing_agencies")
+        .select("id, name")
+        .eq("client_id", selectedClientId)
         .order("name");
       if (error) throw error;
       return data;
@@ -349,7 +366,7 @@ const Users = () => {
 
   // Invite user mutation
   const inviteMutation = useMutation({
-    mutationFn: async (userData: { email: string; fullName: string; role: string; temporaryPassword?: string; deliverByEmail?: boolean; clientId?: string; siteIds?: string[] }) => {
+    mutationFn: async (userData: { email: string; fullName: string; role: string; temporaryPassword?: string; deliverByEmail?: boolean; clientId?: string; managingAgencyId?: string; siteIds?: string[] }) => {
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: {
           email: userData.email,
@@ -359,6 +376,7 @@ const Users = () => {
           temporaryPassword: userData.temporaryPassword,
           deliverByEmail: userData.deliverByEmail,
           clientId: userData.clientId,
+          managingAgencyId: userData.managingAgencyId,
           siteIds: userData.siteIds,
         },
       });
@@ -384,6 +402,7 @@ const Users = () => {
       setFullName("");
       setRole("User");
       setSelectedClientId("");
+      setSelectedAgencyId("");
       setSelectedSiteIds([]);
       setTemporaryPassword("");
       setSendCredentialsByEmail(false);
@@ -401,15 +420,18 @@ const Users = () => {
       
       // Fetch existing client/site assignments for the user
       let clientId: string | undefined;
+      let managingAgencyId: string | undefined;
       let siteIds: string[] | undefined;
 
       if (role === 'Client' && user.id) {
         const { data: clientMapping } = await supabase
           .from('user_clients')
-          .select('client_id')
+          .select('client_id, managing_agency_id')
           .eq('user_id', user.id)
           .maybeSingle();
         clientId = clientMapping?.client_id || undefined;
+        // Preserve the user's agency scope across a resend.
+        managingAgencyId = clientMapping?.managing_agency_id || undefined;
       }
 
       if (role === 'Contractor' && user.id) {
@@ -428,6 +450,7 @@ const Users = () => {
           isResend: true,
           temporaryPassword,
           clientId,
+          managingAgencyId,
           siteIds,
         },
       });
@@ -724,6 +747,7 @@ const Users = () => {
       temporaryPassword: initialPassword,
       deliverByEmail: sendCredentialsByEmail || undefined,
       clientId: role === "Client" ? selectedClientId : undefined,
+      managingAgencyId: role === "Client" && selectedAgencyId ? selectedAgencyId : undefined,
       siteIds: role === "Contractor" ? selectedSiteIds : undefined
     });
   };
@@ -786,7 +810,10 @@ const Users = () => {
                   <Label htmlFor="role">Role</Label>
                   <Select value={role} onValueChange={(value: any) => {
                     setRole(value);
-                    if (value !== "Client") setSelectedClientId("");
+                    if (value !== "Client") {
+                      setSelectedClientId("");
+                      setSelectedAgencyId("");
+                    }
                     if (value !== "Contractor") setSelectedSiteIds([]);
                   }}>
                     <SelectTrigger>
@@ -804,7 +831,14 @@ const Users = () => {
                 {role === "Client" && (
                   <div className="space-y-2">
                     <Label htmlFor="client">Assign to Client</Label>
-                    <Select value={selectedClientId} onValueChange={setSelectedClientId} required>
+                    <Select
+                      value={selectedClientId}
+                      onValueChange={(value) => {
+                        setSelectedClientId(value);
+                        setSelectedAgencyId("");
+                      }}
+                      required
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select a client" />
                       </SelectTrigger>
@@ -818,6 +852,31 @@ const Users = () => {
                     </Select>
                     <p className="text-xs text-muted-foreground">
                       This user will only see data for the selected client.
+                    </p>
+                  </div>
+                )}
+                {role === "Client" && selectedClientId && (inviteClientAgencies?.length ?? 0) > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="agency">Managing Agency (Optional)</Label>
+                    <Select
+                      value={selectedAgencyId || "all"}
+                      onValueChange={(value) => setSelectedAgencyId(value === "all" ? "" : value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Entire portfolio (no agency)</SelectItem>
+                        {inviteClientAgencies?.map((agency) => (
+                          <SelectItem key={agency.id} value={agency.id}>
+                            {agency.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      With an agency selected, this user only sees that agency's
+                      sites. Leave on "Entire portfolio" for client representatives.
                     </p>
                   </div>
                 )}

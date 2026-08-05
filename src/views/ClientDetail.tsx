@@ -5,7 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Building2, FileText, ClipboardCheck, Upload, Trash2, AlertCircle, Image, Pencil } from "lucide-react";
+import { MapPin, Building2, FileText, ClipboardCheck, Upload, Trash2, AlertCircle, Image, Pencil, Briefcase, Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { toast } from "sonner";
 import { Breadcrumbs } from "@/components/Breadcrumb";
@@ -30,8 +32,14 @@ interface Site {
   name: string;
   address: string | null;
   site_type: string | null;
+  managing_agency_id?: string | null;
   subsections?: Subsection[];
   inspections?: Inspection[];
+}
+
+interface ManagingAgency {
+  id: string;
+  name: string;
 }
 
 interface Subsection {
@@ -62,6 +70,9 @@ const ClientDetail = () => {
   const navigate = useNavigate();
   const [client, setClient] = useState<Client | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
+  const [agencies, setAgencies] = useState<ManagingAgency[]>([]);
+  const [newAgencyName, setNewAgencyName] = useState("");
+  const [savingAgency, setSavingAgency] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -101,6 +112,14 @@ const ClientDetail = () => {
         inspections: site.inspections || [],
       })).sort((a, b) => a.name.localeCompare(b.name));
       setSites(processedSites);
+
+      const { data: agencyRows, error: agencyError } = await supabase
+        .from("managing_agencies")
+        .select("id, name")
+        .eq("client_id", clientId)
+        .order("name");
+      if (agencyError) throw agencyError;
+      setAgencies(agencyRows || []);
     } catch (error) {
       console.error("Error fetching client data:", error);
       toast.error("Failed to fetch client data");
@@ -173,6 +192,64 @@ const ClientDetail = () => {
     await supabase.from('clients').update({ logo_url: null }).eq('id', clientId);
     toast.success("Legacy URL removed. Please upload a new logo.");
     fetchClientData();
+  };
+
+  const handleAddAgency = async () => {
+    const name = newAgencyName.trim();
+    if (!clientId || !name) return;
+    setSavingAgency(true);
+    try {
+      const { error } = await supabase
+        .from("managing_agencies")
+        .insert({ client_id: clientId, name });
+      if (error) throw error;
+      toast.success(`Managing agency "${name}" added`);
+      setNewAgencyName("");
+      fetchClientData();
+    } catch (error: any) {
+      toast.error(
+        error?.code === "23505"
+          ? `An agency named "${name}" already exists for this client`
+          : error.message || "Failed to add managing agency",
+      );
+    } finally {
+      setSavingAgency(false);
+    }
+  };
+
+  const handleDeleteAgency = async (agency: ManagingAgency) => {
+    try {
+      const { error } = await supabase
+        .from("managing_agencies")
+        .delete()
+        .eq("id", agency.id);
+      if (error) throw error;
+      toast.success(`Managing agency "${agency.name}" deleted`);
+      fetchClientData();
+    } catch (error: any) {
+      toast.error(
+        error?.code === "23503"
+          ? `"${agency.name}" still has sites, users, or share links assigned — unassign them first`
+          : error.message || "Failed to delete managing agency",
+      );
+    }
+  };
+
+  const handleAssignSiteAgency = async (siteId: string, agencyId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from("sites")
+        .update({ managing_agency_id: agencyId })
+        .eq("id", siteId);
+      if (error) throw error;
+      const agencyName = agencies.find(a => a.id === agencyId)?.name;
+      toast.success(agencyId ? `Site assigned to ${agencyName}` : "Site unassigned from agency");
+      // Reflect immediately; the assignment is also audited server-side in
+      // agency_assignment_history.
+      setSites(prev => prev.map(s => s.id === siteId ? { ...s, managing_agency_id: agencyId } : s));
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update site agency");
+    }
   };
 
 
@@ -371,6 +448,71 @@ const ClientDetail = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Managing Agencies */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4" />
+              Managing Agencies
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Split this client's portfolio between agencies. Portal users assigned
+              to an agency only see that agency's sites; users without one see the
+              whole portfolio.
+            </p>
+            {agencies.length > 0 ? (
+              <div className="space-y-2">
+                {agencies.map((agency) => {
+                  const assignedCount = sites.filter(s => s.managing_agency_id === agency.id).length;
+                  return (
+                    <div key={agency.id} className="flex items-center justify-between border rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{agency.name}</span>
+                        <Badge variant="outline">{assignedCount} {assignedCount === 1 ? "site" : "sites"}</Badge>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 text-destructive"
+                        onClick={() => handleDeleteAgency(agency)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No agencies yet — all of this client's users see the whole portfolio.
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Agency name, e.g. Broll"
+                value={newAgencyName}
+                onChange={(e) => setNewAgencyName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddAgency();
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleAddAgency}
+                disabled={savingAgency || !newAgencyName.trim()}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Sites with nested structure */}
@@ -398,6 +540,29 @@ const ClientDetail = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
+                        {agencies.length > 0 && (
+                          // The header click navigates; the agency picker must not.
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <Select
+                              value={site.managing_agency_id ?? "none"}
+                              onValueChange={(value) =>
+                                handleAssignSiteAgency(site.id, value === "none" ? null : value)
+                              }
+                            >
+                              <SelectTrigger className="h-7 w-[150px] text-xs">
+                                <SelectValue placeholder="Agency" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No agency</SelectItem>
+                                {agencies.map((agency) => (
+                                  <SelectItem key={agency.id} value={agency.id}>
+                                    {agency.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                         <SiteHealthBadge score={siteScores?.get(site.id)} isLoading={scoresLoading} />
                         <Badge variant="outline">{site.subsections?.length || 0} subsections</Badge>
                         <Badge variant="outline">{site.inspections?.length || 0} inspections</Badge>

@@ -99,6 +99,8 @@ describe("useClientInfo — admin preview race", () => {
       expect(result.current.data).toEqual({
         client_id: CLIENT_ID,
         clients: CLIENT_ROW,
+        managing_agency_id: null,
+        managing_agency_name: null,
       })
     );
     // The admin branch was taken — the normal-client mapping was never hit.
