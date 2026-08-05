@@ -21,9 +21,17 @@ export function parseFilesCount(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// yyyy-mm-dd from LOCAL components. An issued date is a calendar date, and xlsx
+// (cellDates:true) materialises a date cell as LOCAL midnight — toISOString() would
+// shift that back a day everywhere east of Greenwich, South Africa included.
+function localIsoDate(d: Date): string {
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
 export function parseIssuedDate(v: unknown): string | null {
   if (v === null || v === undefined || v === "") return null;
-  if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0, 10);
+  if (v instanceof Date && !isNaN(v.getTime())) return localIsoDate(v);
   const s = String(v).trim();
   const m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
   if (m) {
@@ -31,5 +39,5 @@ export function parseIssuedDate(v: unknown): string | null {
     return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
   }
   const dt = new Date(s);
-  return isNaN(dt.getTime()) ? null : dt.toISOString().slice(0, 10);
+  return isNaN(dt.getTime()) ? null : localIsoDate(dt);
 }

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { QrCode, Search, ExternalLink, Building2, MapPin, Layers, Download } from "lucide-react";
 import { useNavigate } from "@/lib/navigation";
@@ -17,6 +18,7 @@ interface QRCodeEntry {
   qr_code_url: string | null;
   created_at: string;
   site_id: string;
+  qr_disabled: boolean;
   sites: {
     name: string;
     client_id: string;
@@ -34,6 +36,7 @@ const QRCodes = () => {
   const [loading, setLoading] = useState(true);
   const [selectedQR, setSelectedQR] = useState<QRCodeEntry | null>(null);
   const [companyLogo, setCompanyLogo] = useState<string>("");
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -72,6 +75,7 @@ const QRCodes = () => {
           qr_code_url,
           created_at,
           site_id,
+          qr_disabled,
           sites (
             name,
             client_id,
@@ -126,6 +130,46 @@ const QRCodes = () => {
   const handleViewDetails = (qr: QRCodeEntry) => {
     if (qr.sites?.client_id && qr.site_id && qr.id) {
       navigate(`/clients/${qr.sites.client_id}/sites/${qr.site_id}/subsections/${qr.id}`);
+    }
+  };
+
+  const handleToggleQrDisabled = async (qr: QRCodeEntry, nextActive: boolean) => {
+    const newDisabled = !nextActive;
+    setTogglingIds((prev) => new Set(prev).add(qr.id));
+
+    try {
+      const { error } = await supabase
+        .from("subsections")
+        .update({ qr_disabled: newDisabled })
+        .eq("id", qr.id);
+
+      if (error) throw error;
+
+      setQrCodes((prev) =>
+        prev.map((entry) =>
+          entry.id === qr.id ? { ...entry, qr_disabled: newDisabled } : entry
+        )
+      );
+
+      toast({
+        title: newDisabled ? "QR code retired" : "QR code activated",
+        description: newDisabled
+          ? "This QR code will now redirect to the retired page."
+          : "This QR code is active again.",
+      });
+    } catch (error: any) {
+      console.error("Error updating QR code status:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update QR code status",
+        variant: "destructive",
+      });
+    } finally {
+      setTogglingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(qr.id);
+        return next;
+      });
     }
   };
 
@@ -195,8 +239,15 @@ const QRCodes = () => {
                         <QrCode className="h-5 w-5 text-primary" />
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-semibold text-lg mb-2">{qr.name}</h3>
-                        
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold text-lg">{qr.name}</h3>
+                          {qr.qr_disabled && (
+                            <Badge variant="secondary" className="text-xs text-muted-foreground">
+                              Retired
+                            </Badge>
+                          )}
+                        </div>
+
                         <div className="space-y-2">
                           {qr.sites?.clients && (
                             <div className="flex items-center gap-2 text-sm">
@@ -230,6 +281,15 @@ const QRCodes = () => {
                   </div>
 
                   <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-end gap-2 text-sm">
+                      <span className="text-muted-foreground">Active</span>
+                      <Switch
+                        checked={!qr.qr_disabled}
+                        disabled={togglingIds.has(qr.id)}
+                        onCheckedChange={(checked) => handleToggleQrDisabled(qr, checked)}
+                        aria-label="Active"
+                      />
+                    </div>
                     <Button
                       variant="default"
                       size="sm"

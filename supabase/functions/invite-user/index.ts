@@ -8,6 +8,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Every member of the public.app_role enum (CREATE TYPE in the 20251014 migration,
+// then the 20251014 / 20251017 ADD VALUEs). Anything outside this list cannot be
+// stored in user_roles, and the role decides what the invited user can see, so it
+// is checked up front instead of surfacing as an enum error at the insert.
+const ALLOWED_ROLES = ['Admin', 'User', 'Contractor', 'Moderator', 'Client'];
+
+// auth.admin.listUsers() is paginated and defaults to 50 users per page. The page
+// cap bounds the walk so an API that keeps returning full pages cannot spin here.
+const USER_PAGE_SIZE = 200;
+const MAX_USER_PAGES = 50;
+
 interface InviteUserRequest {
   email: string;
   fullName: string;
@@ -164,8 +175,55 @@ async function sendInitialPasswordEmail(
 
   if (emailError) {
     console.error('Initial-password email error:', emailError);
-    throw new Error(`Failed to email login details: ${emailError.message}`);
+    throw new Error(
+      `Failed to email login details: ${emailError.message}. The account and its password are already set - use Resend on the user's row to retry delivery.`,
+    );
   }
+}
+
+/**
+ * Look up the auth account for an email, if there is one. listUsers() returns one
+ * page at a time, so a single call only ever sees the first 50 accounts: past that
+ * an existing user looks new, the caller takes the create branch, and Supabase
+ * rejects the duplicate address. Pages are walked until the email is found or a
+ * page comes back empty. Running out of pages means the answer is unknown, and an
+ * unknown answer must not be reported as "no such account".
+ */
+async function findUserByEmail(
+  supabase: ReturnType<typeof createClient>,
+  email: string,
+) {
+  for (let page = 1; page <= MAX_USER_PAGES; page++) {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page,
+      perPage: USER_PAGE_SIZE,
+    });
+
+    if (error) {
+      console.error(`Existing-user lookup error on page ${page}:`, error);
+      throw new Error(
+        `Could not check whether ${email} already has an account: ${error.message}. Retry the invite; if it keeps failing, check the function's SUPABASE_SERVICE_ROLE_KEY.`,
+      );
+    }
+
+    // Only an empty page ends the walk. A short page is deliberately not used as
+    // the terminator: if the API ever caps perPage below what we ask for, every
+    // page looks short and the walk stops on the first one, missing exactly the
+    // accounts it is here to find. One extra round trip is the cheaper risk.
+    const users = data?.users ?? [];
+    if (users.length === 0) {
+      return undefined;
+    }
+
+    const match = users.find(u => u.email === email);
+    if (match) {
+      return match;
+    }
+  }
+
+  throw new Error(
+    `Could not confirm whether ${email} already has an account after checking ${MAX_USER_PAGES * USER_PAGE_SIZE} of them. Find the user in Supabase Auth and use Resend on their existing row instead.`,
+  );
 }
 
 Deno.serve(async (req) => {
@@ -181,7 +239,7 @@ Deno.serve(async (req) => {
     // Get the authorization header to verify the requesting user
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      throw new Error('No authorization header');
+      throw new Error('No authorization header - sign out, sign back in, and send the invite again.');
     }
 
     // Verify the requesting user is an admin
@@ -192,40 +250,69 @@ Deno.serve(async (req) => {
       throw new Error('Unauthorized - please log in again');
     }
 
-    // Check if requesting user has Admin role
-    const { data: roleData } = await supabase
+    // Check if requesting user has Admin role. maybeSingle() fails when the query
+    // matches more than one row, and user_roles is UNIQUE(user_id, role) rather
+    // than one row per user — so a second role row is a failed lookup, not proof
+    // that the caller is not an admin, and must not be reported as one.
+    const { data: roleData, error: roleLookupError } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (roleData?.role !== 'Admin') {
-      throw new Error('Only admins can invite users');
+    if (roleLookupError) {
+      console.error('Admin role lookup error:', roleLookupError);
+      throw new Error(
+        `Could not resolve your role: ${roleLookupError.message}. Check user_roles for user_id ${user.id} - inviting requires your account to have exactly one role row.`,
+      );
+    }
+
+    if (!roleData) {
+      throw new Error('Only admins can invite users - your account has no role assigned. Ask another admin to give you the Admin role.');
+    }
+
+    if (roleData.role !== 'Admin') {
+      throw new Error(`Only admins can invite users - your role is ${roleData.role}.`);
     }
 
     const { email, fullName, role, isResend, temporaryPassword, clientId, siteIds, deliverByEmail }: InviteUserRequest = await req.json();
 
+    // The role reaches user_metadata and the user_roles insert unchecked, so an
+    // absent or unknown one is rejected here. Never substitute a default: which
+    // role someone gets is an authorization decision, not ours to guess.
+    if (!role) {
+      throw new Error(
+        `No role was supplied for ${email}. Choose a role (${ALLOWED_ROLES.join(', ')}) for the user, then send the invite again.`,
+      );
+    }
+
+    if (!ALLOWED_ROLES.includes(role)) {
+      throw new Error(
+        `Unknown role "${role}" for ${email}. Choose one of: ${ALLOWED_ROLES.join(', ')}.`,
+      );
+    }
+
     // Emailing credentials requires a password to email. Fail loud rather than
     // silently create an account the user can never reach.
     if (deliverByEmail && !temporaryPassword) {
-      throw new Error('deliverByEmail requires an initial password to be provided');
+      throw new Error('deliverByEmail requires an initial password to be provided - send the invite without emailing the password, or supply one.');
     }
 
     console.log(isResend ? 'Resending invite to:' : 'Inviting user:', email, 'with role:', role);
     
     // Validate clientId for Client role
     if (role === 'Client' && !clientId) {
-      throw new Error('Client ID is required for Client role users');
+      throw new Error('Client ID is required for Client role users - pick the client the user belongs to, then send the invite again.');
     }
 
     // Validate siteIds for Contractor role
     if (role === 'Contractor' && (!siteIds || siteIds.length === 0)) {
-      throw new Error('At least one site must be assigned for Contractor role users');
+      throw new Error('At least one site must be assigned for Contractor role users - select their sites, then send the invite again.');
     }
 
     // Validate temporary password if provided
     if (temporaryPassword && temporaryPassword.length < 6) {
-      throw new Error('Temporary password must be at least 6 characters');
+      throw new Error('Temporary password must be at least 6 characters - enter a longer one and send the invite again.');
     }
 
     // Redirect base from env, NOT the request origin — a preview deployment or a
@@ -237,8 +324,7 @@ Deno.serve(async (req) => {
     console.log('Redirect URL:', redirectTo);
 
     // Check if user already exists
-    const { data: existingUsers } = await supabase.auth.admin.listUsers();
-    const existingUser = existingUsers?.users.find(u => u.email === email);
+    const existingUser = await findUserByEmail(supabase, email);
 
     let userId: string;
     let isNewUser = false;
@@ -385,7 +471,9 @@ Deno.serve(async (req) => {
 
         if (recoveryError) {
           console.error('Password recovery error:', recoveryError);
-          throw new Error(`Failed to send password reset: ${recoveryError.message}`);
+          throw new Error(
+            `Failed to send password reset: ${recoveryError.message}. The account is unchanged - check the project's Auth email settings, then try again.`,
+          );
         }
 
         return new Response(
@@ -424,7 +512,9 @@ Deno.serve(async (req) => {
 
       if (createError) {
         console.error('User creation error:', createError);
-        throw new Error(`Failed to create user: ${createError.message}`);
+        throw new Error(
+          `Failed to create user: ${createError.message}. If it says the address is already registered, reload the user list and use Resend on their row instead.`,
+        );
       }
 
       userId = newUser.user.id;
@@ -460,7 +550,9 @@ Deno.serve(async (req) => {
 
           if (roleError) {
             console.error('Role update error:', roleError);
-            throw new Error(`Failed to update role: ${roleError.message}`);
+            throw new Error(
+              `Failed to update role: ${roleError.message}. The account exists but still holds its previous role - use Resend on their row to try again.`,
+            );
           }
           console.log('Role updated successfully');
         } else {
@@ -477,7 +569,9 @@ Deno.serve(async (req) => {
 
         if (roleError) {
           console.error('Role assignment error:', roleError);
-          throw new Error(`Failed to assign role: ${roleError.message}`);
+          throw new Error(
+            `Failed to assign role: ${roleError.message}. The account exists with no role and cannot sign in usefully - use Resend on their row to finish setting it up.`,
+          );
         }
         console.log('Role assigned successfully');
       }
@@ -493,7 +587,9 @@ Deno.serve(async (req) => {
 
         if (clientMappingError) {
           console.error('Client mapping error:', clientMappingError);
-          throw new Error(`Failed to map user to client: ${clientMappingError.message}`);
+          throw new Error(
+            `Failed to map user to client: ${clientMappingError.message}. The account exists but is not linked to the client, so it will see nothing - use Resend on their row to retry the link.`,
+          );
         }
 
         console.log('User mapped to client successfully');
@@ -512,7 +608,9 @@ Deno.serve(async (req) => {
 
         if (siteMappingError) {
           console.error('Site mapping error:', siteMappingError);
-          throw new Error(`Failed to map user to sites: ${siteMappingError.message}`);
+          throw new Error(
+            `Failed to map user to sites: ${siteMappingError.message}. The account exists but has no site assignments - use Resend on their row to retry them.`,
+          );
         }
 
         console.log(`User mapped to ${siteIds.length} site(s) successfully`);
@@ -576,7 +674,9 @@ Deno.serve(async (req) => {
 
     if (inviteError) {
       console.error('Invite link generation error:', inviteError);
-      throw new Error(`Failed to generate invite link: ${inviteError.message}`);
+      throw new Error(
+        `Failed to generate invite link: ${inviteError.message}. The account is set up but no email went out - use Resend on their row to try again.`,
+      );
     }
 
     console.log('Fresh invite link generated');
@@ -671,7 +771,9 @@ Deno.serve(async (req) => {
 
     if (emailError) {
       console.error('Resend email error:', emailError);
-      throw new Error(`Failed to send invite email: ${emailError.message}`);
+      throw new Error(
+        `Failed to send invite email: ${emailError.message}. The account and invite link exist but the email did not send - use Resend on their row to try again.`,
+      );
     }
 
     console.log('Invite email sent via Resend');

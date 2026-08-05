@@ -88,9 +88,16 @@ export function calculateCocComplianceStats(
     hasValidCocStatus(s.coc_status)
   ).length;
 
-  const meteringInstalledCount = subsections.filter(s =>
-    s.metering_status === 'Installed' || !!s.meter_serial_number
-  ).length;
+  const isMetered = (s: SubsectionForCompliance) =>
+    s.metering_status === 'Installed' || !!s.meter_serial_number;
+
+  // Site-wide count (what the site header shows); metering is tracked on every subsection.
+  const meteringInstalledCount = subsections.filter(isMetered).length;
+
+  // The rate is scoped to the COC-required subsections so it shares a denominator with
+  // cocComplianceRate and stays bounded by 100 — counting site-wide installs against the
+  // COC-required count lets the percentage run past 100.
+  const meteringRequiredCount = cocRequiredSubsections.filter(isMetered).length;
 
   return {
     totalSubsections,
@@ -98,6 +105,6 @@ export function calculateCocComplianceStats(
     cocApprovedCount,
     meteringInstalledCount,
     cocComplianceRate: cocComplianceRate(cocApprovedCount, cocRequiredCount),
-    meteringComplianceRate: cocComplianceRate(meteringInstalledCount, cocRequiredCount),
+    meteringComplianceRate: cocComplianceRate(meteringRequiredCount, cocRequiredCount),
   };
 }

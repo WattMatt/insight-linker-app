@@ -43,10 +43,14 @@ export function normalizeCocDocStatus(raw: string | null | undefined): CocDocSta
   return 'Pending'; // null/blank/unknown => uploaded but unmarked
 }
 
-export function cocDocFails(d: CocDoc, today: string): boolean {
-  if (d.cocStatus === 'Fail') return true;
-  if (d.cocStatus === 'Pass' && d.cocExpiryDate && d.cocExpiryDate < today) return true;
-  return false;
+/**
+ * Register-truth model (2026-07-25): a doc fails ONLY on an explicit Fail
+ * verdict. Expiry is display-only — re-verification (new workbook imports) is
+ * what invalidates old certificates. The `today` param is kept for call-site
+ * stability but no longer affects the result.
+ */
+export function cocDocFails(d: CocDoc, _today: string): boolean {
+  return d.cocStatus === 'Fail';
 }
 
 export function rollupStatus(docs: CocDoc[], today: string): CocDocStatus {

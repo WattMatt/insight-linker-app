@@ -1,10 +1,15 @@
-import { useEffect, useState } from "react";
-import { useParams } from "@/lib/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useNavigate } from "@/lib/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, FileText, Eye, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { PublicVerdictCard } from "@/components/public/PublicVerdictCard";
+import { PublicIssueReportDialog } from "@/components/public/PublicIssueReportDialog";
+import { presentVerdict, type PublicVerdict } from "@/lib/publicVerdict";
+import { useAuthSession } from "@/components/auth/useAuthSession";
+import { useUserRole } from "@/hooks/useUserRole";
 
 // get_public_subsection returns only these subsection fields (deliberate
 // data-minimization — no COC/metering on the public landing).
@@ -49,20 +54,86 @@ interface SnagData {
 }
 
 
+// Slim session-aware banner rendered below the verdict card. Anonymous visitors
+// (no session) see nothing — this must never affect the unauthenticated path.
+// Role resolution is async (useUserRole via react-query), so we wait for it to
+// settle (data !== undefined) rather than flash a wrong/generic action.
+type RoleBannerProps = {
+  session: ReturnType<typeof useAuthSession>["session"];
+  userRole: ReturnType<typeof useUserRole>["data"];
+  siteData: SiteData | null;
+  subsectionId: string | undefined;
+  navigate: ReturnType<typeof useNavigate>;
+};
+
+function RoleBanner({ session, userRole, siteData, subsectionId, navigate }: RoleBannerProps) {
+  if (!session || !siteData?.id || userRole === undefined) return null;
+
+  let text: string;
+  let buttonLabel: string;
+  let onClick: () => void;
+
+  if (userRole === "Contractor") {
+    text = "You're signed in as a contractor.";
+    buttonLabel = "Upload COC for this subsection";
+    onClick = () => navigate(`/contractor/subsections/${subsectionId}?tab=upload`);
+  } else if (userRole === "Client") {
+    text = "You're signed in.";
+    buttonLabel = "Open client portal";
+    onClick = () => navigate('/client-portal');
+  } else {
+    // Admin or any other staff (userRole "Admin" or null-but-session-exists)
+    text = "You're signed in as staff.";
+    buttonLabel = "Open in admin";
+    onClick = () => navigate(`/sites/${siteData.id}/subsections/${subsectionId}?tab=coc-metering`);
+  }
+
+  return (
+    <Card className="mb-6 shadow-sm border-primary/20 bg-primary/5">
+      <CardContent className="py-4 flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-sm font-medium">{text}</p>
+        <Button size="sm" onClick={onClick}>{buttonLabel}</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 const PublicSubsection = () => {
   const { subsectionId } = useParams();
+  const navigate = useNavigate();
+  const { session } = useAuthSession();
+  const { data: userRole } = useUserRole();
   const [subsection, setSubsection] = useState<SubsectionData | null>(null);
   const [siteData, setSiteData] = useState<SiteData | null>(null);
   const [documents, setDocuments] = useState<DocumentCategory[]>([]);
   const [snags, setSnags] = useState<SnagData[]>([]);
+  const [verdict, setVerdict] = useState<PublicVerdict | null>(null);
   const [loading, setLoading] = useState(true);
   const [companySettings, setCompanySettings] = useState<{company_name: string; company_logo_url?: string} | null>(null);
+  const presenceLogged = useRef(false);
 
   useEffect(() => {
     if (subsectionId) {
       fetchPublicData();
     }
   }, [subsectionId]);
+
+  // One-time presence log per mount, only when signed in. RLS (Task 1) permits exactly
+  // this shape: authenticated, scanned_by = auth.uid(), source = 'landing'. Pre-migration
+  // this fails with an RLS error — non-blocking, the page must not break for it.
+  useEffect(() => {
+    if (!session || !subsectionId || presenceLogged.current) return;
+    presenceLogged.current = true;
+    Promise.resolve(
+      supabase.from('qr_scans').insert({
+        subsection_id: subsectionId,
+        scanned_by: session.user.id,
+        source: 'landing',
+      }),
+    ).then(({ error }) => {
+      if (error) console.error('presence log failed (non-blocking):', error);
+    }).catch((e) => console.error('presence log failed (non-blocking):', e));
+  }, [session, subsectionId]);
 
   const fetchPublicData = async () => {
     try {
@@ -103,6 +174,7 @@ const PublicSubsection = () => {
 
       setDocuments(transformedDocs);
       setSnags(payload.snags || []);
+      setVerdict((payload.verdict as PublicVerdict) ?? null);
     } catch (error) {
       console.error("Error fetching public data:", error);
     } finally {
@@ -206,6 +278,18 @@ const PublicSubsection = () => {
 
       {/* Main content */}
       <div className="container mx-auto px-4 py-6 max-w-4xl">
+        <div className="flex justify-end mb-4">
+          <PublicIssueReportDialog
+            subsectionId={subsectionId ?? ""}
+            trigger={
+              <Button variant="outline" size="sm">
+                <AlertTriangle className="h-4 w-4 mr-1.5" />
+                Report an issue
+              </Button>
+            }
+          />
+        </div>
+
         {/* Status Summary Card - matching SubsectionDetail layout */}
         <Card className="mb-6 shadow-sm">
           <CardHeader className="pb-4">
@@ -285,6 +369,24 @@ const PublicSubsection = () => {
             </div>
           </CardContent>
         </Card>
+
+        <PublicVerdictCard verdict={verdict} />
+
+        {presentVerdict(verdict, new Date()).kind === "fail" && (
+          <div className="flex justify-center mb-6 -mt-3">
+            <PublicIssueReportDialog
+              subsectionId={subsectionId ?? ""}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <AlertTriangle className="h-4 w-4 mr-1.5" />
+                  Report an issue
+                </Button>
+              }
+            />
+          </div>
+        )}
+
+        <RoleBanner session={session} userRole={userRole} siteData={siteData} subsectionId={subsectionId} navigate={navigate} />
 
         {/* Subsection Document Categories */}
         {documents.map((category, idx) => (

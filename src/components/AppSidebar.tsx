@@ -16,6 +16,7 @@ import {
   Lightbulb,
   FileCode,
   Sparkles,
+  Activity,
 } from "lucide-react";
 import { NavLink, useNavigate } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,6 +44,7 @@ const menuItems = [
   { title: "Calendar", url: "/calendar", icon: CalendarDays, adminOnly: false },
   { title: "Clients", url: "/clients", icon: Users, adminOnly: false },
   { title: "QR Codes", url: "/qr-codes", icon: QrCode, adminOnly: false },
+  { title: "QR Activity", url: "/qr-activity", icon: Activity, adminOnly: false },
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText, adminOnly: false },
   { title: "Settings", url: "/settings", icon: SettingsIcon, adminOnly: true },
 ];

@@ -1,19 +1,30 @@
-import { Navigate, useSearchParams } from "@/lib/navigation";
+import { Navigate, useSearchParams, useLocation } from "@/lib/navigation";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuthSession } from "@/components/auth/useAuthSession";
 import { useOnboardingStatus } from "@/components/auth/useOnboardingStatus";
 import { AuthLoading } from "@/components/auth/AuthLoading";
-import { OnboardingGate } from "@/components/auth/OnboardingGate";
 
 const ClientProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, isLoading: sessionLoading } = useAuthSession();
   const { data: userRole, isPending: rolePending } = useUserRole();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const previewClientId = searchParams.get("preview");
-  const { data: onboardingStatus, refetch } = useOnboardingStatus(!!session);
+  const {
+    data: onboardingStatus,
+    isLoading: onboardingLoading,
+    isError: onboardingError,
+  } = useOnboardingStatus(!!session);
 
   if (sessionLoading) return <AuthLoading variant="skeleton" />;
-  if (!session) return <Navigate to="/auth/login" replace />;
+  if (!session) {
+    const next = encodeURIComponent(location.pathname + (location.search || ""));
+    return <Navigate to={`/auth/login?next=${next}`} replace />;
+  }
+  // Forced password change enforced at the guard (see ProtectedRoute).
+  if (session.user?.user_metadata?.requires_password_change === true) {
+    return <Navigate to="/auth/set-password" replace />;
+  }
   // isPending, not isLoading: the role query is *disabled* until the session's
   // userId lands, and a disabled query reports isLoading=false while userRole
   // is still undefined — routing on it then bounces admins to /dashboard.
@@ -24,11 +35,18 @@ const ClientProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   if (userRole === "Admin" && previewClientId) return <>{children}</>;
   if (userRole !== "Client") return <Navigate to="/dashboard" replace />;
 
-  return (
-    <OnboardingGate onboardingStatus={onboardingStatus} onComplete={() => refetch()}>
-      {children}
-    </OnboardingGate>
-  );
+  // First-run gate (STANDARD D2): redirect-style, never while loading/unknown,
+  // fail safe on lookup errors.
+  if (
+    !onboardingLoading &&
+    !onboardingError &&
+    onboardingStatus &&
+    onboardingStatus.onboarding_completed === false
+  ) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  return <>{children}</>;
 };
 
 export default ClientProtectedRoute;

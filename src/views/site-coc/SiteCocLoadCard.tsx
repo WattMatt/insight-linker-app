@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Upload, Loader2 } from "lucide-react";
 import { useSiteCocPool } from "./useSiteCocPool";
 
-export function SiteCocLoadCard({ pool }: { pool: ReturnType<typeof useSiteCocPool> }) {
+export function SiteCocLoadCard({ pool, hasImport }: { pool: ReturnType<typeof useSiteCocPool>; hasImport: boolean }) {
   const { busy, progress, outcomes, upload } = pool;
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
@@ -20,6 +20,11 @@ export function SiteCocLoadCard({ pool }: { pool: ReturnType<typeof useSiteCocPo
     <Card>
       <CardHeader><CardTitle>Load COC files & evaluation reports</CardTitle></CardHeader>
       <CardContent className="space-y-3">
+        {!hasImport && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+            Import the register first — files can only auto-match after the DB Schedule + Verification workbooks are imported above.
+          </p>
+        )}
         <div
           onDragOver={e => { e.preventDefault(); setDrag(true); }}
           onDragLeave={() => setDrag(false)}
@@ -29,7 +34,7 @@ export function SiteCocLoadCard({ pool }: { pool: ReturnType<typeof useSiteCocPo
         >
           {busy
             ? <span className="inline-flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> {progress ? `Uploading ${progress.done}/${progress.total}…` : "Working…"}</span>
-            : <span className="inline-flex items-center gap-2 text-sm text-muted-foreground"><Upload className="h-4 w-4" /> Drop all COC PDFs + evaluation reports. They upload to a pool; exact register matches auto-assign — assign the rest in the Assign tab.</span>}
+            : <span className="inline-flex items-center gap-2 text-sm text-muted-foreground"><Upload className="h-4 w-4" /> Drop all COC PDFs + evaluation reports. They upload to a pool; exact register matches auto-assign — fix the rest in the Exceptions tab.</span>}
           <input ref={inputRef} type="file" multiple className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.html,.htm"
             onChange={e => { handleFiles(e.target.files); if (inputRef.current) inputRef.current.value = ""; }} />
         </div>
@@ -47,7 +52,7 @@ export function SiteCocLoadCard({ pool }: { pool: ReturnType<typeof useSiteCocPo
                     </span>}
               </div>
             ))}
-            <p className="text-xs text-muted-foreground pt-1">Assign the unmatched files in the <strong>Assign</strong> tab.</p>
+            <p className="text-xs text-muted-foreground pt-1">Fix the unmatched files in the <strong>Exceptions</strong> tab.</p>
           </div>
         )}
       </CardContent>

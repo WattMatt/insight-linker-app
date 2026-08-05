@@ -9,6 +9,9 @@ verify_jwt = true
 [functions.qr-redirect]
 verify_jwt = false
 
+[functions.report-issue]
+verify_jwt = false
+
 [functions.validate-coc]
 verify_jwt = true
 

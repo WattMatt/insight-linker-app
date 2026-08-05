@@ -7,10 +7,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Mail, Lock, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 
-import { useNavigate } from "@/lib/navigation";
+import { useNavigate, useSearchParams } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthLayout } from "@/views/auth/AuthLayout";
 import { useRoleRedirect } from "@/views/auth/useRoleRedirect";
+import { safeNext } from "@/lib/loginNext";
 import {
   CaptchaTurnstile,
   CAPTCHA_ENABLED,
@@ -39,6 +40,7 @@ type MagicLinkStep = "email" | "code";
 export default function Login() {
   const navigate = useNavigate();
   const { redirectByRole } = useRoleRedirect();
+  const [searchParams] = useSearchParams();
 
   const [mode, setMode] = useState<Mode>("password");
   const [serverError, setServerError] = useState<string | null>(null);
@@ -64,11 +66,16 @@ export default function Login() {
         if (needsChange) {
           navigate("/auth/reset-password");
         } else {
-          void redirectByRole(data.session.user.id);
+          const next = safeNext(searchParams.get("next"));
+          if (next) {
+            navigate(next);
+          } else {
+            void redirectByRole(data.session.user.id);
+          }
         }
       }
     });
-  }, [navigate, redirectByRole]);
+  }, [navigate, redirectByRole, searchParams]);
 
   const pw = useForm<SignInInput>({ resolver: zodResolver(signInSchema) });
   const ml = useForm<ForgotPasswordInput>({ resolver: zodResolver(forgotPasswordSchema) });
@@ -103,7 +110,12 @@ export default function Login() {
         return;
       }
       toast.success("Signed in");
-      await redirectByRole(data.user!.id);
+      const next = safeNext(searchParams.get("next"));
+      if (next) {
+        navigate(next);
+      } else {
+        await redirectByRole(data.user!.id);
+      }
     }
   }
 
@@ -170,8 +182,18 @@ export default function Login() {
     }
 
     recordAuthEvent("login", { method: "magic_link" });
+    const needsChange = data.user?.user_metadata?.requires_password_change;
+    if (needsChange) {
+      navigate("/auth/reset-password");
+      return;
+    }
     toast.success("Signed in");
-    await redirectByRole(data.user!.id);
+    const next = safeNext(searchParams.get("next"));
+    if (next) {
+      navigate(next);
+    } else {
+      await redirectByRole(data.user!.id);
+    }
   }
 
   // ---------- Magic-link code-entry step ----------

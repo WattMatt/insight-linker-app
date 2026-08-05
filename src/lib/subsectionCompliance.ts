@@ -22,8 +22,8 @@ export interface VerdictInput {
  * - Installation Review: physical health — no open snags AND metering not explicitly
  *   "Missing" without a serial. COC plays no part.
  * - Documentation: COC paperwork — when not required, compliant; otherwise compliant only
- *   when an Initial-typed COC document exists and is Pass (not failed/expired). Same source
- *   as the I/S card line (cocHierarchy), so the two never disagree.
+ *   when an Initial-typed COC document exists and is Pass (register verdict; expiry is
+ *   display-only). Same source as the I/S card line (cocHierarchy), so the two never disagree.
  * - Overall: both pass.
  */
 export function computeSubsectionVerdict(input: VerdictInput): SubsectionVerdict {

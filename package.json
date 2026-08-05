@@ -7,6 +7,9 @@
     "build": "NODE_OPTIONS='--require ./server-polyfills.js' next build",
     "start": "NODE_OPTIONS='--require ./server-polyfills.js' next start",
     "lint": "eslint .",
+    "lint:ratchet": "node scripts/lint-ratchet.mjs",
+    "typecheck": "tsc --noEmit",
+    "typecheck:ratchet": "node scripts/typecheck-ratchet.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

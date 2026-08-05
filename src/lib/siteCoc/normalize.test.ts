@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { normShop, normCert, normCertType, parseFilesCount, parseIssuedDate } from "./normalize";
 
 describe("normShop", () => {
@@ -39,11 +39,28 @@ describe("parseFilesCount", () => {
 });
 
 describe("parseIssuedDate", () => {
-  it("returns yyyy-mm-dd for a Date", () => {
-    expect(parseIssuedDate(new Date("2024-11-05T00:00:00Z"))).toBe("2024-11-05");
+  // Date cells arrive from xlsx (cellDates:true) as LOCAL midnight, so these pin the
+  // runner's zone: a UTC serialisation drops a day everywhere east of Greenwich.
+  const originalTz = process.env.TZ;
+  afterEach(() => {
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
+  });
+
+  it("keeps the calendar day of a local-midnight Date in a UTC-positive zone", () => {
+    process.env.TZ = "Africa/Johannesburg";
+    expect(parseIssuedDate(new Date(2024, 10, 5))).toBe("2024-11-05");
+  });
+  it("keeps the calendar day of a local-midnight Date in a UTC-negative zone", () => {
+    process.env.TZ = "America/New_York";
+    expect(parseIssuedDate(new Date(2024, 10, 5))).toBe("2024-11-05");
   });
   it("passes through an iso-ish string date", () => {
     expect(parseIssuedDate("2024-11-05")).toBe("2024-11-05");
+  });
+  it("reads a non-iso string date from local components", () => {
+    process.env.TZ = "Africa/Johannesburg";
+    expect(parseIssuedDate("05 Nov 2024")).toBe("2024-11-05");
   });
   it("returns null for unparseable", () => {
     expect(parseIssuedDate("n/a")).toBeNull();

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { countInspectionPhotos } from "@/lib/inspectionImages";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,9 @@ export function BulkInspectionReportGenerator({
   const [isLoading, setIsLoading] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
-  const [shouldStop, setShouldStop] = useState(false);
+  // A ref, not state: the run loop is a single async call, so a state value would stay
+  // pinned to the render that started it and Stop would never reach the running loop.
+  const shouldStopRef = useRef(false);
   const [skipExisting, setSkipExisting] = useState(true);
   const [onlyWithPhotos, setOnlyWithPhotos] = useState(false);
   
@@ -93,6 +95,7 @@ export function BulkInspectionReportGenerator({
             id,
             template_id,
             status,
+            created_at,
             json_data,
             inspection_templates (
               id,
@@ -366,7 +369,7 @@ export function BulkInspectionReportGenerator({
   const runBulkGeneration = async () => {
     setIsRunning(true);
     setIsStopping(false);
-    setShouldStop(false);
+    shouldStopRef.current = false;
     setError(null);
     setResults([]);
     setProgress({ current: 0, total: 0 });
@@ -404,7 +407,7 @@ export function BulkInspectionReportGenerator({
       const allResults: GenerationResult[] = [];
 
       for (let i = 0; i < toProcess.length; i++) {
-        if (shouldStop) {
+        if (shouldStopRef.current) {
           toast.info('Generation stopped by user');
           break;
         }
@@ -447,7 +450,7 @@ export function BulkInspectionReportGenerator({
   };
 
   const handleStop = () => {
-    setShouldStop(true);
+    shouldStopRef.current = true;
     setIsStopping(true);
     toast.info('Stopping after current report...');
   };

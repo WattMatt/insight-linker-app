@@ -23,34 +23,14 @@ export async function findOrCreateCategory(subsectionId: string, name: string): 
   return data;
 }
 
-/** Upload a COC certificate into a subsection's COC category (per-COC folder, number extracted). */
-export async function uploadCocCertificate(opts: { subsectionId: string; cocCategoryId: string; file: File }): Promise<{ id: string; cocNumber: string | null }> {
-  const { subsectionId, cocCategoryId, file } = opts;
-  validate(file);
-  const cocNumber = extractCocNumber(file.name);
-  const ts = Date.now();
-  const folderKey = sanitize(cocNumber || `${ts}`);
-  const path = `${subsectionId}/COC/${folderKey}/${ts}-${sanitize(file.name)}`;
-  const { data: up, error: upErr } = await supabase.storage.from("documents").upload(path, file);
-  if (upErr || !up?.path) throw new Error(`Upload failed: ${upErr?.message ?? "no path"}`);
-  const { data: urlData } = supabase.storage.from("documents").getPublicUrl(up.path);
-  try {
-    const { id } = await insertCocCertificateDoc({ subsectionId, cocCategoryId, fileName: file.name, fileUrl: urlData.publicUrl, fileSize: file.size, cocNumber });
-    return { id, cocNumber };
-  } catch (e) {
-    await supabase.storage.from("documents").remove([up.path]);
-    throw e;
-  }
-}
-
 /** Insert a COC certificate document row from an already-stored file (no upload). */
-export async function insertCocCertificateDoc(opts: { subsectionId: string; cocCategoryId: string; fileName: string; fileUrl: string; fileSize: number | null; cocNumber: string | null }): Promise<{ id: string }> {
+export async function insertCocCertificateDoc(opts: { subsectionId: string; cocCategoryId: string; fileName: string; fileUrl: string; fileSize: number | null; cocNumber: string | null; cocStatus?: "Pass" | "Fail" | "Pending" }): Promise<{ id: string }> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
   const { data: row, error } = await supabase.from("subsection_documents").insert({
     subsection_id: opts.subsectionId, category_id: opts.cocCategoryId, file_name: opts.fileName,
     file_url: opts.fileUrl, file_size: opts.fileSize, uploaded_by: user.id,
-    coc_number: opts.cocNumber, coc_status: "Pending",
+    coc_number: opts.cocNumber, coc_status: opts.cocStatus ?? "Pending",
   }).select("id").single();
   if (error || !row) throw new Error(`Save failed: ${error?.message}`);
   return { id: row.id };

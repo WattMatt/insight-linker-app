@@ -42,3 +42,10 @@ export function qrRedirectUrl(subsectionId: string): string {
   const fnHost = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
   return `${fnHost}/functions/v1/qr-redirect?path=${subsectionId}`;
 }
+
+/** Stable redirect for SITE-level QR codes (report covers) — same indirection
+ *  as qrRedirectUrl: the edge function resolves the live domain at scan time. */
+export function qrSiteRedirectUrl(siteId: string): string {
+  const fnHost = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
+  return `${fnHost}/functions/v1/qr-redirect?site=${siteId}`;
+}

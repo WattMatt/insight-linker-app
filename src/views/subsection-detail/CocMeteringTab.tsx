@@ -10,12 +10,21 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CocCertificateList } from "@/components/coc/CocCertificateList";
 import { useSearchParams } from "@/lib/navigation";
-import { uploadCocCertificate } from "@/lib/coc/uploadCocFiles";
+import { poolRouteFile } from "@/lib/coc/poolUpload";
 import type { SubsectionData, SupabaseDocument, DocumentCategory } from "./types";
+
+const POOL_REASON_TEXT: Record<string, string> = {
+  no_cert_detected: "no cert number in the filename",
+  cert_not_found: "cert number not in the imported register",
+  cert_has_no_subsection: "cert's shop isn't matched to a subsection yet",
+  ambiguous_cert: "cert number appears on more than one subsection",
+  assign_failed: "assignment failed",
+};
 
 interface CocMeteringTabProps {
   subsection: SubsectionData;
   subsectionId: string | undefined;
+  siteId: string | undefined;
   supabaseDocuments: SupabaseDocument[];
   documentCategories: DocumentCategory[];
   deletingDocumentId: string | null;
@@ -43,6 +52,7 @@ interface CocMeteringTabProps {
 export function CocMeteringTab({
   subsection,
   subsectionId,
+  siteId,
   supabaseDocuments,
   documentCategories,
   deletingDocumentId,
@@ -81,8 +91,8 @@ export function CocMeteringTab({
     const st = (subsection.cocStatus || "").toLowerCase();
     if (["pass", "approved", "valid"].includes(st)) return { cls: "bg-emerald-50 text-emerald-700 border-emerald-200", text: "COC: PASS — complete." };
     if (["fail", "failed", "rejected"].includes(st)) return { cls: "bg-red-50 text-red-700 border-red-200", text: "COC: FAILED — assessment recorded. The installation must be remediated and re-certified to become compliant." };
-    if (st === "pending") return { cls: "bg-amber-50 text-amber-700 border-amber-200", text: "COC: PENDING — set a verdict (Pass/Fail) on the certificate(s) below and Save." };
-    return { cls: "bg-amber-50 text-amber-700 border-amber-200", text: "COC: not yet recorded — upload the certificate and set its verdict below." };
+    if (st === "pending") return { cls: "bg-amber-50 text-amber-700 border-amber-200", text: "COC: PENDING — awaiting verification. Verdicts come from the imported verification register (Site COC tab)." };
+    return { cls: "bg-amber-50 text-amber-700 border-amber-200", text: "COC: not yet recorded — upload the certificate below; it will match the imported register automatically." };
   })();
 
   return (
@@ -106,7 +116,6 @@ export function CocMeteringTab({
             evaluationDocuments={getSupabaseEvaluationDocuments()}
             deletingDocumentId={deletingDocumentId}
             uploadingFile={uploadingFile}
-            onSaved={() => { fetchSupabaseDocuments(); refetchSubsection(); }}
             setPreviewDocument={setPreviewDocument}
             handleDownloadDocument={handleDownloadDocument}
             setDeleteDocumentId={setDeleteDocumentId}
@@ -128,34 +137,26 @@ export function CocMeteringTab({
                 disabled={uploadingFile}
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
-                  if (file) {
-                    const cocCategory = documentCategories.find(cat => cat.name === '01 COC');
-                    if (cocCategory) {
-                      setUploadCategoryId(cocCategory.id);
-                      setUploadFile(file);
-
-                      try {
-                        if (!file) { toast.error("No file selected"); return; }
-                        setUploadingFile(true);
-                        toast.info("Uploading COC document...");
-                        await uploadCocCertificate({ subsectionId: subsectionId!, cocCategoryId: cocCategory.id, file });
-                        toast.success("COC document uploaded successfully!");
-                        setUploadCategoryId(null);
-                        setUploadFile(null);
-                        fetchSupabaseDocuments();
-                        e.target.value = '';
-                      } catch (error: any) {
-                        if (process.env.NODE_ENV === 'development') console.error("Error uploading COC document:", error);
-                        let errorMessage = "Failed to upload COC document";
-                        if (error?.message) errorMessage = error.message;
-                        else if (typeof error === 'string') errorMessage = error;
-                        else if (error?.error_description) errorMessage = error.error_description;
-                        toast.error(errorMessage, { duration: 5000 });
-                        e.target.value = '';
-                      } finally {
-                        setUploadingFile(false);
-                      }
+                  if (!file) return;
+                  if (!siteId || !subsectionId) { toast.error("Missing site context"); return; }
+                  try {
+                    setUploadingFile(true);
+                    toast.info("Uploading COC document...");
+                    const res = await poolRouteFile(siteId, file);
+                    if (res.assignedSubsectionId === subsectionId) {
+                      toast.success("COC attached — verdict taken from the verification register.");
+                    } else if (res.assignedSubsectionId) {
+                      toast.info("Per the register this certificate belongs to a different subsection — it was attached there.", { duration: 8000 });
+                    } else {
+                      toast.warning(`File didn't match the imported register (${POOL_REASON_TEXT[res.reason ?? ""] ?? "no match"}). Find it under Site COC → Exceptions.`, { duration: 8000 });
                     }
+                    fetchSupabaseDocuments();
+                    refetchSubsection();
+                  } catch (error: any) {
+                    toast.error(error?.message || "Failed to upload COC document", { duration: 5000 });
+                  } finally {
+                    setUploadingFile(false);
+                    e.target.value = "";
                   }
                 }}
               />

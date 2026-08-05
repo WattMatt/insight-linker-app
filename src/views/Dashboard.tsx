@@ -22,6 +22,7 @@ interface DashboardStats {
   closedSnags: number;
   cocCompliantCount: number;
   cocRequiredCount: number;
+  qrScans30d: number;
 }
 
 interface ActivityLog {
@@ -69,6 +70,7 @@ const Dashboard = () => {
     closedSnags: 0,
     cocCompliantCount: 0,
     cocRequiredCount: 0,
+    qrScans30d: 0,
   });
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
@@ -95,7 +97,8 @@ const Dashboard = () => {
         supabaseSnagsRes,
         activityRes,
         eventsRes,
-        highRiskSnagsRes
+        highRiskSnagsRes,
+        qrScansRes
       ] = await Promise.all([
         supabase.from("clients").select("id", { count: "exact", head: true }),
         supabase.from("sites").select("id", { count: "exact", head: true }),
@@ -125,6 +128,8 @@ const Dashboard = () => {
           .in("risk_level", ["High", "Critical"])
           .order("created_at", { ascending: false })
           .limit(10),
+        supabase.from('qr_scans').select('id', { count: 'exact', head: true })
+          .gte('scanned_at', new Date(Date.now() - 30 * 86400000).toISOString()),
       ]);
 
       const totalClients = supabaseClientsRes.count || 0;
@@ -151,6 +156,7 @@ const Dashboard = () => {
         closedSnags,
         cocCompliantCount: complianceStats.cocApprovedCount,
         cocRequiredCount: complianceStats.cocRequiredCount,
+        qrScans30d: qrScansRes.count ?? 0,
       });
 
       setActivities(activityRes.data || []);
@@ -351,6 +357,17 @@ const Dashboard = () => {
             <p className="text-xs text-muted-foreground mt-1">
               Resolution rate
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">QR scans · 30d</CardTitle>
+            <QrCode className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.qrScans30d}</div>
+            <p className="text-xs text-muted-foreground">Last 30 days</p>
           </CardContent>
         </Card>
       </div>

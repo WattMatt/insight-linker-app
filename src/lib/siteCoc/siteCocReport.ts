@@ -129,7 +129,7 @@ const stripeLayout = (headerRows: number) => ({
   paddingLeft: () => 6, paddingRight: () => 6, paddingTop: () => 2.2, paddingBottom: () => 2.2,
   fillColor: (rowIndex: number) => (rowIndex >= headerRows && (rowIndex - headerRows) % 2 === 1 ? STRIPE : null),
 });
-export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: string | null): TDocumentDefinitions {
+export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: string | null, qrCodeDataUrl?: string | null): TDocumentDefinitions {
   const s = model.summary, k = model.kpis, cov = model.cover, sk = model.siteKpis;
   const tone = (pct: number) => (pct >= 80 ? "#1D9E75" : pct >= 50 ? "#EF9F27" : "#E24B4A");
 
@@ -140,11 +140,34 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
         { text: "CONSULTING ELECTRICAL ENGINEERS", fontSize: 9, color: "#5F5E5A" },
       ] };
 
+  // Title row: subtitle stack on the left, small verification QR on the right when
+  // provided — beside the title rather than inline in the vertical stack, so the
+  // existing cover spacing below (site name / address / prepared-for table) is untouched.
+  const titleBlock: Content = qrCodeDataUrl
+    ? {
+        columns: [
+          { width: "*", stack: [
+            { text: "Certificate of Compliance", fontSize: 28, bold: true, color: "#0C447C" },
+            { text: "Status report", fontSize: 16, color: "#5F5E5A", margin: [0, 2, 0, 0] },
+          ] },
+          { width: 70, stack: [
+            { image: qrCodeDataUrl, width: 70 },
+            { text: "Scan to verify", fontSize: 6, color: "#5F5E5A", alignment: "center", margin: [0, 2, 0, 0] },
+          ] },
+        ],
+        margin: [0, 0, 0, 22],
+      }
+    : {
+        stack: [
+          { text: "Certificate of Compliance", fontSize: 28, bold: true, color: "#0C447C" },
+          { text: "Status report", fontSize: 16, color: "#5F5E5A", margin: [0, 2, 0, 22] },
+        ],
+      };
+
   const cover: Content[] = [
     brand,
     { canvas: [{ type: "rect", x: 0, y: 0, w: 760, h: 3, color: "#185FA5" }], margin: [0, 8, 0, 26] },
-    { text: "Certificate of Compliance", fontSize: 28, bold: true, color: "#0C447C" },
-    { text: "Status report", fontSize: 16, color: "#5F5E5A", margin: [0, 2, 0, 22] },
+    titleBlock,
     { text: model.siteName, fontSize: 18, bold: true },
     { text: cov.address || "", fontSize: 11, color: "#5F5E5A", margin: [0, 1, 0, 16] },
     { table: { widths: ["auto", "*"], body: [

@@ -1765,6 +1765,7 @@ export type Database = {
           ip_address: string | null
           scanned_at: string
           scanned_by: string | null
+          source: string
           subsection_id: string
           user_agent: string | null
         }
@@ -1774,6 +1775,7 @@ export type Database = {
           ip_address?: string | null
           scanned_at?: string
           scanned_by?: string | null
+          source?: string
           subsection_id: string
           user_agent?: string | null
         }
@@ -1783,6 +1785,7 @@ export type Database = {
           ip_address?: string | null
           scanned_at?: string
           scanned_by?: string | null
+          source?: string
           subsection_id?: string
           user_agent?: string | null
         }
@@ -2337,6 +2340,7 @@ export type Database = {
           notes: string | null
           photos: Json | null
           project_id: string | null
+          reported_channel: string
           rectification_notes: string | null
           rectification_photos: Json | null
           rectified_at: string | null
@@ -2367,6 +2371,7 @@ export type Database = {
           notes?: string | null
           photos?: Json | null
           project_id?: string | null
+          reported_channel?: string
           rectification_notes?: string | null
           rectification_photos?: Json | null
           rectified_at?: string | null
@@ -2397,6 +2402,7 @@ export type Database = {
           notes?: string | null
           photos?: Json | null
           project_id?: string | null
+          reported_channel?: string
           rectification_notes?: string | null
           rectification_photos?: Json | null
           rectified_at?: string | null
@@ -2573,6 +2579,7 @@ export type Database = {
           metering_status: string | null
           name: string
           qr_code_url: string | null
+          qr_disabled: boolean
           site_id: string
           tenant_name: string | null
           updated_at: string
@@ -2602,6 +2609,7 @@ export type Database = {
           metering_status?: string | null
           name: string
           qr_code_url?: string | null
+          qr_disabled?: boolean
           site_id: string
           tenant_name?: string | null
           updated_at?: string
@@ -2631,6 +2639,7 @@ export type Database = {
           metering_status?: string | null
           name?: string
           qr_code_url?: string | null
+          qr_disabled?: boolean
           site_id?: string
           tenant_name?: string | null
           updated_at?: string
@@ -3091,6 +3100,7 @@ export type Database = {
         }[]
       }
       get_public_portfolio: { Args: { p_token: string }; Returns: Json }
+      get_public_site_register: { Args: { p_site_id: string }; Returns: Json }
       get_public_site_review: {
         Args: { p_site_id: string; p_token: string }
         Returns: Json
