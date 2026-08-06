@@ -3,6 +3,7 @@ export interface Site {
     name: string;
     address: string | null;
     site_type: string | null;
+    managing_agency_id: string | null;
     client_id: string;
     supply_authority: string | null;
     nominated_max_demand: string | null;
@@ -15,6 +16,10 @@ export interface Site {
         id: string;
         name: string;
     };
+    managing_agencies?: {
+        id: string;
+        name: string;
+    } | null;
 }
 
 export interface Subsection {

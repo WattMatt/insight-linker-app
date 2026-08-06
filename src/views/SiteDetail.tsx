@@ -19,8 +19,8 @@ import { SiteEditDialog } from "@/components/site/SiteEditDialog";
 import { DocumentDialogs } from "@/components/site/DocumentDialogs";
 import { InspectionDialogs } from "@/components/site/InspectionDialogs";
 import { Card, CardTitle, CardHeader, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Breadcrumbs } from "@/components/Breadcrumb";
 import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist";
@@ -80,7 +80,7 @@ const SiteDetail = () => {
   const [assetCount, setAssetCount] = useState(0);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({
-    name: '', address: '', description: '', status: '', location_lat: '', location_lng: '',
+    name: '', address: '', site_type: '', managing_agency_id: '',
   });
   const [documentCategories, setDocumentCategories] = useState<any[]>([]);
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
@@ -416,7 +416,7 @@ const SiteDetail = () => {
     try {
       const { data: siteRes, error: siteError } = await supabase
         .from("sites")
-        .select("*, clients(id, name)")
+        .select("*, clients(id, name), managing_agencies(id, name)")
         .eq("id", siteId)
         .maybeSingle();
 
@@ -537,7 +537,14 @@ const SiteDetail = () => {
     e.preventDefault();
     if (!site) return;
     try {
-      const { error } = await supabase.from('sites').update({ ...editFormData }).eq('id', site.id);
+      // Explicit column list: the form's fields map 1:1 onto sites columns
+      // (an earlier version spread non-existent columns and every save failed).
+      const { error } = await supabase.from('sites').update({
+        name: editFormData.name,
+        address: editFormData.address || null,
+        site_type: editFormData.site_type || null,
+        managing_agency_id: editFormData.managing_agency_id || null,
+      }).eq('id', site.id);
       if (error) throw error;
       toast.success("Site updated");
       setEditDialogOpen(false);
@@ -716,11 +723,20 @@ const SiteDetail = () => {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{site.name}</h1>
             <div className="flex items-center text-muted-foreground mt-1"><MapPin className="h-4 w-4 mr-1.5" /><span className="text-sm">{site.address}</span></div>
+            {(site.site_type || site.managing_agencies?.name) && (
+              <div className="flex items-center gap-2 mt-2">
+                {site.site_type && <Badge variant="secondary">{site.site_type}</Badge>}
+                {site.managing_agencies?.name && (
+                  <Badge variant="outline">Managed by {site.managing_agencies.name}</Badge>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <Button onClick={() => {
           setEditFormData({
-            name: site.name || '', address: site.address || '', description: '', status: 'Active', location_lat: '', location_lng: '',
+            name: site.name || '', address: site.address || '',
+            site_type: site.site_type || '', managing_agency_id: site.managing_agency_id || '',
           });
           setEditDialogOpen(true);
         }} variant="outline" className="gap-2"><ClipboardCheck className="h-4 w-4" />Edit Site</Button>

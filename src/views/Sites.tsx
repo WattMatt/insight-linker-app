@@ -17,6 +17,7 @@ import { RobustImage } from "@/components/RobustImage";
 import { EmptyState } from "@/components/EmptyState";
 import { useSiteScores } from "@/hooks/useSiteScores";
 import { SiteHealthBadge } from "@/components/SiteHealthBadge";
+import { SITE_TYPE_OPTIONS } from "@/lib/siteTypes";
 
 interface Site {
   id: string;
@@ -36,11 +37,18 @@ interface Client {
   name: string;
 }
 
+interface ManagingAgency {
+  id: string;
+  name: string;
+  client_id: string;
+}
+
 const Sites = () => {
   const { clientId } = useParams();
   const navigate = useNavigate();
   const [sites, setSites] = useState<Site[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [agencies, setAgencies] = useState<ManagingAgency[]>([]);
   const [currentClient, setCurrentClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -49,6 +57,7 @@ const Sites = () => {
     address: "",
     site_type: "",
     client_id: "",
+    managing_agency_id: "",
   });
   const { data: siteScores, isLoading: scoresLoading } = useSiteScores(sites.map(s => s.id));
 
@@ -65,13 +74,15 @@ const Sites = () => {
         sitesQuery = sitesQuery.eq("client_id", clientId);
       }
 
-      const [sitesRes, clientsRes] = await Promise.all([
+      const [sitesRes, clientsRes, agenciesRes] = await Promise.all([
         sitesQuery,
         supabase.from("clients").select("id, name").order("name"),
+        supabase.from("managing_agencies").select("id, name, client_id").order("name"),
       ]);
 
       if (sitesRes.error) throw sitesRes.error;
       if (clientsRes.error) throw clientsRes.error;
+      if (agenciesRes.error) throw agenciesRes.error;
 
       // Generate signed URLs for site images (site-images bucket is private)
       const sitesWithSignedUrls = await Promise.all(
@@ -100,6 +111,7 @@ const Sites = () => {
 
       setSites(sitesWithSignedUrls);
       setClients(clientsRes.data || []);
+      setAgencies(agenciesRes.data || []);
 
       // Set current client if filtering by clientId
       if (clientId && clientsRes.data) {
@@ -131,6 +143,9 @@ const Sites = () => {
       const { error } = await supabase.from("sites").insert([
         {
           ...validated,
+          // Not part of siteSchema (zod strips unknown keys); guarded by the
+          // composite FK so it can only reference the chosen client's agency.
+          managing_agency_id: formData.managing_agency_id || null,
           created_by: user?.id,
         } as any,  // Type assertion needed due to zod inference
       ]);
@@ -139,7 +154,7 @@ const Sites = () => {
 
       toast.success("Site added successfully");
       setDialogOpen(false);
-      setFormData({ name: "", address: "", site_type: "", client_id: "" });
+      setFormData({ name: "", address: "", site_type: "", client_id: "", managing_agency_id: "" });
       fetchData();
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -221,7 +236,7 @@ const Sites = () => {
                   <Label htmlFor="client">Client *</Label>
                   <Select
                     value={formData.client_id}
-                    onValueChange={(value) => setFormData({ ...formData, client_id: value })}
+                    onValueChange={(value) => setFormData({ ...formData, client_id: value, managing_agency_id: "" })}
                     required
                   >
                     <SelectTrigger>
@@ -256,14 +271,42 @@ const Sites = () => {
                       <SelectValue placeholder="Select site type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Commercial">Commercial</SelectItem>
-                      <SelectItem value="Industrial">Industrial</SelectItem>
-                      <SelectItem value="Residential">Residential</SelectItem>
-                      <SelectItem value="Mall">Shopping Mall</SelectItem>
-                      <SelectItem value="Office">Office Building</SelectItem>
+                      {SITE_TYPE_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
+                {formData.client_id && agencies.some(a => a.client_id === formData.client_id) && (
+                  <div className="space-y-2">
+                    <Label htmlFor="managing_agency">Managing Agency</Label>
+                    <Select
+                      value={formData.managing_agency_id || "none"}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, managing_agency_id: value === "none" ? "" : value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No agency</SelectItem>
+                        {agencies
+                          .filter(a => a.client_id === formData.client_id)
+                          .map(agency => (
+                            <SelectItem key={agency.id} value={agency.id}>
+                              {agency.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Agency-scoped portal users only see sites assigned to their agency.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="address">Address</Label>
                   <div className="relative">

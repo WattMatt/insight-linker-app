@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,26 +11,23 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCamera } from "@/hooks/useCamera";
+import { SITE_TYPE_OPTIONS } from "@/lib/siteTypes";
+
+// Mirrors the real columns of public.sites — the previous shape carried
+// description/status/lat/lng, which don't exist on the table, so every save
+// was rejected by the API.
+export interface SiteEditFormData {
+    name: string;
+    address: string;
+    site_type: string;
+    managing_agency_id: string; // "" = no agency (fund-level visibility only)
+}
 
 interface SiteEditDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    editFormData: {
-        name: string;
-        address: string;
-        description: string;
-        status: string;
-        location_lat: string;
-        location_lng: string;
-    };
-    setEditFormData: React.Dispatch<React.SetStateAction<{
-        name: string;
-        address: string;
-        description: string;
-        status: string;
-        location_lat: string;
-        location_lng: string;
-    }>>;
+    editFormData: SiteEditFormData;
+    setEditFormData: React.Dispatch<React.SetStateAction<SiteEditFormData>>;
     onSubmit: (e: React.FormEvent) => void;
     site?: Site | null;
     siteId?: string;
@@ -50,7 +47,26 @@ export const SiteEditDialog: React.FC<SiteEditDialogProps> = ({
     const [deleteImageConfirm, setDeleteImageConfirm] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [agencies, setAgencies] = useState<{ id: string; name: string }[]>([]);
     const { takePicture } = useCamera();
+
+    // The site's client's managing agencies (empty for clients without any —
+    // the agency selector only renders when the client uses agencies).
+    useEffect(() => {
+        if (!open || !site?.client_id) return;
+        supabase
+            .from("managing_agencies")
+            .select("id, name")
+            .eq("client_id", site.client_id)
+            .order("name")
+            .then(({ data, error }) => {
+                if (error) {
+                    console.error("Failed to load managing agencies:", error);
+                    return;
+                }
+                setAgencies(data ?? []);
+            });
+    }, [open, site?.client_id]);
 
     const handleImageUpload = async (file: File) => {
         if (!siteId) return;
@@ -152,59 +168,63 @@ export const SiteEditDialog: React.FC<SiteEditDialogProps> = ({
                                         placeholder="Physical address"
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="edit-description">Description</Label>
-                                    <Input
-                                        id="edit-description"
-                                        value={editFormData.description}
-                                        onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                                        placeholder="Brief description"
-                                    />
-                                </div>
                             </div>
 
-                            {/* Location & Status */}
+                            {/* Classification */}
                             <div className="space-y-4">
-                                <h3 className="font-semibold">Location & Status</h3>
+                                <h3 className="font-semibold">Classification</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label htmlFor="edit-status">Status</Label>
+                                        <Label htmlFor="edit-site-type">Site Type / Sector</Label>
                                         <Select
-                                            value={editFormData.status}
-                                            onValueChange={(v) => setEditFormData({ ...editFormData, status: v })}
+                                            value={editFormData.site_type || undefined}
+                                            onValueChange={(v) => setEditFormData({ ...editFormData, site_type: v })}
                                         >
-                                            <SelectTrigger id="edit-status">
-                                                <SelectValue placeholder="Select status" />
+                                            <SelectTrigger id="edit-site-type">
+                                                <SelectValue placeholder="Select site type" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="Active">Active</SelectItem>
-                                                <SelectItem value="Maintenance">Maintenance</SelectItem>
-                                                <SelectItem value="Pending">Pending</SelectItem>
-                                                <SelectItem value="Inactive">Inactive</SelectItem>
+                                                {/* keep a legacy value visible/selectable rather than blanking it */}
+                                                {editFormData.site_type &&
+                                                    !SITE_TYPE_OPTIONS.some(o => o.value === editFormData.site_type) && (
+                                                        <SelectItem value={editFormData.site_type}>
+                                                            {editFormData.site_type}
+                                                        </SelectItem>
+                                                    )}
+                                                {SITE_TYPE_OPTIONS.map((o) => (
+                                                    <SelectItem key={o.value} value={o.value}>
+                                                        {o.label}
+                                                    </SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="edit-lat">Latitude</Label>
-                                        <Input
-                                            id="edit-lat"
-                                            value={editFormData.location_lat}
-                                            onChange={(e) => setEditFormData({ ...editFormData, location_lat: e.target.value })}
-                                            placeholder="-25.123456"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="edit-lng">Longitude</Label>
-                                        <Input
-                                            id="edit-lng"
-                                            value={editFormData.location_lng}
-                                            onChange={(e) => setEditFormData({ ...editFormData, location_lng: e.target.value })}
-                                            placeholder="27.123456"
-                                        />
-                                    </div>
+                                    {agencies.length > 0 && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="edit-agency">Managing Agency</Label>
+                                            <Select
+                                                value={editFormData.managing_agency_id || "none"}
+                                                onValueChange={(v) =>
+                                                    setEditFormData({ ...editFormData, managing_agency_id: v === "none" ? "" : v })
+                                                }
+                                            >
+                                                <SelectTrigger id="edit-agency">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">No agency</SelectItem>
+                                                    {agencies.map((agency) => (
+                                                        <SelectItem key={agency.id} value={agency.id}>
+                                                            {agency.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-xs text-muted-foreground">
+                                                Agency-scoped portal users only see sites assigned to their agency.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
