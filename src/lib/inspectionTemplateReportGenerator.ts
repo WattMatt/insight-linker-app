@@ -5,7 +5,7 @@
  * server generate-pdf edge fn (i.e. it never rendered the template structure).
  * This builds the real document: template meta + per-section field tables.
  */
-import { createInfoTable, createDataTable, createSectionHeader, COLORS } from './pdfMakeUtils';
+import { createInfoTable, createDataTable, createSectionHeader, COLORS, generateDocumentFilename } from './pdfMakeUtils';
 import { generateReport } from './pdfEngine';
 import { loadCompanyBranding } from './pdfBranding';
 import {
@@ -88,7 +88,8 @@ export async function generateInspectionTemplatePdf(
       options: {
         logoDataUrl: branding.logoDataUrl,
         organizationName: branding.organizationName,
-        filename: `${safeName}_Template.pdf`,
+        // Unified naming (F3): {type}_{name}_{local-date}.pdf via the shared helper.
+        filename: generateDocumentFilename('Template', safeName),
       },
     });
 

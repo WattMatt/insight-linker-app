@@ -4,10 +4,11 @@
  */
 
 import * as pdfjsLib from 'pdfjs-dist';
+import { workerSrcFor } from '@/lib/pdfWorkerPath';
 
-// Configure PDF.js worker
+// Self-hosted, version-matched worker (see src/lib/pdfWorker.ts).
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrcFor(pdfjsLib.version);
 }
 
 export interface ExtractedSection {

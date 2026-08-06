@@ -83,15 +83,16 @@ const withPWA = withPWAInit({
           },
         },
       },
-      // Static assets from CDNs (e.g., pdfjs worker)
+      // Self-hosted pdf.js workers (src/lib/pdfWorker.ts) — version-named
+      // files are immutable, so cache-first keeps PDF viewing working offline.
       {
-        urlPattern: /^https:\/\/cdnjs\.cloudflare\.com\/.*/i,
+        urlPattern: /\/pdf-workers\/pdf\.worker-.*\.mjs$/i,
         handler: "CacheFirst",
         options: {
-          cacheName: "cdn-assets",
+          cacheName: "pdf-workers",
           expiration: {
-            maxEntries: 30,
-            maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+            maxEntries: 4,
+            maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year (version-named, immutable)
           },
         },
       },
@@ -112,7 +113,7 @@ const nextConfig = {
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
 
-  serverExternalPackages: ['fabric', 'canvas', 'pdfmake', 'jspdf', 'html2canvas'],
+  serverExternalPackages: ['fabric', 'canvas', 'pdfmake', 'html2canvas'],
 
   images: {
     remotePatterns: [

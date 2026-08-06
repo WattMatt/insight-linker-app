@@ -60,9 +60,8 @@ export {
 
 const { typography, margins, footers } = DOCUMENT_DESIGN_STANDARDS;
 
-// Type definitions
-type Content = any;
-type TDocumentDefinitions = any;
+// Real pdfmake types via @types/pdfmake (the runtime package ships none).
+import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 
 // ============================================================================
 // COVER PAGE BUILDERS
@@ -530,7 +529,7 @@ export function createDataTable(
       text: col.format ? col.format(row[col.field]) : String(row[col.field] ?? ''),
       fontSize: 9,
       alignment: col.alignment || 'left',
-      fillColor: zebra && rowIndex % 2 === 1 ? COLORS.bgCard : null,
+      fillColor: zebra && rowIndex % 2 === 1 ? COLORS.bgCard : undefined,
     }))
   );
 
@@ -702,6 +701,26 @@ export interface PDFComplianceCheck {
   pageFooters: boolean;
   tableStyles: boolean;
   pageBreaks: boolean;
+}
+
+/**
+ * Create a compliance result object with defaults (migrated from the deleted
+ * duplicate template lib pdfTemplates.ts).
+ */
+export function createComplianceResult(
+  checks: Partial<PDFComplianceCheck>
+): PDFComplianceCheck {
+  return {
+    hasCoverPage: checks.hasCoverPage ?? false,
+    logoPlacement: checks.logoPlacement ?? false,
+    standardMargins: checks.standardMargins ?? false,
+    typographyScale: checks.typographyScale ?? false,
+    brandColors: checks.brandColors ?? false,
+    pageHeaders: checks.pageHeaders ?? false,
+    pageFooters: checks.pageFooters ?? false,
+    tableStyles: checks.tableStyles ?? false,
+    pageBreaks: checks.pageBreaks ?? false,
+  };
 }
 
 /**

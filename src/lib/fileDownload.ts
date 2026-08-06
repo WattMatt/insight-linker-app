@@ -1,8 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { openDownloadHandoffWindow } from '@/lib/downloadHandoff';
+import { parseDocumentFileRef, resolveDocumentUrl } from '@/lib/documents/documentUrl';
 import { toast } from 'sonner';
-
-type StorageAccessType = 'public' | 'sign' | 'authenticated';
 
 interface SaveFilePickerAcceptType {
   description: string;
@@ -28,18 +27,8 @@ interface DownloadCapableWindow extends Window {
   showSaveFilePicker?: (options?: SaveFilePickerOptionsLike) => Promise<FileSystemFileHandleLike>;
 }
 
-function parseSupabaseStorageUrl(
-  url: string,
-): { accessType: StorageAccessType; bucket: string; path: string } | null {
-  const match = url.match(/\/storage\/v1\/object\/(public|sign|authenticated)\/([^/]+)\/(.+)/);
-  if (!match) return null;
-
-  return {
-    accessType: match[1] as StorageAccessType,
-    bucket: match[2],
-    path: decodeURIComponent(match[3].split('?')[0]),
-  };
-}
+// Storage-reference parsing (full URLs of any access variant AND bare
+// `documents`-bucket paths) is centralised in documents/documentUrl.ts.
 
 function getFileExtension(fileName: string): string {
   const extension = fileName.split('.').pop();
@@ -102,7 +91,7 @@ function buildSavePickerOptions(fileName: string): SaveFilePickerOptionsLike {
 }
 
 async function resolveDownloadBlob(url: string): Promise<Blob> {
-  const parsed = parseSupabaseStorageUrl(url);
+  const parsed = parseDocumentFileRef(url);
 
   if (parsed) {
     const { data, error } = await supabase.storage.from(parsed.bucket).download(parsed.path);
@@ -230,13 +219,18 @@ export async function downloadFile(url: string, fileName: string): Promise<void>
   const toastId = toast.loading(`Preparing ${fileName}...`);
 
   try {
-    const handedOffToTopLevel = await openDownloadHandoffWindow({ url, fileName });
+    // Storage references (bare `documents` paths or legacy public URLs) are
+    // resolved to short-lived signed URLs first — the bucket is private, so a
+    // raw public URL handed to the handoff window would 400. Non-storage
+    // values (blob:/data:/external) pass through unchanged.
+    const resolvedUrl = await resolveDocumentUrl(url);
+    const handedOffToTopLevel = await openDownloadHandoffWindow({ url: resolvedUrl, fileName });
     if (handedOffToTopLevel) {
       toast.success(`Opened download tab – ${fileName}`, { id: toastId });
       return;
     }
 
-    const blob = await resolveDownloadBlob(url);
+    const blob = await resolveDownloadBlob(resolvedUrl);
     toast.dismiss(toastId);
     await downloadBlob(blob, fileName);
   } catch (error) {

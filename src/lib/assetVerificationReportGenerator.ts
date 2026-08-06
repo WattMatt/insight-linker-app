@@ -13,7 +13,7 @@
 import { generateDocumentFilename } from "./documentDesignStandards";
 import { generatePdfBlob } from "./pdfMakeConfig";
 import { loadCompanyBranding, imageUrlToBase64, formatPdfDate, generateReferenceNumber } from "./pdfBranding";
-import { PDFComplianceCheck, createComplianceResult } from "./pdfTemplates";
+import { PDFComplianceCheck, createComplianceResult } from "./pdfMakeUtils";
 import type { ComparisonResult } from "./assetVerification";
 import { buildAssetVerificationReportModel } from "./assetVerificationReportModel";
 import { buildAssetVerificationReportDocDef } from "./assetVerificationReport";

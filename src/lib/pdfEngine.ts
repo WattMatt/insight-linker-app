@@ -59,9 +59,8 @@ export {
 
 export type { CoverPageOptions, TableColumn, PDFComplianceCheck };
 
-// Type definitions
-type Content = any;
-type TDocumentDefinitions = any;
+// Real pdfmake types via @types/pdfmake (the runtime package ships none).
+import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 
 // ============================================================================
 // REPORT TYPES & OPTIONS

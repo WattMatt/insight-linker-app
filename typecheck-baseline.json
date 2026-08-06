@@ -1,5 +1,5 @@
 {
-  "maxErrors": 80,
+  "maxErrors": 67,
   "command": "tsc --noEmit --pretty false | grep -cE 'error TS'",
   "enforcedBy": "npm run typecheck:ratchet",
   "note": "A ceiling, never a target. Lower it whenever the real count drops; never raise it. The figure counts src/ only: tsconfig.json excludes the ' 2' duplicate files and the *.PULLED-FROM-PROD.ts Deno sources so that deleting scratch files cannot pass for fixing type errors. At 0, drop typescript.ignoreBuildErrors from next.config.mjs and make `npm run typecheck` the gate."

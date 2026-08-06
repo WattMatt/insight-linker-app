@@ -1,10 +1,26 @@
 export type DocSource = 'site' | 'subsection';
 
+/**
+ * Storage path from a stored file_url value. Handles BOTH row formats:
+ *  - legacy full storage URLs (rows written while the bucket was public):
+ *    ".../storage/v1/object/public/documents/<path>[?query]"
+ *  - bare storage paths (rows written since the private-bucket migration
+ *    20260806090000): returned as-is.
+ * Returns null only for non-storage URLs (blob:/data:/external http).
+ */
 export function storagePathFromUrl(url: string): string | null {
-  if (!url || !url.includes('/documents/')) return null;
-  const after = url.split('/documents/')[1];
-  if (!after) return null;
-  return after.split('?')[0];
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes('/storage/v1/object/')) {
+    const after = trimmed.split(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/documents\//)[1];
+    if (!after) return null;
+    return after.split('?')[0];
+  }
+  // Any other URL scheme is not a managed storage object.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) || trimmed.startsWith('//')) return null;
+  // Bare path (new rows).
+  return trimmed.replace(/^\/+/, '');
 }
 
 export function splitNameExt(fileName: string): { base: string; ext: string } {

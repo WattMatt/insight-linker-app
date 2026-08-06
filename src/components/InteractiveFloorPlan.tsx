@@ -8,6 +8,7 @@ import { Badge } from "./ui/badge";
 import { Upload, Eye, Loader2, WifiOff, Zap, Undo2 } from "lucide-react";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
+import { resolveDocumentUrl } from "@/lib/documents/documentUrl";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { generateFloorPlanReport } from "@/lib/floorPlanReportGenerator";
@@ -29,6 +30,23 @@ export const InteractiveFloorPlan = ({
   subsectionName,
 }: InteractiveFloorPlanProps) => {
   const [floorPlan, setFloorPlan] = useState<any>(null);
+  // file_url may be a bare storage path or a stale public URL (private
+  // bucket) — floorPlanDisplayUrl is the signed URL the viewer actually loads.
+  const [floorPlanDisplayUrl, setFloorPlanDisplayUrl] = useState<string>("");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!floorPlan?.file_url) {
+      setFloorPlanDisplayUrl("");
+      return;
+    }
+    resolveDocumentUrl(floorPlan.file_url).then((resolved) => {
+      if (!cancelled) setFloorPlanDisplayUrl(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [floorPlan?.file_url]);
   const [pins, setPins] = useState<any[]>([]);
   const [selectedPin, setSelectedPin] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -478,8 +496,8 @@ export const InteractiveFloorPlan = ({
 
       const blob = report.blob;
       const url = URL.createObjectURL(blob);
-      const filename = `floor-plan-report-${subsectionName}-${new Date().toISOString().split('T')[0]}.pdf`;
-      setPdfPreview({ url, blob, filename });
+      // Unified naming (F3): use the generator's shared-helper filename.
+      setPdfPreview({ url, blob, filename: report.fileName });
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error generating report:", error);
       toast.error("Failed to generate report");
@@ -646,7 +664,7 @@ export const InteractiveFloorPlan = ({
             </div>
           )}
           <FloorPlanViewer
-            pdfUrl={floorPlan?.file_url || ""}
+            pdfUrl={floorPlanDisplayUrl}
             pins={pins}
             onAddPin={handleAddPin}
             onPinClick={(pin) => {

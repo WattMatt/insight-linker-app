@@ -9,6 +9,17 @@ describe('storagePathFromUrl', () => {
   it('returns null when not a documents-bucket URL', () => {
     expect(storagePathFromUrl('https://example.com/whatever.pdf')).toBeNull();
   });
+  it('accepts a bare storage path (private-bucket rows) as-is', () => {
+    expect(storagePathFromUrl('site-1/Reports/123-a.pdf')).toBe('site-1/Reports/123-a.pdf');
+    expect(storagePathFromUrl('subsections/sub-1/Cat/1-b.pdf')).toBe('subsections/sub-1/Cat/1-b.pdf');
+  });
+  it('strips a leading slash from bare paths', () => {
+    expect(storagePathFromUrl('/site-1/Reports/123-a.pdf')).toBe('site-1/Reports/123-a.pdf');
+  });
+  it('returns null for blob: and data: URLs', () => {
+    expect(storagePathFromUrl('blob:https://app/xyz')).toBeNull();
+    expect(storagePathFromUrl('data:application/pdf;base64,AAAA')).toBeNull();
+  });
 });
 
 describe('splitNameExt', () => {

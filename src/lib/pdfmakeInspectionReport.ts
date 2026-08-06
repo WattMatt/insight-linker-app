@@ -19,9 +19,11 @@ import {
 } from './pdfEngine';
 import { supabase } from '@/integrations/supabase/client';
 import { mmToPt } from './pdfMakeConfig';
+import { generateDocumentFilename } from './documentDesignStandards';
 import { loadImageSimple, loadImagesSimple, compressImageBlob } from './simpleImageLoader';
 import { scorePercentage, isPassStatus, isFailStatus } from './report/inspectionScore';
 import { savePDFToDocuments } from './pdfDocumentSaver';
+import { parseDocumentFileRef } from './documents/documentUrl';
 
 // Type definitions
 type Content = any;
@@ -1356,8 +1358,13 @@ function createTenantCardContent(
 
 async function fetchDocumentBytes(doc: ReportDocument): Promise<Uint8Array | null> {
   try {
-    if (doc.path) {
-      const { data, error } = await supabase.storage.from('documents').download(doc.path);
+    // Prefer the explicit path; otherwise derive one from the stored url —
+    // the documents bucket is private, so plain fetch() of a public URL 400s.
+    const ref = doc.path
+      ? { bucket: 'documents', path: doc.path }
+      : parseDocumentFileRef(doc.url);
+    if (ref) {
+      const { data, error } = await supabase.storage.from(ref.bucket).download(ref.path);
       if (!error && data) return new Uint8Array(await data.arrayBuffer());
     }
     const res = await fetch(doc.url);
@@ -1505,7 +1512,8 @@ export async function generateInspectionReportPdf(
         includeCoverPage: false, // We're using our custom cover page
         skipFirstPageHeaderFooter: true, // keep the running banner + page number off our cover
         logoDataUrl,
-        filename: `${siteName}_${inspection.subsectionName || 'Inspection'}_Report.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_'),
+        // Unified naming (F3): sanitised, LOCAL date stamp via the shared helper.
+        filename: generateDocumentFilename('Inspection_Report', `${siteName}_${inspection.subsectionName || 'Inspection'}`),
       },
     });
 

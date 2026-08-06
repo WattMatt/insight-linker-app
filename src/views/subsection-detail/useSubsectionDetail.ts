@@ -7,6 +7,8 @@ import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { isSnagOpen } from "@/lib/subsectionStatus";
 import { isCocCertificateCategory } from "@/lib/cocHierarchy";
 import { uploadEvaluationReport as libUploadEvaluationReport } from "@/lib/coc/uploadCocFiles";
+import { storagePathFromUrl } from "@/lib/documents/paths";
+import { downloadDocumentBlob } from "@/lib/documents/documentUrl";
 import { isInspectionCompleted } from "@/lib/siteHealth";
 import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
 import type {
@@ -710,12 +712,9 @@ export function useSubsectionDetail() {
         .from('subsection_documents')
         .select('file_url')
         .eq('category_id', categoryId);
+      // storagePathFromUrl handles both legacy full URLs and bare-path rows.
       const paths = (catDocs || [])
-        .map(d => {
-          const parts = (d.file_url || '').split('/');
-          const idx = parts.indexOf('documents');
-          return idx >= 0 ? parts.slice(idx + 1).join('/') : null;
-        })
+        .map(d => (d.file_url ? storagePathFromUrl(d.file_url) : null))
         .filter((p): p is string => !!p);
       if (paths.length > 0) {
         const { error: removeError } = await supabase.storage.from('documents').remove(paths);
@@ -864,10 +863,10 @@ export function useSubsectionDetail() {
         throw fetchError;
       }
 
-      if (doc?.file_url) {
-        const url = new URL(doc.file_url);
-        const pathParts = url.pathname.split('/');
-        const filePath = pathParts.slice(pathParts.indexOf('documents') + 1).join('/');
+      // storagePathFromUrl handles both legacy full URLs and bare-path rows
+      // (a bare path would throw in `new URL(...)`, aborting the delete).
+      const filePath = doc?.file_url ? storagePathFromUrl(doc.file_url) : null;
+      if (filePath) {
         const { error: storageError } = await supabase.storage.from('documents').remove([filePath]);
         if (storageError) {
           if (process.env.NODE_ENV === 'development') console.error("Error deleting file from storage:", storageError);
@@ -881,14 +880,7 @@ export function useSubsectionDetail() {
         .select('file_url')
         .eq('parent_document_id', documentId);
       const childPaths = (children || [])
-        .map(c => {
-          if (!c.file_url) return null;
-          try {
-            const u = new URL(c.file_url);
-            const parts = u.pathname.split('/');
-            return parts.slice(parts.indexOf('documents') + 1).join('/');
-          } catch { return null; }
-        })
+        .map(c => (c.file_url ? storagePathFromUrl(c.file_url) : null))
         .filter((p): p is string => !!p);
       if (childPaths.length > 0) {
         await supabase.storage.from('documents').remove(childPaths);
@@ -919,8 +911,15 @@ export function useSubsectionDetail() {
   const handleDownloadDocument = async (url: string, fileName: string) => {
     if (!url) { toast.error("Document URL not available"); return; }
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
+      // Storage references (bare paths or legacy public URLs against the now
+      // private bucket) download via the SDK; anything else is fetched as-is.
+      const blob =
+        (await downloadDocumentBlob(url)) ??
+        (await (async () => {
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+          return response.blob();
+        })());
       const blobUrl = window.URL.createObjectURL(blob);
 
       // Open in new tab — anchor download is blocked in iframe sandboxes

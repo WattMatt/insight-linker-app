@@ -5,7 +5,7 @@
  * useUnifiedPdfGeneration. Pure row/KPI logic lives in report/fortressChecklistRows.ts
  * (unit-tested); this module is the thin pdfmake assembly + branding + render glue.
  */
-import { createKpiRow, createDataTable, createSectionHeader, COLORS } from './pdfMakeUtils';
+import { createKpiRow, createDataTable, createSectionHeader, COLORS, generateDocumentFilename } from './pdfMakeUtils';
 import { generateReport } from './pdfEngine';
 import { loadCompanyBranding, imageUrlToBase64 } from './pdfBranding';
 import {
@@ -101,7 +101,8 @@ export async function generateFortressChecklistPdf(
       options: {
         logoDataUrl,
         organizationName: branding.organizationName,
-        filename: `Fortress_Checklist_${safeSite}_${new Date().toISOString().split('T')[0]}.pdf`,
+        // Unified naming (F3): sanitised, LOCAL date stamp — no UTC drift.
+        filename: generateDocumentFilename('Fortress_Checklist', safeSite),
       },
     });
 

@@ -33,6 +33,7 @@ import { computeSiteDeliverables, categoryMatches, THERMAL_CATEGORY_PATTERNS } f
 import { buildSiteKpiBlock } from "@/lib/siteCoc/reportKpis";
 import { useUserRole } from "@/hooks/useUserRole";
 import { renameDocument, moveDocuments, deleteDocuments, type DocRef } from "@/lib/documents/documentMutations";
+import { storagePathFromUrl } from "@/lib/documents/paths";
 import { validateUploadFile } from "@/lib/documents/uploadConstraints";
 import { MoveDocumentsDialog, type MoveDoc } from "@/components/site/MoveDocumentsDialog";
 import { DocumentHistoryDialog } from "@/components/site/DocumentHistoryDialog";
@@ -520,10 +521,9 @@ const SiteDetail = () => {
       // site_documents row and silently "deletes" nothing while still toasting success.
       const table = source === 'subsection' ? 'subsection_documents' : 'site_documents';
       const { data: doc } = await supabase.from(table).select('file_url').eq('id', id).single();
-      if (doc?.file_url?.includes('supabase.co/storage')) {
-        const path = doc.file_url.split('/documents/')[1]?.split('?')[0];
-        if (path) await supabase.storage.from('documents').remove([path]);
-      }
+      // storagePathFromUrl handles both legacy full URLs and bare-path rows.
+      const path = doc?.file_url ? storagePathFromUrl(doc.file_url) : null;
+      if (path) await supabase.storage.from('documents').remove([path]);
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) throw error;
       toast.success(`${name} deleted`);

@@ -10,6 +10,7 @@ import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { Site } from "@/types/site";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadFile } from "@/lib/fileDownload";
+import { storagePathFromUrl } from "@/lib/documents/paths";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { 
@@ -89,13 +90,12 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
         try {
             setDeleting(id);
             
-            // Get the file URL to delete from storage
+            // Get the stored file reference to delete from storage.
+            // storagePathFromUrl handles both legacy full URLs and bare-path rows.
             const report = reports.find(r => r.id === id);
-            if (report?.file_url?.includes('supabase.co/storage')) {
-                const path = report.file_url.split('/documents/')[1]?.split('?')[0];
-                if (path) {
-                    await supabase.storage.from('documents').remove([path]);
-                }
+            const path = report?.file_url ? storagePathFromUrl(report.file_url) : null;
+            if (path) {
+                await supabase.storage.from('documents').remove([path]);
             }
             
             const { error } = await supabase
