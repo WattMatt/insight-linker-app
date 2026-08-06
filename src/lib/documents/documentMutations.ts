@@ -36,15 +36,16 @@ export async function logDocumentActivity(action: string, details: Record<string
   });
 }
 
-// Relocate one storage object (download -> upload -> getPublicUrl). Returns the new public URL,
-// or throws. Mirrors src/lib/imageNaming.ts (repo has no storage.copy/move).
+// Relocate one storage object (download -> upload). Returns the new STORAGE
+// PATH (the bucket is private — file_url stores paths, and readers mint
+// signed URLs via documentUrl.ts). Mirrors src/lib/imageNaming.ts (repo has
+// no storage.copy/move).
 async function relocateObject(oldPath: string, newPath: string): Promise<string> {
   const dl = await supabase.storage.from(BUCKET).download(oldPath);
   if (dl.error || !dl.data) throw new Error('Could not read the stored file.');
   const up = await supabase.storage.from(BUCKET).upload(newPath, dl.data, { cacheControl: '3600', upsert: false });
   if (up.error) throw new Error('Could not write the file to its new location.');
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(newPath);
-  return data.publicUrl;
+  return newPath;
 }
 
 export async function renameDocument(doc: DocRef, newName: string, now: number = Date.now()): Promise<MutationResult> {
@@ -123,8 +124,9 @@ export async function moveDocuments(docs: DocRef[], target: TargetCategory, now:
 }
 
 async function deleteOne(doc: DocRef): Promise<MutationResult> {
+  // storagePathFromUrl handles both legacy full URLs and bare-path rows.
   const path = storagePathFromUrl(doc.file_url);
-  if (path && doc.file_url.includes('supabase.co/storage')) {
+  if (path) {
     await supabase.storage.from(BUCKET).remove([path]).catch(() => {}); // best-effort
   }
   const { error } = await supabase.from(tableFor(doc.source)).delete().eq('id', doc.id);

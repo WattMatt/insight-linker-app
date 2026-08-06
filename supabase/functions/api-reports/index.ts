@@ -112,6 +112,7 @@ serve(async (req) => {
             token_endpoint: "/oauth-token",
             grant_types: ["client_credentials", "refresh_token"],
           },
+          note: "Generate endpoints return structured JSON plus content_text_base64 (base64 plain text, content_type text/plain). PDF output is not yet implemented.",
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -145,7 +146,9 @@ serve(async (req) => {
             report_type: "inspection",
             generated_at: new Date().toISOString(),
             inspection: inspection || {},
-            content_base64: generateInspectionPDFBase64(inspection),
+            content_text_base64: generateInspectionTextBase64(inspection),
+            content_type: "text/plain",
+            note: "PDF output is not yet implemented: content_text_base64 is a base64-encoded PLAIN TEXT summary (content_type text/plain). Do not save it with a .pdf extension.",
           };
           break;
         }
@@ -188,7 +191,9 @@ serve(async (req) => {
               total_inspections: inspections?.length || 0,
               pending_inspections: inspections?.filter((i: any) => i.status === "pending").length || 0,
             },
-            content_base64: generateSiteSummaryPDFBase64(site, subsections, inspections),
+            content_text_base64: generateSiteSummaryTextBase64(site, subsections, inspections),
+            content_type: "text/plain",
+            note: "PDF output is not yet implemented: content_text_base64 is a base64-encoded PLAIN TEXT summary (content_type text/plain). Do not save it with a .pdf extension.",
           };
           break;
         }
@@ -224,7 +229,9 @@ serve(async (req) => {
             subsection: subsection || {},
             documents: documents || [],
             inspections: inspections || [],
-            content_base64: generateSubsectionPDFBase64(subsection, documents, inspections),
+            content_text_base64: generateSubsectionTextBase64(subsection, documents, inspections),
+            content_type: "text/plain",
+            note: "PDF output is not yet implemented: content_text_base64 is a base64-encoded PLAIN TEXT summary (content_type text/plain). Do not save it with a .pdf extension.",
           };
           break;
         }
@@ -259,7 +266,9 @@ serve(async (req) => {
               open_issues: pins?.filter((p: any) => p.status === "open").length || 0,
               resolved: pins?.filter((p: any) => p.status === "resolved" || p.status === "rectified").length || 0,
             },
-            content_base64: generateFloorPlanPDFBase64(floorPlan, pins),
+            content_text_base64: generateFloorPlanTextBase64(floorPlan, pins),
+            content_type: "text/plain",
+            note: "PDF output is not yet implemented: content_text_base64 is a base64-encoded PLAIN TEXT summary (content_type text/plain). Do not save it with a .pdf extension.",
           };
           break;
         }
@@ -291,8 +300,16 @@ serve(async (req) => {
   }
 });
 
-// PDF Generation functions (simplified base64 text reports)
-function generateInspectionPDFBase64(inspection: any): string {
+// -----------------------------------------------------------------------------
+// TEXT report builders — NOT PDFs.
+// These endpoints previously returned this same base64'd plain text under the
+// field name `content_base64`, which consumers reasonably decoded and saved as
+// .pdf files, producing corrupt documents (PDF-STANDARD-AUDIT-AND-PLAN §6.4).
+// The honest contract is now: `content_text_base64` + `content_type: text/plain`
+// + a `note` response field. Real server-side PDF rendering is deliberately NOT
+// attempted in this Deno function; if/when it lands it should follow the
+// standard's gather/render/persist shape and reuse the app's builders.
+function generateInspectionTextBase64(inspection: any): string {
   const content = `
 INSPECTION REPORT
 =================
@@ -320,7 +337,7 @@ ${inspection?.json_data ? JSON.stringify(inspection.json_data, null, 2) : "No da
   return btoa(unescape(encodeURIComponent(content)));
 }
 
-function generateSiteSummaryPDFBase64(site: any, subsections: any, inspections: any): string {
+function generateSiteSummaryTextBase64(site: any, subsections: any, inspections: any): string {
   const content = `
 SITE SUMMARY REPORT
 ===================
@@ -352,7 +369,7 @@ ${inspections?.slice(0, 10).map((i: any) => `- ${i.title}: ${i.status} (${i.insp
   return btoa(unescape(encodeURIComponent(content)));
 }
 
-function generateSubsectionPDFBase64(subsection: any, documents: any, inspections: any): string {
+function generateSubsectionTextBase64(subsection: any, documents: any, inspections: any): string {
   const content = `
 SUBSECTION REPORT
 =================
@@ -391,7 +408,7 @@ ${inspections?.map((i: any) => `- ${i.title}: ${i.status}`).join("\n") || "No in
   return btoa(unescape(encodeURIComponent(content)));
 }
 
-function generateFloorPlanPDFBase64(floorPlan: any, pins: any): string {
+function generateFloorPlanTextBase64(floorPlan: any, pins: any): string {
   const content = `
 FLOOR PLAN REPORT
 =================

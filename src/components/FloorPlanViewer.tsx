@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
+import "@/lib/pdfWorker"; // self-hosted pdf.js worker (single source of truth)
 import { Button } from "./ui/button";
 import { ZoomIn, ZoomOut, Maximize2, MapPin, Loader2, Layers, Map } from "lucide-react";
 import { toast } from "sonner";
@@ -7,9 +8,6 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { clusterPins, isCluster, getClusterColor, type ClusteredPin } from "@/lib/pinClustering";
 import { FloorPlanMiniMap } from "./FloorPlanMiniMap";
-
-// Set up PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface Pin {
   id: string;

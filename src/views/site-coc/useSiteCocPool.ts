@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { assignPoolFile } from "@/lib/coc/assignPoolFile";
+import { storagePathFromUrl } from "@/lib/documents/paths";
 import { uploadFileToPool } from "@/lib/coc/poolUpload";
 import { reassignPendingPoolFiles } from "@/lib/coc/reassignPool";
 import { mapWithConcurrency, summarizeUpload, type FileOutcome } from "@/lib/siteCoc/uploadQueue";
@@ -107,9 +108,8 @@ export function useSiteCocPool(siteId: string | undefined, onAssigned: () => voi
 
   const remove = useCallback(async (file: PoolFile) => {
     try {
-      const u = new URL(file.file_url);
-      const parts = u.pathname.split("/");
-      const p = parts.slice(parts.indexOf("documents") + 1).join("/");
+      // storagePathFromUrl handles both legacy full URLs and bare-path rows.
+      const p = storagePathFromUrl(file.file_url);
       if (p) await supabase.storage.from("documents").remove([p]);
     } catch { /* ignore */ }
     await supabase.from("coc_file_pool").delete().eq("id", file.id);

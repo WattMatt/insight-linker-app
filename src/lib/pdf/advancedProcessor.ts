@@ -4,13 +4,14 @@
  */
 
 import * as pdfjsLib from 'pdfjs-dist';
+import { workerSrcFor } from '@/lib/pdfWorkerPath';
 import { processPageWithOCR, OCRPageResult, OCROptions } from './ocrEngine';
 import { extractDocumentContent, PageTextContent, DetectedTable, TextBlock } from './textExtractor';
 import { extractAllImages, extractCoverPageImages, ExtractedImage, ImageExtractionOptions } from './imageExtractor';
 
-// Configure PDF.js worker
+// Self-hosted, version-matched worker (see src/lib/pdfWorker.ts).
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrcFor(pdfjsLib.version);
 }
 
 export interface ProcessingOptions {

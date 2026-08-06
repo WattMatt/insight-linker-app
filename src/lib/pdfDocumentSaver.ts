@@ -11,6 +11,11 @@ interface SavePDFOptions {
 interface SaveResult {
   success: boolean;
   error?: string;
+  /**
+   * The STORAGE PATH of the saved document (not a fetchable URL). The
+   * `documents` bucket is private; resolve through getDocumentSignedUrl()
+   * (src/lib/documents/documentUrl.ts) before displaying or downloading.
+   */
   documentUrl?: string;
 }
 
@@ -98,19 +103,15 @@ async function saveToSiteDocuments(
 
   if (uploadError) throw uploadError;
 
-  // Get public URL
-  const { data: urlData } = supabase.storage
-    .from("documents")
-    .getPublicUrl(uploadData.path);
-
-  // Insert document record
+  // The bucket is PRIVATE: store the storage PATH, not a public URL.
+  // Readers mint signed URLs via getDocumentSignedUrl() at display time.
   const { error: insertError } = await supabase
     .from("site_documents")
     .insert({
       site_id: siteId,
       category_id: categoryId,
       file_name: fileName,
-      file_url: urlData.publicUrl,
+      file_url: uploadData.path,
       category: categoryName,
     });
 
@@ -119,7 +120,7 @@ async function saveToSiteDocuments(
     throw insertError;
   }
 
-  return { success: true, documentUrl: urlData.publicUrl };
+  return { success: true, documentUrl: uploadData.path };
 }
 
 async function saveToSubsectionDocuments(
@@ -168,19 +169,15 @@ async function saveToSubsectionDocuments(
 
   if (uploadError) throw uploadError;
 
-  // Get public URL
-  const { data: urlData } = supabase.storage
-    .from("documents")
-    .getPublicUrl(uploadData.path);
-
-  // Insert document record
+  // The bucket is PRIVATE: store the storage PATH, not a public URL.
+  // Readers mint signed URLs via getDocumentSignedUrl() at display time.
   const { error: insertError } = await supabase
     .from("subsection_documents")
     .insert({
       subsection_id: subsectionId,
       category_id: categoryId,
       file_name: fileName,
-      file_url: urlData.publicUrl,
+      file_url: uploadData.path,
       file_size: blob.size,
     });
 
@@ -189,7 +186,7 @@ async function saveToSubsectionDocuments(
     throw insertError;
   }
 
-  return { success: true, documentUrl: urlData.publicUrl };
+  return { success: true, documentUrl: uploadData.path };
 }
 
 /**

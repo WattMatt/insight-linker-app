@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
 import { toast } from "sonner";
 import { 
   Upload, 
@@ -61,9 +61,10 @@ import {
   computeAutoMatches,
   matchSubsectionId,
 } from "@/lib/schematicMatching";
+import { resolveDocumentUrl } from "@/lib/documents/documentUrl";
 
-// Initialize PDF.js worker for rendering PDF documents
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+// Self-hosted pdf.js worker (single source of truth: src/lib/pdfWorker.ts)
+import "@/lib/pdfWorker";
 
 interface SchematicDiagramProps {
   siteId: string;
@@ -142,6 +143,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   // State
   const [schematic, setSchematic] = useState<Schematic | null>(null);
+  // file_url may be a bare storage path or a stale public URL (private
+  // bucket) — schematicDisplayUrl is the signed URL react-pdf actually loads.
+  const [schematicDisplayUrl, setSchematicDisplayUrl] = useState<string>("");
   const [blocks, setBlocks] = useState<SchematicBlock[]>([]);
   const [subsections, setSubsections] = useState<Subsection[]>([]);
   const [inspections, setInspections] = useState<any[]>([]);
@@ -226,6 +230,22 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   useEffect(() => {
     measureViewport();
   }, [measureViewport, loading, schematic?.id, dimensionsLoaded]);
+
+  // Resolve the stored file_url (bare path or legacy public URL) to a signed
+  // URL for react-pdf — the documents bucket is private.
+  useEffect(() => {
+    let cancelled = false;
+    if (!schematic?.file_url) {
+      setSchematicDisplayUrl("");
+      return;
+    }
+    resolveDocumentUrl(schematic.file_url).then((resolved) => {
+      if (!cancelled) setSchematicDisplayUrl(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [schematic?.file_url]);
 
   // Shift key tracking for pan mode (like FloorPlanViewer)
   useEffect(() => {
@@ -1814,7 +1834,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               }}
             >
               <Document
-                file={schematic.file_url}
+                file={schematicDisplayUrl || undefined}
                 onLoadSuccess={({ numPages }) => setNumPages(numPages)}
                 loading={
                   <div className="flex items-center justify-center h-64">

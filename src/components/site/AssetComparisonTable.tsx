@@ -20,6 +20,7 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Search, CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon, Eye, Loader2, Pencil, Check, X, Trash2 } from "lucide-react";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
+import { storagePathFromUrl } from "@/lib/documents/paths";
 import { RobustImage } from "@/components/RobustImage";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { generateInspectionBasedReport } from "@/lib/assetVerificationReportGenerator";
@@ -340,10 +341,9 @@ export const AssetComparisonTable = ({
     if (!window.confirm(`Delete "${r.file_name}"? This cannot be undone.`)) return;
     setDeletingReport(r.id);
     try {
-      if (r.file_url?.includes("supabase.co/storage")) {
-        const path = r.file_url.split("/documents/")[1]?.split("?")[0];
-        if (path) await supabase.storage.from("documents").remove([path]);
-      }
+      // storagePathFromUrl handles both legacy full URLs and bare-path rows.
+      const path = r.file_url ? storagePathFromUrl(r.file_url) : null;
+      if (path) await supabase.storage.from("documents").remove([path]);
       const { error } = await supabase.from("site_documents").delete().eq("id", r.id);
       if (error) throw error;
       toast.success("Report deleted");

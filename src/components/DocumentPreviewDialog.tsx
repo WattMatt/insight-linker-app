@@ -21,15 +21,14 @@ import {
   FileText
 } from 'lucide-react';
 import { downloadBlob, downloadFile } from '@/lib/fileDownload';
-import { Document, Page, pdfjs } from 'react-pdf';
+import { parseDocumentFileRef, resolveDocumentUrl } from '@/lib/documents/documentUrl';
+import { Document, Page } from 'react-pdf';
+import '@/lib/pdfWorker';
 import { PDFComplianceCheck, getComplianceCheckLabel } from '@/lib/pdfEngine';
 import { renderAsync } from 'docx-preview';
 import { supabase } from '@/integrations/supabase/client';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-
-// Configure PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface DocumentPreviewDialogProps {
   open: boolean;
@@ -74,12 +73,33 @@ export function DocumentPreviewDialog({
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [pdfBlobData, setPdfBlobData] = useState<Blob | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  // fileUrl may be a bare storage path or a stale public URL (the documents
+  // bucket is private) — displayUrl is the signed/fetchable equivalent used
+  // by the image/docx/open-in-tab paths. PDFs blob-fetch via the SDK instead.
+  const [displayUrl, setDisplayUrl] = useState<string>(fileUrl);
   const containerRef = useRef<HTMLDivElement>(null);
   const docxContainerRef = useRef<HTMLDivElement>(null);
 
   const isPdf = fileName.toLowerCase().endsWith('.pdf');
   const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(fileName);
   const isDocx = fileName.toLowerCase().endsWith('.docx');
+
+  // Resolve the stored value to a displayable URL (signed URL for storage
+  // references; unchanged for blob:/data:/external URLs).
+  useEffect(() => {
+    if (!open || !fileUrl) {
+      setDisplayUrl(fileUrl);
+      return;
+    }
+    let cancelled = false;
+    setDisplayUrl(fileUrl);
+    resolveDocumentUrl(fileUrl).then((resolved) => {
+      if (!cancelled) setDisplayUrl(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, fileUrl]);
 
   // Fit PDF pages to the container width (landscape pages would otherwise overflow + clip at 100%).
   useEffect(() => {
@@ -99,15 +119,15 @@ export function DocumentPreviewDialog({
       return;
     }
 
-    // Check if it's a Supabase storage URL
-    const storageMatch = fileUrl.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/]+)\/(.+)/);
-    if (!storageMatch) {
+    // Storage reference? (bare `documents` path or full storage URL)
+    const ref = parseDocumentFileRef(fileUrl);
+    if (!ref) {
       setPdfBlobUrl(null);
       return;
     }
 
-    const bucket = storageMatch[1];
-    const filePath = decodeURIComponent(storageMatch[2].split('?')[0]);
+    const bucket = ref.bucket;
+    const filePath = ref.path;
 
     setPdfLoading(true);
     console.log(`[DocPreview] Downloading PDF via SDK: ${bucket}/${filePath}`);
@@ -157,11 +177,23 @@ export function DocumentPreviewDialog({
         docxContainerRef.current.innerHTML = '';
       }
       
-      fetch(fileUrl)
-        .then(res => {
-          if (!res.ok) throw new Error('Failed to fetch document');
-          return res.arrayBuffer();
-        })
+      // Storage references download via the SDK (private bucket); anything
+      // else (blob:/data:/external) is fetched directly.
+      const docxRef = parseDocumentFileRef(fileUrl);
+      const bufferPromise: Promise<ArrayBuffer> = docxRef
+        ? supabase.storage
+            .from(docxRef.bucket)
+            .download(docxRef.path)
+            .then(({ data, error }) => {
+              if (error || !data) throw new Error(error?.message || 'Failed to fetch document');
+              return data.arrayBuffer();
+            })
+        : fetch(fileUrl).then(res => {
+            if (!res.ok) throw new Error('Failed to fetch document');
+            return res.arrayBuffer();
+          });
+
+      bufferPromise
         .then(buffer => {
           if (!docxContainerRef.current) return;
           
@@ -370,7 +402,7 @@ export function DocumentPreviewDialog({
         );
       }
 
-      const pdfSource = pdfBlobUrl || fileUrl;
+      const pdfSource = pdfBlobUrl || displayUrl;
 
       return (
         <Document
@@ -384,7 +416,7 @@ export function DocumentPreviewDialog({
           error={
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
               <p>Failed to load PDF. The document may be inaccessible or corrupted.</p>
-              <Button variant="outline" className="mt-2" onClick={() => window.open(fileUrl, '_blank')}>
+              <Button variant="outline" className="mt-2" onClick={() => window.open(displayUrl, '_blank')}>
                 Open in new tab
               </Button>
             </div>
@@ -404,7 +436,7 @@ export function DocumentPreviewDialog({
     if (isImage) {
       return (
         <img
-          src={fileUrl}
+          src={displayUrl}
           alt={fileName}
           className="max-w-none"
           style={{
