@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { generatePdfBlob } from "@/lib/pdfMakeConfig";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { storagePathFromUrl } from "@/lib/documents/paths";
+import { generateDocumentFilename } from "@/lib/documentDesignStandards";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { buildCocReportModel } from "@/lib/siteCoc/cocReportModel";
 import type { SiteKpiBlock } from "@/lib/siteCoc/reportKpis";
@@ -60,7 +61,8 @@ export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, 
         : null;
       const blob = await generatePdfBlob(buildSiteCocReportDocDef(buildModel(), logoDataUrl, qrCodeDataUrl));
       const url = URL.createObjectURL(blob);
-      setPreview({ url, name: `${siteName} - Site COC Report - ${new Date().toISOString().slice(0, 10)}.pdf`, blob, isObjectUrl: true });
+      // Unified naming (F3): sanitised, LOCAL date stamp via the shared helper.
+      setPreview({ url, name: generateDocumentFilename('Site_COC_Report', siteName), blob, isObjectUrl: true });
     } catch (e: any) {
       if (process.env.NODE_ENV === "development") console.error("Site COC report failed:", e);
       toast.error("Could not generate the report");

@@ -2,6 +2,7 @@ import type { TDocumentDefinitions, Content } from "pdfmake/interfaces";
 import { COC_SANS_RULES } from "./sansRules";
 import type { CocReportModel, VerdictKind, ScheduleTableRow, VerificationRow, FileRegisterRow } from "./cocReportModel";
 import { scheduleStatusTone, verdictTone, type Tone } from "./statusDisplay";
+import { miniBar, gaugeBar, segmentedBar } from "../pdfBars";
 
 const FILL = { pass: "#E1F5EE", fail: "#FCEBEB", review: "#FAEEDA", cv: "#FAEEDA", pending: "#F1EFE8", na: "#F1EFE8" };
 const TEXT: Record<VerdictKind, string> = { pass: "#0F6E56", fail: "#A32D2D", review: "#854F0B", cv: "#854F0B", pending: "#5F5E5A" };
@@ -87,36 +88,16 @@ function fileRegisterContent(rows: FileRegisterRow[]): Content {
   return { table: { headerRows: 1, widths: ["*", 42, 64, 56, 40, 22, 48, 30, "*"], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
 }
 
-// Bars are built as 2-cell (or N-cell) TABLES, never canvases. pdf.js — the in-app viewer —
-// mis-positions canvas elements inside table cells (it pushes them to the bottom and stretches the
-// row), so the cover gauge and these KPI bars all use the reliable table primitive instead.
-const barLayout = { defaultBorder: false, paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0 };
-function miniBar(pct: number, color: string, w = 108, track = "#ECECEC"): Content {
-  const p = Math.max(0, Math.min(100, pct));
-  const fw = Math.max(1, Math.round((w * p) / 100)), rest = Math.max(1, w - fw);
-  return { table: { widths: [fw, rest], heights: [5], body: [[{ text: "", fillColor: color }, { text: "", fillColor: track }]] }, layout: barLayout, margin: [0, 5, 0, 0] };
-}
-function verdictBar(v: { pass: number; fail: number; review: number; cv: number; pending: number }, W = 104): Content {
-  const total = Math.max(1, v.pass + v.fail + v.review + v.cv + v.pending);
-  const segs = [
-    { n: v.pass, c: "#1D9E75" }, { n: v.review + v.cv, c: "#EF9F27" },
-    { n: v.pending, c: "#B4B2A9" }, { n: v.fail, c: "#E24B4A" },
-  ].filter(s => s.n > 0);
-  const widths = segs.length ? segs.map(s => Math.max(2, Math.round((W * s.n) / total))) : [W];
-  const cells = segs.length ? segs.map(s => ({ text: "", fillColor: s.c })) : [{ text: "", fillColor: "#ECECEC" }];
-  return { table: { widths, heights: [10], body: [cells] }, layout: barLayout, margin: [0, 5, 0, 3] };
-}
-
-// Cover gauge bar built as a 2-cell table (NOT a canvas): a standalone canvas block gets bumped to
-// the next page by pdfmake/pdf.js pagination; a table flows reliably inline.
-function gaugeBar(pct: number, color: string): Content {
-  const W = 320, p = Math.max(0, Math.min(100, pct));
-  const fw = Math.max(2, Math.round((W * p) / 100)), rest = Math.max(2, W - fw);
-  return {
-    table: { widths: [fw, rest], heights: [9], body: [[{ text: "", fillColor: color }, { text: "", fillColor: "#ECECEC" }]] },
-    layout: { defaultBorder: false, paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0 },
-    margin: [0, 12, 0, 10],
-  } as Content;
+// Bar primitives (table-based, canvas-free) live in the shared pdfBars.ts —
+// they were originally authored here and lifted out; the local copies are gone.
+// verdictBar is expressed via segmentedBar with the COC verdict palette.
+function verdictBar(v: { pass: number; fail: number; review: number; cv: number; pending: number }): Content {
+  return segmentedBar([
+    { value: v.pass, color: "#1D9E75" },
+    { value: v.review + v.cv, color: "#EF9F27" },
+    { value: v.pending, color: "#B4B2A9" },
+    { value: v.fail, color: "#E24B4A" },
+  ]);
 }
 
 // Zebra-striped, borderless-vertical table layout. Status/colored cells keep their own fillColor
@@ -214,12 +195,12 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
     cardCell(t, [
       { text: label, fontSize: 9, color: TINT[t].label },
       { text: value, fontSize: 19, bold: true, color: TINT[t].value, margin: [0, 3, 0, 0] },
-      ...(barPct != null ? [miniBar(barPct, TINT[t].accent, 108, TINT[t].track)] : []),
+      ...(barPct != null ? [miniBar(barPct, TINT[t].accent, { width: 108, track: TINT[t].track })] : []),
       { text: sub, fontSize: 7, color: TINT[t].label, margin: [0, barPct != null ? 4 : 6, 0, 0] },
     ]);
   const verdictCard = (): any => cardCell("slate", [
     { text: "Verdict mix", fontSize: 9, color: TINT.slate.label },
-    verdictBar(k.verdict, 104),
+    verdictBar(k.verdict),
     { text: `P ${k.verdict.pass} · R/CV ${k.verdict.review + k.verdict.cv} · ${k.verdict.pending}pd · F ${k.verdict.fail}`, fontSize: 7, color: TINT.slate.label, margin: [0, 6, 0, 0] },
   ]);
   const mPct = sk && sk.meteringTotal ? Math.round((sk.meteringDone / sk.meteringTotal) * 100) : 100;

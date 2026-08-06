@@ -113,7 +113,7 @@ const nextConfig = {
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
 
-  serverExternalPackages: ['fabric', 'canvas', 'pdfmake', 'jspdf', 'html2canvas'],
+  serverExternalPackages: ['fabric', 'canvas', 'pdfmake', 'html2canvas'],
 
   images: {
     remotePatterns: [

@@ -2,7 +2,7 @@
  * Client-side pdfmake generator for the Calendar report (events grouped by month).
  * Replaces the server generate-pdf (PDFShift) path. Pure logic in report/calendarRows.ts.
  */
-import { createKpiRow, createDataTable, createSectionHeader, COLORS } from './pdfMakeUtils';
+import { createKpiRow, createDataTable, createSectionHeader, COLORS, generateDocumentFilename } from './pdfMakeUtils';
 import { generateReport } from './pdfEngine';
 import { loadCompanyBranding } from './pdfBranding';
 import {
@@ -89,7 +89,8 @@ export async function generateCalendarPdf(data: CalendarReportData): Promise<Cal
       options: {
         logoDataUrl: branding.logoDataUrl,
         organizationName: branding.organizationName,
-        filename: `Calendar_Report_${data.year}.pdf`,
+        // Unified naming (F3): {type}_{name}_{local-date}.pdf via the shared helper.
+        filename: generateDocumentFilename('Calendar_Report', String(data.year)),
       },
     });
 

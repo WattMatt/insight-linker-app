@@ -21,7 +21,7 @@ import {
   CONTENT_WIDTH_PT,
   PDFComplianceCheck,
 } from "./pdfMakeUtils";
-import { DOCUMENT_DESIGN_STANDARDS } from "./documentDesignStandards";
+import { DOCUMENT_DESIGN_STANDARDS, generateDocumentFilename } from "./documentDesignStandards";
 import { fetchPDFTemplate, AccentColors } from "@/hooks/usePDFTemplateGateway";
 
 const { margins } = DOCUMENT_DESIGN_STANDARDS;
@@ -442,7 +442,8 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<FloorPl
     pageBreaks: true,
   });
 
-  const fileName = `Floor_Plan_Report_${data.subsectionName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+  // Unified naming (F3): sanitised, LOCAL date stamp — no hand-rolled UTC drift.
+  const fileName = generateDocumentFilename('Floor_Plan_Report', data.subsectionName);
 
   return { blob, fileName, complianceChecks };
 };

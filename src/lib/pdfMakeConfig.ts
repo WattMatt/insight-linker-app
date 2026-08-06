@@ -9,11 +9,14 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 
-// pdfmake types - use 'any' for complex types until proper type definitions are available
-type TDocumentDefinitions = any;
-type StyleDictionary = Record<string, any>;
-type TableLayout = any;
-type Content = any;
+// Real pdfmake types via @types/pdfmake (the runtime package ships none).
+import type {
+  TDocumentDefinitions,
+  StyleDictionary,
+  Content,
+  CustomTableLayout,
+} from 'pdfmake/interfaces';
+type TableLayout = CustomTableLayout;
 import { DOCUMENT_DESIGN_STANDARDS } from './documentDesignStandards';
 
 // Initialize pdfmake with bundled fonts

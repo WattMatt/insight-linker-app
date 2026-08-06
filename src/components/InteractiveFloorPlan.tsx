@@ -496,8 +496,8 @@ export const InteractiveFloorPlan = ({
 
       const blob = report.blob;
       const url = URL.createObjectURL(blob);
-      const filename = `floor-plan-report-${subsectionName}-${new Date().toISOString().split('T')[0]}.pdf`;
-      setPdfPreview({ url, blob, filename });
+      // Unified naming (F3): use the generator's shared-helper filename.
+      setPdfPreview({ url, blob, filename: report.fileName });
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error generating report:", error);
       toast.error("Failed to generate report");

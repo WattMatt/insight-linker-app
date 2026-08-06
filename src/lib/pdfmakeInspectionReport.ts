@@ -19,6 +19,7 @@ import {
 } from './pdfEngine';
 import { supabase } from '@/integrations/supabase/client';
 import { mmToPt } from './pdfMakeConfig';
+import { generateDocumentFilename } from './documentDesignStandards';
 import { loadImageSimple, loadImagesSimple, compressImageBlob } from './simpleImageLoader';
 import { scorePercentage, isPassStatus, isFailStatus } from './report/inspectionScore';
 import { savePDFToDocuments } from './pdfDocumentSaver';
@@ -1511,7 +1512,8 @@ export async function generateInspectionReportPdf(
         includeCoverPage: false, // We're using our custom cover page
         skipFirstPageHeaderFooter: true, // keep the running banner + page number off our cover
         logoDataUrl,
-        filename: `${siteName}_${inspection.subsectionName || 'Inspection'}_Report.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_'),
+        // Unified naming (F3): sanitised, LOCAL date stamp via the shared helper.
+        filename: generateDocumentFilename('Inspection_Report', `${siteName}_${inspection.subsectionName || 'Inspection'}`),
       },
     });
 
