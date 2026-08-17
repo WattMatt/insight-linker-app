@@ -1,124 +1,28 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-// heic2any dynamically imported to avoid SSR issues (references window at load)
+import { applyExtension, normaliseImageForUpload } from '@/lib/uploadImageNormaliser';
 
 interface UploadResult {
   url: string;
   path: string;
 }
 
-// Image compression settings for optimized storage and PDF generation
-const COMPRESSION_CONFIG = {
-  maxWidth: 800,        // Max width in pixels
-  quality: 0.7,         // JPEG quality (0.7 = 70%)
-  targetSizeKB: 100,    // Target ~100KB per image
-};
-
 export const useImageUpload = () => {
   const [uploading, setUploading] = useState(false);
 
   /**
-   * Compresses an image using Canvas API before upload
-   * Target: ~50-100KB output for efficient PDF generation
-   */
-  const compressImageForUpload = async (file: File): Promise<Blob> => {
-    return new Promise((resolve) => {
-      // Skip compression for non-image files
-      if (!file.type.startsWith('image/')) {
-        resolve(file);
-        return;
-      }
-
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-
-        const { maxWidth, quality } = COMPRESSION_CONFIG;
-        let width = img.width;
-        let height = img.height;
-
-        // Scale down if larger than maxWidth
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          if (process.env.NODE_ENV === 'development') console.warn('Canvas context unavailable, using original file');
-          resolve(file);
-          return;
-        }
-
-        // Use high-quality image smoothing
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              resolve(file);
-            }
-          },
-          'image/jpeg',
-          quality
-        );
-      };
-
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        if (process.env.NODE_ENV === 'development') console.warn('Image load failed, using original file');
-        resolve(file);
-      };
-
-      img.src = url;
-    });
-  };
-
-  /**
-   * Converts HEIC images to JPG for browser compatibility
-   */
-  const convertHeicToJpg = async (file: File): Promise<File> => {
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    
-    if (ext === 'heic' || ext === 'heif') {
-      try {
-        const heic2any = (await import('heic2any')).default;
-        const convertedBlob = await heic2any({
-          blob: file,
-          toType: 'image/jpeg',
-          quality: 0.9
-        });
-        
-        const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-        const newFileName = file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
-        
-        return new File([blob], newFileName, { type: 'image/jpeg' });
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') console.error('HEIC conversion failed:', error);
-        toast.error('Failed to convert HEIC image. Please use JPG or PNG format.');
-        throw error;
-      }
-    }
-    
-    return file;
-  };
-
-  /**
    * Uploads an image and returns a public URL (doesn't expire)
-   * Automatically converts HEIC to JPG
-   * Includes retry logic and proper error handling
-   * Optionally triggers server-side compression for optimal PDF generation
+   *
+   * HEIC conversion, downscaling and re-encoding all happen in
+   * normaliseImageForUpload, which guarantees the stored bytes are genuinely
+   * JPEG or PNG and that the extension and Content-Type describe them
+   * truthfully. Previously this relabelled every upload `image/jpeg` and `.jpg`
+   * even when compression had silently fallen back to the original bytes, so a
+   * source the canvas could not rasterise was stored lying about its own format.
+   *
+   * Includes retry logic and proper error handling.
+   * Optionally triggers server-side compression for optimal PDF generation.
    */
   const uploadImage = async (
     file: File,
@@ -130,18 +34,19 @@ export const useImageUpload = () => {
     setUploading(true);
 
     try {
-      // Convert HEIC to JPG if needed
-      const heicConverted = await convertHeicToJpg(file);
-      
-      // Compress image for optimized storage and PDF generation
-      const compressedBlob = await compressImageForUpload(heicConverted);
-      
-      // Create final file with .jpg extension (compression outputs JPEG)
-      const finalFileName = heicConverted.name.replace(/\.[^.]+$/, '.jpg');
-      const finalFile = new File([compressedBlob], finalFileName, { type: 'image/jpeg' });
-      
-      // Update path to use .jpg extension
-      let uploadPath = path.replace(/\.[^.]+$/, '.jpg');
+      const normalised = await normaliseImageForUpload(file);
+      if (!normalised.ok) {
+        // Refuse rather than store something no report can embed.
+        toast.error(normalised.error.reason);
+        setUploading(false);
+        return null;
+      }
+
+      const { blob, mime, extension } = normalised.image;
+      const finalFileName = applyExtension(file.name, extension);
+      const finalFile = new File([blob], finalFileName, { type: mime });
+
+      const uploadPath = applyExtension(path, extension);
 
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
@@ -154,10 +59,11 @@ export const useImageUpload = () => {
             });
 
           if (error) {
-            // If file already exists, try with a different timestamp
+            // If file already exists, try with a different timestamp. Keeps the
+            // normalised extension rather than forcing .jpg.
             if (error.message.includes('duplicate') || error.message.includes('already exists')) {
               const timestamp = Date.now();
-              const newPath = uploadPath.replace(/\.[^.]+$/, `_${timestamp}.jpg`);
+              const newPath = applyExtension(`${uploadPath.replace(/\.[^.]+$/, '')}_${timestamp}`, extension);
               return uploadImage(file, bucket, newPath, 1, options); // Don't retry on duplicate
             }
             throw error;

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, Upload, X, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { applyExtension, normaliseImageForUpload } from "@/lib/uploadImageNormaliser";
 import { useCamera } from "@/hooks/useCamera";
 
 interface DynamicField {
@@ -78,70 +79,6 @@ export const DynamicFieldManager = ({
     toast.success("Field removed");
   };
 
-  /**
-   * Compresses an image using Canvas API before upload
-   * Target: ~50-100KB output for efficient PDF generation
-   */
-  const compressImageForUpload = async (file: File): Promise<Blob> => {
-    return new Promise((resolve) => {
-      if (!file.type.startsWith('image/')) {
-        resolve(file);
-        return;
-      }
-
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        
-        const MAX_WIDTH = 800;
-        const QUALITY = 0.7;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > MAX_WIDTH) {
-          height = Math.round((height * MAX_WIDTH) / width);
-          width = MAX_WIDTH;
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(file);
-          return;
-        }
-
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              console.log(`Image compressed: ${(file.size / 1024).toFixed(0)}KB → ${(blob.size / 1024).toFixed(0)}KB`);
-              resolve(blob);
-            } else {
-              resolve(file);
-            }
-          },
-          'image/jpeg',
-          QUALITY
-        );
-      };
-
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        resolve(file);
-      };
-
-      img.src = url;
-    });
-  };
-
   const handleImageUpload = async (fieldId: string, file: File) => {
     const field = fields.find(f => f.id === fieldId);
     if (!field) return;
@@ -149,38 +86,26 @@ export const DynamicFieldManager = ({
     setUploadingImages(prev => new Set(prev).add(fieldId));
 
     try {
-      let processedFile = file;
-      
-      // Convert HEIC/HEIF images to JPEG for cross-browser compatibility
-      if (file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
-        try {
-          const heic2any = (await import('heic2any')).default;
-          const convertedBlob = await heic2any({
-            blob: file,
-            toType: 'image/jpeg',
-            quality: 0.9
-          });
-          
-          const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-          processedFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
-        } catch (conversionError) {
-          console.error("Error converting HEIC image:", conversionError);
-          toast.error("Failed to convert HEIC image. Please use JPG or PNG.");
-          return;
-        }
+      // HEIC conversion, downscaling and re-encoding all happen here, and the
+      // result's extension/Content-Type truthfully describe the bytes. This used
+      // to duplicate the logic in useImageUpload and shared its defect: the
+      // output was relabelled .jpg / image/jpeg even when the canvas step had
+      // silently fallen back to the original bytes.
+      const normalised = await normaliseImageForUpload(file);
+      if (!normalised.ok) {
+        toast.error(normalised.error.reason);
+        return;
       }
-      
-      // Compress image before upload for optimized storage and PDF generation
-      const compressedBlob = await compressImageForUpload(processedFile);
-      const finalFileName = processedFile.name.replace(/\.[^.]+$/, '.jpg');
-      const finalFile = new File([compressedBlob], finalFileName, { type: 'image/jpeg' });
-      
+
+      const { blob, mime, extension } = normalised.image;
+      const finalFile = new File([blob], applyExtension(file.name, extension), { type: mime });
+
       const fileName = `${Date.now()}-${finalFile.name}`;
       const filePath = `${inspectionId}/${sectionKey}/${fileName}`;
 
       const { error: uploadError, data } = await supabase.storage
         .from("inspection-photos")
-        .upload(filePath, finalFile);
+        .upload(filePath, finalFile, { contentType: mime });
 
       if (uploadError) throw uploadError;
 
@@ -192,7 +117,7 @@ export const DynamicFieldManager = ({
         if (f.id === fieldId) {
           return {
             ...f,
-            images: [...(f.images || []), { url: publicUrl, name: processedFile.name }]
+            images: [...(f.images || []), { url: publicUrl, name: finalFile.name }]
           };
         }
         return f;

@@ -144,8 +144,9 @@ async function reencodeViaCanvas(
 
     if (!img) return null;
 
-    // An SVG without intrinsic dimensions reports 0x0; rasterising that yields an
-    // empty canvas, so fall back to the standard's max box rather than 0.
+    // Verified in-browser: an SVG carrying only a viewBox still gets a default
+    // 150x150 intrinsic size, so this covers the rarer genuinely zero-dimension
+    // source — fall back to the standard's max box rather than an empty canvas.
     let width = img.naturalWidth || img.width;
     let height = img.naturalHeight || img.height;
     if (!width || !height) {
