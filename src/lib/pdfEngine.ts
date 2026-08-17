@@ -30,11 +30,13 @@ import {
   createStatusBadge,
   getStatusType,
   logComplianceCheck,
+  assessDocumentCompliance,
   CoverPageOptions,
   TableColumn,
   PDFComplianceCheck,
 } from './pdfMakeUtils';
 import { DOCUMENT_DESIGN_STANDARDS, generateDocumentFilename } from './documentDesignStandards';
+import { loadReportImage } from './pdf/loadReportImage';
 
 // Re-export commonly used utilities
 export {
@@ -108,187 +110,21 @@ export interface GenerateReportResult {
 // IMAGE UTILITIES
 // ============================================================================
 
-// Image compression settings for PDF generation - optimized for quality
-const PDF_IMAGE_CONFIG = {
-  maxWidth: 1200,     // Increased for better quality photos
-  maxHeight: 1200,    // Increased for better quality photos
-  quality: 0.80,      // Higher JPEG quality (0-1)
-  format: 'image/jpeg' as const,
-};
-
 /**
- * Load image via Image element - works for public URLs with proper CORS headers
- */
-async function loadImageViaElement(url: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(null);
-          return;
-        }
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-        resolve(dataUrl);
-      } catch (e) {
-        console.warn('[PDF] Canvas export failed (tainted canvas):', e);
-        resolve(null);
-      }
-    };
-    
-    img.onerror = () => {
-      resolve(null);
-    };
-    
-    // Add cache busting to avoid stale responses
-    const separator = url.includes('?') ? '&' : '?';
-    img.src = `${url}${separator}_t=${Date.now()}`;
-  });
-}
-
-/**
- * Compress an image blob using canvas
- */
-async function compressImageBlob(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(blob);
-    
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      
-      // Calculate new dimensions
-      let { width, height } = img;
-      const { maxWidth, maxHeight } = PDF_IMAGE_CONFIG;
-      
-      if (width > maxWidth || height > maxHeight) {
-        const ratio = Math.min(maxWidth / width, maxHeight / height);
-        width = Math.round(width * ratio);
-        height = Math.round(height * ratio);
-      }
-      
-      // Create canvas and draw scaled image
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      
-      if (!ctx) {
-        reject(new Error('Could not get canvas context'));
-        return;
-      }
-      
-      // White background for JPEG
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
-      
-      // Convert to compressed JPEG
-      const dataUrl = canvas.toDataURL(PDF_IMAGE_CONFIG.format, PDF_IMAGE_CONFIG.quality);
-      resolve(dataUrl);
-    };
-    
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Failed to load image for compression'));
-    };
-    
-    img.src = url;
-  });
-}
-
-/**
- * Load an image from URL, compress it, and convert to base64 data URL for embedding in PDF
- * Uses robust Supabase storage handling with fallbacks
+ * Load an image from a URL as a data URL pdfmake can embed.
+ *
+ * Delegates to the single report image loader (src/lib/pdf/loadReportImage.ts).
+ * The previous implementation had two pass-through holes that produced valid data
+ * URLs carrying bytes pdfkit rejects, aborting the whole report:
+ *   • `blob.type === 'image/svg+xml' || blob.size < 5000` skipped conversion
+ *     entirely — and most logos are under 5KB.
+ *   • compression failure fell back to the raw blob, so an undecodable HEIC was
+ *     embedded as `data:image/heic;base64,…`.
+ *
+ * @returns a verified JPEG/PNG data URL, or null when the source cannot be used
  */
 export async function loadImageAsDataUrl(url: string): Promise<string | null> {
-  if (!url) return null;
-  
-  try {
-    // Try multiple fetch strategies for resilience
-    let blob: Blob | null = null;
-    
-    // Strategy 1: Direct fetch with no-cors fallback
-    try {
-      const response = await fetch(url, { 
-        mode: 'cors',
-        credentials: 'omit',
-        cache: 'force-cache',
-      });
-      if (response.ok) {
-        blob = await response.blob();
-      }
-    } catch (e) {
-      console.warn(`[PDF] CORS fetch failed for ${url.substring(0, 80)}...`);
-    }
-    
-    // Strategy 2: Try without cors mode
-    if (!blob) {
-      try {
-        const response = await fetch(url);
-        if (response.ok) {
-          blob = await response.blob();
-        }
-      } catch (e) {
-        console.warn(`[PDF] Standard fetch failed for ${url.substring(0, 80)}...`);
-      }
-    }
-    
-    // Strategy 3: Use Image element (works for public URLs with CORS headers)
-    if (!blob) {
-      try {
-        const dataUrl = await loadImageViaElement(url);
-        if (dataUrl) {
-          console.log(`[PDF] Loaded via Image element: ${url.substring(0, 50)}...`);
-          return dataUrl;
-        }
-      } catch (e) {
-        console.warn(`[PDF] Image element load failed for ${url.substring(0, 80)}...`);
-      }
-    }
-    
-    if (!blob) {
-      console.warn(`[PDF] All fetch strategies failed for: ${url.substring(0, 80)}...`);
-      return null;
-    }
-    
-    // Skip compression for SVGs and very small files
-    if (blob.type === 'image/svg+xml' || blob.size < 5000) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(blob);
-      });
-    }
-    
-    // Compress image
-    try {
-      const compressedDataUrl = await compressImageBlob(blob);
-      console.log(`[PDF] Compressed image: ${(blob.size / 1024).toFixed(1)}KB → ~${(compressedDataUrl.length * 0.75 / 1024).toFixed(1)}KB`);
-      return compressedDataUrl;
-    } catch (compressError) {
-      console.warn('[PDF] Image compression failed, using original:', compressError);
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(blob);
-      });
-    }
-  } catch (error) {
-    console.error('Error loading image:', error);
-    return null;
-  }
+  return loadReportImage(url, { compress: true });
 }
 
 /**
@@ -785,18 +621,20 @@ export async function generateReport(opts: ReportGeneratorOptions): Promise<Gene
     coverPage?.siteName || 'report'
   );
 
-  // Log compliance
-  const complianceChecks = logComplianceCheck(`${type} Report`, {
-    hasCoverPage,
-    logoPlacement: !!logoDataUrl || !!coverPage?.logoDataUrl,
-    standardMargins: true,
-    typographyScale: true,
-    brandColors: true,
-    pageHeaders: true,
-    pageFooters: true,
-    tableStyles: true,
-    pageBreaks: true,
-  });
+  // Log compliance — measured from the definition that was actually built.
+  //
+  // A report that draws its own cover as content (includeCoverPage:false plus
+  // skipFirstPageHeaderFooter:true, as the inspection report does) still HAS a
+  // cover page; only the engine did not draw it. Reporting otherwise made the
+  // compliance log flag a cover page that is plainly there.
+  const documentHasCoverPage = hasCoverPage || skipFirstPageHeaderFooter;
+  const complianceChecks = logComplianceCheck(
+    `${type} Report`,
+    assessDocumentCompliance(docDefinition, {
+      hasCoverPage: documentHasCoverPage,
+      hasLogo: !!logoDataUrl || !!coverPage?.logoDataUrl,
+    }),
+  );
 
   console.log(`[PDF Engine] Report generated: ${generatedFilename} (${blob.size} bytes)`);
 

@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { DOCUMENT_DESIGN_STANDARDS } from './documentDesignStandards';
 import { mmToPt } from './pdfMakeConfig';
 import { formatDate as kernelFormatDate, formatDateTime as kernelFormatDateTime } from './report/reportKernel';
+import { loadReportImage } from './pdf/loadReportImage';
 
 // ============================================================================
 // BRANDING CONSTANTS
@@ -78,48 +79,20 @@ export function getCachedBranding(): { logoDataUrl: string | null; organizationN
 // ============================================================================
 
 /**
- * Convert an image URL to base64 data URL for PDF embedding
- * @param url - The URL of the image to convert
- * @returns Base64 data URL or null if conversion fails
+ * Convert a logo URL to a data URL pdfkit can embed.
+ *
+ * Delegates to the single report image loader. The previous implementation read
+ * the fetched blob straight through FileReader, so an SVG, WebP, GIF or HEIC logo
+ * — all legal uploads — produced a valid data URL carrying bytes pdfkit rejects,
+ * and every report that drew the logo failed with "Unknown image format".
+ *
+ * `transparent: true` encodes to PNG rather than flattening onto white, so a
+ * white-on-transparent mark survives.
+ *
+ * @returns a verified JPEG/PNG data URL, or null if the logo cannot be used
  */
 export async function imageUrlToBase64(url: string): Promise<string | null> {
-  if (!url) return null;
-  
-  try {
-    // Handle data URLs - already in correct format
-    if (url.startsWith('data:')) {
-      return url;
-    }
-    
-    // Fetch the image
-    const response = await fetch(url, { 
-      mode: 'cors',
-      cache: 'force-cache',
-    });
-    
-    if (!response.ok) {
-      console.warn(`Failed to fetch image: ${response.status}`);
-      return null;
-    }
-    
-    const blob = await response.blob();
-    
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        resolve(result);
-      };
-      reader.onerror = () => {
-        console.warn('FileReader error converting image to base64');
-        resolve(null);
-      };
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    console.warn('Error converting image to base64:', error);
-    return null;
-  }
+  return loadReportImage(url, { transparent: true });
 }
 
 // ============================================================================

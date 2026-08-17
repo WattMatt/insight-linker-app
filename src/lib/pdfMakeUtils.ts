@@ -25,6 +25,8 @@ import {
   CONTENT_WIDTH_PT,
   A4_WIDTH_PT,
   A4_HEIGHT_PT,
+  FOOTER_CONTENT_OFFSET_PT,
+  HEADER_BAND_HEIGHT_PT,
   mmToPt,
   ptToMm,
   getStandardTableLayout,
@@ -50,6 +52,8 @@ export {
   CONTENT_WIDTH_PT,
   A4_WIDTH_PT,
   A4_HEIGHT_PT,
+  FOOTER_CONTENT_OFFSET_PT,
+  HEADER_BAND_HEIGHT_PT,
   mmToPt,
   ptToMm,
   getStandardTableLayout,
@@ -445,10 +449,21 @@ export function createPageHeader(title: string, skipFirstPage = true): (currentP
 }
 
 /**
- * Create page footer function for document definition
- * Footer is positioned at the very bottom of the page within the margin area
+ * Create page footer function for document definition.
+ *
+ * The footer band sits flush with the bottom page edge: pdfmake's footer area
+ * begins at (pageHeight - pageMargins[3]), and FOOTER_CONTENT_OFFSET_PT shifts the
+ * content down so exactly footers.height of band remains below it. Both values
+ * derive from DOCUMENT_DESIGN_STANDARDS, so changing the standard moves the footer.
+ *
+ * @param skipFirstPage omit on page 1 (engine-drawn cover pages)
+ * @param contextLabel  optional site/report label shown beside the page number,
+ *                      for landscape registers that identify themselves in the footer
  */
-export function createPageFooter(skipFirstPage = true): (currentPage: number, pageCount: number) => Content {
+export function createPageFooter(
+  skipFirstPage = true,
+  contextLabel?: string,
+): (currentPage: number, pageCount: number) => Content {
   const formattedDate = formatDate(new Date());
 
   return (currentPage: number, pageCount: number): Content => {
@@ -457,35 +472,34 @@ export function createPageFooter(skipFirstPage = true): (currentPage: number, pa
     }
 
     const { page: displayPage, total: displayTotal } = clampPageNumbers(currentPage, pageCount, skipFirstPage);
+    const pageText = contextLabel
+      ? `${contextLabel} · Page ${displayPage} of ${displayTotal}`
+      : `Page ${displayPage} of ${displayTotal}`;
 
-    // Footer positioned at absolute bottom - pdfmake footer area starts at pageMargins[3] from bottom
-    // We use a small top margin to push content to the very bottom of the footer area
     return {
       columns: [
         {
           text: footers.confidentialityText,
-          fontSize: 8,
+          fontSize: typography.scale.footer + 1,
           color: COLORS.textMuted,
           width: '*',
         },
         {
-          text: `Page ${displayPage} of ${displayTotal}`,
-          fontSize: 8,
+          text: pageText,
+          fontSize: typography.scale.footer + 1,
           color: COLORS.textMuted,
           alignment: 'center',
-          width: 80,
+          width: contextLabel ? 'auto' : 80,
         },
         {
           text: formattedDate,
-          fontSize: 8,
+          fontSize: typography.scale.footer + 1,
           color: COLORS.textMuted,
           alignment: 'right',
           width: '*',
         },
       ],
-      // Footer area is 35mm (~99pt). Push content to bottom with margin-top
-      // This positions text at the very bottom of the page
-      margin: [mmToPt(margins.left), mmToPt(25), mmToPt(margins.right), 0],
+      margin: [mmToPt(margins.left), FOOTER_CONTENT_OFFSET_PT, mmToPt(margins.right), 0],
     };
   };
 }
@@ -720,6 +734,57 @@ export function createComplianceResult(
     pageFooters: checks.pageFooters ?? false,
     tableStyles: checks.tableStyles ?? false,
     pageBreaks: checks.pageBreaks ?? false,
+  };
+}
+
+/**
+ * Derive the compliance flags from the document definition that was actually
+ * built, rather than asserting them.
+ *
+ * Callers previously passed `standardMargins: true, typographyScale: true,
+ * brandColors: true, …` as literals, so the compliance log reported 100% for
+ * every report regardless of what was produced — it could never surface a
+ * regression. These checks read the real definition.
+ */
+export function assessDocumentCompliance(
+  docDefinition: TDocumentDefinitions,
+  context: { hasCoverPage: boolean; hasLogo: boolean },
+): PDFComplianceCheck {
+  let sawTable = false;
+  let sawPageBreak = false;
+
+  const walk = (node: unknown, depth = 0): void => {
+    if (!node || typeof node !== 'object' || depth > 64) return;
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item, depth + 1);
+      return;
+    }
+    const obj = node as Record<string, unknown>;
+    if ('table' in obj) sawTable = true;
+    if ('pageBreak' in obj) sawPageBreak = true;
+    for (const key of Object.keys(obj)) {
+      if (key === 'layout' || typeof obj[key] === 'function') continue;
+      walk(obj[key], depth + 1);
+    }
+  };
+  walk(docDefinition.content);
+
+  const actualMargins = docDefinition.pageMargins;
+  const standardMargins =
+    Array.isArray(actualMargins) &&
+    actualMargins.length === 4 &&
+    (actualMargins as number[]).every((v, i) => Math.abs(v - PAGE_CONFIG.pageMargins[i]) < 0.5);
+
+  return {
+    hasCoverPage: context.hasCoverPage,
+    logoPlacement: context.hasLogo,
+    standardMargins,
+    typographyScale: docDefinition.defaultStyle?.fontSize === typography.scale.body,
+    brandColors: docDefinition.styles === DEFAULT_STYLES,
+    pageHeaders: !!docDefinition.header,
+    pageFooters: !!docDefinition.footer,
+    tableStyles: sawTable,
+    pageBreaks: sawPageBreak || !!docDefinition.pageBreakBefore,
   };
 }
 

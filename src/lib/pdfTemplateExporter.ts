@@ -14,6 +14,7 @@ import {
   CONTENT_WIDTH_PT,
 } from './pdfMakeConfig';
 import { DOCUMENT_DESIGN_STANDARDS } from './documentDesignStandards';
+import { loadReportImage } from './pdf/loadReportImage';
 
 export interface TemplateData {
   name: string;
@@ -77,15 +78,31 @@ const ACCENT_COLORS = {
 };
 
 /**
+ * Resolve options.logoUrl to an embeddable data URL.
+ *
+ * buildCoverPage previously placed the raw URL into `{ image: options.logoUrl }`.
+ * pdfmake 0.3.x never fetches URLs used inline in content — Printer.resolveUrls
+ * walks only docDefinition.images/fonts/attachments/files — so pdfkit tried to
+ * read the URL off disk and any export with a logo failed outright. Unresolvable
+ * logos become undefined so the cover falls back to the company name.
+ */
+async function withResolvedLogo(options: ExportOptions): Promise<ExportOptions> {
+  if (!options.logoUrl) return options;
+  const logoDataUrl = await loadReportImage(options.logoUrl, { transparent: true });
+  return { ...options, logoUrl: logoDataUrl ?? undefined };
+}
+
+/**
  * Export a template to PDF with full customization
  */
 export async function exportTemplateToPDF(
   template: TemplateData,
-  options: ExportOptions
+  rawOptions: ExportOptions
 ): Promise<Blob> {
+  const options = await withResolvedLogo(rawOptions);
   const colors = ACCENT_COLORS[options.accentColor];
   const content: any[] = [];
-  
+
   // Cover page
   if (options.includeCoverPage) {
     content.push(...buildCoverPage(template, options, colors));
@@ -122,14 +139,15 @@ export async function exportTemplateToPDF(
 /**
  * Download template as PDF
  */
-export function downloadTemplatePDF(
+export async function downloadTemplatePDF(
   template: TemplateData,
-  options: ExportOptions,
+  rawOptions: ExportOptions,
   filename?: string
-): void {
+): Promise<void> {
+  const options = await withResolvedLogo(rawOptions);
   const colors = ACCENT_COLORS[options.accentColor];
   const content: any[] = [];
-  
+
   if (options.includeCoverPage) {
     content.push(...buildCoverPage(template, options, colors));
   }

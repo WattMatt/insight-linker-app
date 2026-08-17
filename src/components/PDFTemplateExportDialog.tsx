@@ -76,7 +76,7 @@ export const PDFTemplateExportDialog: React.FC<PDFTemplateExportDialogProps> = (
     
     setIsExporting(true);
     try {
-      downloadTemplatePDF(template, options);
+      await downloadTemplatePDF(template, options);
       toast.success('PDF downloaded successfully');
       onOpenChange(false);
     } catch (error) {

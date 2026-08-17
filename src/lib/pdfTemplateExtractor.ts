@@ -470,10 +470,15 @@ export async function generateTemplatePreviewPDF(
     }
   }
   
+  // Running header/footer were missing entirely, so extracted templates were the
+  // only documents in the app with no page numbers or confidentiality notice.
+  const { createPageHeader, createPageFooter } = await import('./pdfMakeUtils');
   const docDefinition = createBaseDocDefinition(content, {
     title: template.name,
     author: template.cover_page?.company_name,
+    header: createPageHeader(template.name, false),
+    footer: createPageFooter(false),
   });
-  
+
   return generatePdfBlob(docDefinition);
 }

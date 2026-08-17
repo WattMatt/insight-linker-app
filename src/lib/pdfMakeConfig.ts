@@ -18,6 +18,7 @@ import type {
 } from 'pdfmake/interfaces';
 type TableLayout = CustomTableLayout;
 import { DOCUMENT_DESIGN_STANDARDS } from './documentDesignStandards';
+import { sanitizeDocDefinitionImages } from './pdf/sanitizeDocImages';
 
 // Initialize pdfmake with bundled fonts
 // pdfmake v0.3.x - direct assignment approach
@@ -55,17 +56,39 @@ const MM_TO_PT = 2.83465;
 export const mmToPt = (mm: number): number => mm * MM_TO_PT;
 export const ptToMm = (pt: number): number => pt / MM_TO_PT;
 
+const { headers: headerStandards, footers: footerStandards } = DOCUMENT_DESIGN_STANDARDS;
+
 export const PAGE_CONFIG = {
   pageSize: 'A4' as const,
-  // [left, top, right, bottom] in points
+  // [left, top, right, bottom] in points, derived from DOCUMENT_DESIGN_STANDARDS
+  // rather than hand-tuned. Previously top was a hardcoded 64pt and bottom was
+  // mmToPt(35)≈99pt, neither traceable to the standard; the 99pt bottom left ~25mm
+  // of dead space between where content stopped and where the footer text sat.
+  //
+  // The running header band (createPageHeader) measures ~42pt ≈ 15mm, matching
+  // headers.height, so a 20mm top margin clears it with ~5mm to spare. The footer
+  // band is footers.height (12mm) sitting flush to the bottom edge.
   pageMargins: [
-    mmToPt(margins.left),      // 15mm = ~42.5pt
-    64,                        // 64pt top — header band (was mmToPt(50)≈141pt; unit bug)
-    mmToPt(margins.right),     // 15mm = ~42.5pt
-    mmToPt(35),                // 35mm (~99pt) bottom for footer - positioned at page bottom
+    mmToPt(margins.left),      // 15mm ≈ 42.5pt
+    mmToPt(margins.top),       // 20mm ≈ 56.7pt — clears the ~15mm header band
+    mmToPt(margins.right),     // 15mm ≈ 42.5pt
+    mmToPt(margins.bottom),    // 20mm ≈ 56.7pt — holds the 12mm footer band
   ] as [number, number, number, number],
   pageOrientation: 'portrait' as const,
 };
+
+/**
+ * Top offset for footer content inside the footer area, so the footer band sits
+ * flush with the bottom page edge. pdfmake's footer area starts at
+ * (pageHeight - pageMargins[3]); shifting down by (bottom - footerHeight) leaves
+ * exactly footers.height of band below it.
+ */
+export const FOOTER_CONTENT_OFFSET_PT = mmToPt(
+  Math.max(0, margins.bottom - footerStandards.height),
+);
+
+/** Declared height of the running header band, for generators that need to clear it. */
+export const HEADER_BAND_HEIGHT_PT = mmToPt(headerStandards.height);
 
 // A4 dimensions in points
 export const A4_WIDTH_PT = 595.28;
@@ -299,13 +322,17 @@ export function createBaseDocDefinition(
     footer?: TDocumentDefinitions['footer'];
     pageMargins?: [number, number, number, number];
     background?: TDocumentDefinitions['background'];
+    pageOrientation?: 'portrait' | 'landscape';
+    /** Merged over the standard defaults — for dense landscape registers. */
+    defaultStyle?: TDocumentDefinitions['defaultStyle'];
+    pageBreakBefore?: TDocumentDefinitions['pageBreakBefore'];
   }
 ): TDocumentDefinitions {
   return {
     pageSize: PAGE_CONFIG.pageSize,
-    pageOrientation: PAGE_CONFIG.pageOrientation,
+    pageOrientation: options?.pageOrientation ?? PAGE_CONFIG.pageOrientation,
     pageMargins: options?.pageMargins ?? PAGE_CONFIG.pageMargins,
-    
+
     info: {
       title: options?.title ?? 'Document',
       author: options?.author ?? 'Asset Management System',
@@ -319,6 +346,7 @@ export function createBaseDocDefinition(
       fontSize: typography.scale.body,
       color: COLORS.textPrimary,
       lineHeight: typography.lineHeight.body,
+      ...options?.defaultStyle,
     },
 
     styles: DEFAULT_STYLES,
@@ -326,6 +354,7 @@ export function createBaseDocDefinition(
     header: options?.header,
     footer: options?.footer,
     background: options?.background,
+    pageBreakBefore: options?.pageBreakBefore,
 
     content,
   };
@@ -386,18 +415,42 @@ function validateCanvasElements(obj: any, path: string = 'root'): string[] {
 }
 
 /**
- * Generate a PDF blob from a document definition
- * Uses Promise-based getStream for browser environments
+ * Pre-flight every document definition before pdfmake touches it.
+ *
+ * Canvas nodes are checked (a malformed one is a coding error, so it throws), and
+ * image nodes are sanitized: anything pdfkit cannot embed becomes a placeholder
+ * plus a diagnostic instead of aborting the whole render. See
+ * ./pdf/sanitizeDocImages.ts for why the guard lives at the sink.
+ *
+ * Runs exactly once per definition — the retry inside generatePdfBlob reuses the
+ * already-sanitized object, so the warning panel is never appended twice.
  */
-export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Promise<Blob> {
-  
-  // Validate canvas elements before generating
+function preflightDocDefinition(docDefinition: TDocumentDefinitions, label: string): void {
   const canvasIssues = validateCanvasElements(docDefinition);
   if (canvasIssues.length > 0) {
     if (process.env.NODE_ENV === 'development') console.error('Canvas validation issues found:', canvasIssues);
     throw new Error(`Invalid canvas elements: ${canvasIssues.join(', ')}`);
   }
-  
+
+  const { dropped } = sanitizeDocDefinitionImages(docDefinition as unknown as Record<string, unknown>);
+  if (dropped.length > 0) {
+    console.warn(
+      `[PDF] ${label}: ${dropped.length} image(s) could not be embedded and were replaced with placeholders:`,
+    );
+    for (const drop of dropped) {
+      console.warn(`  • ${drop.label ?? drop.path} — ${drop.detail} [${drop.value}]`);
+    }
+  }
+}
+
+/**
+ * Generate a PDF blob from a document definition
+ * Uses Promise-based getStream for browser environments
+ */
+export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Promise<Blob> {
+
+  preflightDocDefinition(docDefinition, 'generatePdfBlob');
+
   // Verify fonts are loaded
   const instance = pdfMake as any;
   const vfsKeys = Object.keys(instance.vfs || {});
@@ -458,6 +511,7 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
  * Generate a PDF data URL from a document definition
  */
 export async function generatePdfDataUrl(docDefinition: TDocumentDefinitions): Promise<string> {
+  preflightDocDefinition(docDefinition, 'generatePdfDataUrl');
   const pdfDocGenerator = pdfMake.createPdf(docDefinition) as any;
   // pdfmake 0.3 uses Promise-based getDataUrl()
   return await pdfDocGenerator.getDataUrl();
@@ -467,6 +521,7 @@ export async function generatePdfDataUrl(docDefinition: TDocumentDefinitions): P
  * Download a PDF directly from a document definition
  */
 export function downloadPdf(docDefinition: TDocumentDefinitions, filename: string): void {
+  preflightDocDefinition(docDefinition, 'downloadPdf');
   const pdfDocGenerator = pdfMake.createPdf(docDefinition);
   pdfDocGenerator.download(filename);
 }
@@ -475,6 +530,7 @@ export function downloadPdf(docDefinition: TDocumentDefinitions, filename: strin
  * Open a PDF in a new window/tab
  */
 export function openPdfInNewWindow(docDefinition: TDocumentDefinitions): void {
+  preflightDocDefinition(docDefinition, 'openPdfInNewWindow');
   const pdfDocGenerator = pdfMake.createPdf(docDefinition);
   pdfDocGenerator.open();
 }

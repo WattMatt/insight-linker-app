@@ -3,6 +3,8 @@ import { COC_SANS_RULES } from "./sansRules";
 import type { CocReportModel, VerdictKind, ScheduleTableRow, VerificationRow, FileRegisterRow } from "./cocReportModel";
 import { scheduleStatusTone, verdictTone, type Tone } from "./statusDisplay";
 import { miniBar, gaugeBar, segmentedBar } from "../pdfBars";
+import { createBaseDocDefinition } from "../pdfMakeConfig";
+import { createPageFooter } from "../pdfMakeUtils";
 
 const FILL = { pass: "#E1F5EE", fail: "#FCEBEB", review: "#FAEEDA", cv: "#FAEEDA", pending: "#F1EFE8", na: "#F1EFE8" };
 const TEXT: Record<VerdictKind, string> = { pass: "#0F6E56", fail: "#A32D2D", review: "#854F0B", cv: "#854F0B", pending: "#5F5E5A" };
@@ -252,20 +254,22 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
     fileRegisterContent(model.fileRegister),
   ];
 
-  return {
+  // Built through createBaseDocDefinition so this report carries the same PDF
+  // metadata, style dictionary, standard margins and confidentiality wording as
+  // every other report. It previously hand-rolled its definition, which meant an
+  // untitled PDF, pdfmake's default 40pt margins and a hardcoded footer string.
+  return createBaseDocDefinition([...cover, ...summary, ...tablesBlock], {
+    title: `Site COC Register — ${model.siteName}`,
+    subject: "Certificate of Compliance register",
     pageOrientation: "landscape",
-    content: [...cover, ...summary, ...tablesBlock],
+    // The register is deliberately denser than the 10pt body default.
     defaultStyle: { fontSize: 9 },
-    footer: (currentPage: number, pageCount: number): Content => ({
-      margin: [40, 6, 40, 0],
-      columns: [
-        { text: "Watson Mattheus · Confidential", fontSize: 7, color: "#A9A9A3" },
-        { text: `${model.siteName} · Page ${currentPage} of ${pageCount}`, fontSize: 7, color: "#A9A9A3", alignment: "right" },
-      ],
-    }),
+    // Cover is the first content block rather than an engine-drawn cover page, so
+    // the footer runs from page 1 and page numbers are not offset.
+    footer: createPageFooter(false, model.siteName),
     // Start each section on a fresh page, but only when content already sits on the current page —
     // this avoids pdfmake inserting a blank page when the previous table happened to fill the page.
     pageBreakBefore: (current: any, opts: any) =>
       current.headlineLevel === 1 && opts.getPreviousNodesOnPage().length > 0,
-  };
+  });
 }

@@ -20,7 +20,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { mmToPt } from './pdfMakeConfig';
 import { generateDocumentFilename } from './documentDesignStandards';
-import { loadImageSimple, loadImagesSimple, compressImageBlob } from './simpleImageLoader';
+import { loadImageSimple, loadImagesSimple } from './simpleImageLoader';
+import { toPdfSafeBlob } from './pdf/loadReportImage';
 import { scorePercentage, isPassStatus, isFailStatus } from './report/inspectionScore';
 import { savePDFToDocuments } from './pdfDocumentSaver';
 import { parseDocumentFileRef } from './documents/documentUrl';
@@ -1416,11 +1417,17 @@ async function appendDocumentsToPdf(bodyBlob: Blob, docs: ReportDocument[]): Pro
       } else {
         try {
           // Downscale/recompress before embedding so a few photos don't blow the
-          // PDF past the storage upload limit. compressImageBlob returns JPEG on
-          // success, or the original blob (PNG/JPEG) if the canvas step fails.
+          // PDF past the storage upload limit. toPdfSafeBlob guarantees JPEG or
+          // PNG — the only formats pdf-lib's embedJpg/embedPng accept — or null
+          // when the source cannot be converted, in which case skip the document
+          // rather than handing pdf-lib bytes it will reject.
           const srcType = lower.endsWith('.png') ? 'image/png' : 'image/jpeg';
           // Cast works around TS 5.7's Uint8Array<ArrayBufferLike> vs BlobPart typing.
-          const compressed = await compressImageBlob(new Blob([bytes as BlobPart], { type: srcType }));
+          const compressed = await toPdfSafeBlob(new Blob([bytes as BlobPart], { type: srcType }), { compress: true });
+          if (!compressed) {
+            console.warn('[pdfmake] Skipping appendix image that could not be converted:', doc.name);
+            continue;
+          }
           const cbytes = new Uint8Array(await compressed.arrayBuffer());
           const img = compressed.type === 'image/png'
             ? await out.embedPng(cbytes)
@@ -1465,11 +1472,12 @@ export async function generateInspectionReportPdf(
     const imageCache = await loadImagesAsDataUrls(imageUrls);
     console.log(`[pdfmake] Loaded ${imageCache.size} images successfully`);
 
-    // Load logo using simple loader
+    // Load logo. transparent:true keeps alpha (PNG output) so a white-on-transparent
+    // mark is not flattened onto white and lost.
     let logoDataUrl: string | null = null;
     if (siteLogoUrl) {
       console.log(`[pdfmake] Loading logo from: ${siteLogoUrl}`);
-      logoDataUrl = await loadImageSimple(siteLogoUrl);
+      logoDataUrl = await loadImageSimple(siteLogoUrl, { transparent: true });
       console.log(`[pdfmake] Logo loaded: ${logoDataUrl ? 'SUCCESS' : 'FAILED'}`);
     }
 

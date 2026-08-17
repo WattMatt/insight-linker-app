@@ -4,6 +4,8 @@
 // the shared, canvas-free src/lib/pdfBars.ts (pdf.js mis-renders canvas-in-table-cell).
 
 import type { Content, TDocumentDefinitions } from "./pdfMakeConfig";
+import { createBaseDocDefinition } from "./pdfMakeConfig";
+import { createPageFooter } from "./pdfMakeUtils";
 import { tintedKpiCard, gaugeBar, toneForPct } from "./pdfBars";
 import type { AvReportModel } from "./assetVerificationReportModel";
 
@@ -192,19 +194,18 @@ export function buildAssetVerificationReportDocDef(
     unverifiedTable(),
   ];
 
-  return {
+  // Built through createBaseDocDefinition for the same reason as the COC report:
+  // shared PDF metadata, style dictionary, standard margins and the standard
+  // confidentiality wording instead of a hand-rolled definition.
+  return createBaseDocDefinition([...cover, ...summary, ...tablesBlock], {
+    title: `Asset Verification — ${model.cover.siteName}`,
+    subject: "Asset verification report",
     pageOrientation: "landscape",
-    content: [...cover, ...summary, ...tablesBlock],
     defaultStyle: { fontSize: 9 },
-    footer: (currentPage: number, pageCount: number): Content => ({
-      margin: [40, 6, 40, 0],
-      columns: [
-        { text: "Watson Mattheus · Confidential", fontSize: 7, color: "#A9A9A3" },
-        { text: `${model.cover.siteName} · Page ${currentPage} of ${pageCount}`, fontSize: 7, color: "#A9A9A3", alignment: "right" },
-      ],
-    }),
+    // Cover is the first content block, not an engine-drawn cover page.
+    footer: createPageFooter(false, model.cover.siteName),
     // Start each section on a fresh page, but only when content already sits on the current page —
     // avoids pdfmake inserting a blank page when a table happened to fill the page.
     pageBreakBefore: (current: any, opts: any) => current.headlineLevel === 1 && opts.getPreviousNodesOnPage().length > 0,
-  };
+  });
 }

@@ -326,71 +326,12 @@ export const DOCUMENT_DESIGN_STANDARDS = {
 // HELPER FUNCTIONS FOR REPORT GENERATORS
 // ============================================================================
 
-/**
- * Get the effective content width for the page
- */
-export function getContentWidth(): number {
-  const { margins } = DOCUMENT_DESIGN_STANDARDS;
-  return 210 - margins.left - margins.right; // A4 width minus margins
-}
-
-/**
- * Get the effective content height for the page
- */
-export function getContentHeight(): number {
-  const { margins, headers, footers } = DOCUMENT_DESIGN_STANDARDS;
-  return 297 - margins.top - margins.bottom - headers.height - footers.height; // A4 height
-}
-
-/**
- * Calculate safe image dimensions that fit within content area
- */
-export function getSafeImageDimensions(
-  originalWidth: number,
-  originalHeight: number,
-  maxWidth?: number,
-  maxHeight?: number
-): { width: number; height: number } {
-  const { images } = DOCUMENT_DESIGN_STANDARDS;
-  const targetMaxWidth = maxWidth ?? images.maxWidth;
-  const targetMaxHeight = maxHeight ?? images.maxHeight;
-  
-  const aspectRatio = originalWidth / originalHeight;
-  
-  let width = Math.min(originalWidth, targetMaxWidth);
-  let height = width / aspectRatio;
-  
-  if (height > targetMaxHeight) {
-    height = targetMaxHeight;
-    width = height * aspectRatio;
-  }
-  
-  return { width, height };
-}
-
-/**
- * Check if content should trigger a page break
- */
-export function shouldBreakPage(
-  currentY: number,
-  contentHeight: number,
-  pageHeight: number = 297
-): boolean {
-  const { margins, footers, pageBreaks } = DOCUMENT_DESIGN_STANDARDS;
-  const availableSpace = pageHeight - currentY - margins.bottom - footers.height;
-  
-  return availableSpace < Math.max(contentHeight, pageBreaks.minContentBeforeBreak);
-}
-
-/**
- * Generate standard footer text
- */
-export function generateFooterText(currentPage: number, totalPages: number): string {
-  const { footers } = DOCUMENT_DESIGN_STANDARDS;
-  return footers.pageNumberFormat
-    .replace('{current}', currentPage.toString())
-    .replace('{total}', totalPages.toString());
-}
+// NOTE: getContentWidth, getContentHeight, getSafeImageDimensions, shouldBreakPage
+// and generateFooterText were removed. All five had zero call sites — pdfmake does
+// its own layout, so hand-rolled mm arithmetic and manual page-break prediction had
+// nothing to drive. The standards they read are now consumed where they matter:
+// margins by PAGE_CONFIG (pdfMakeConfig.ts), footers.height by the footer offset,
+// and images.maxWidth/minDPI by the report image loader (pdf/loadReportImage.ts).
 
 /**
  * Generate filename following naming convention

@@ -15,6 +15,7 @@ import {
   createInfoTable,
   createKpiRow,
   logComplianceCheck,
+  assessDocumentCompliance,
   COLORS,
   mmToPt,
   A4_WIDTH_PT,
@@ -22,6 +23,7 @@ import {
   PDFComplianceCheck,
 } from "./pdfMakeUtils";
 import { DOCUMENT_DESIGN_STANDARDS, generateDocumentFilename } from "./documentDesignStandards";
+import { loadReportImages } from "./pdf/loadReportImage";
 import { fetchPDFTemplate, AccentColors } from "@/hooks/usePDFTemplateGateway";
 
 const { margins } = DOCUMENT_DESIGN_STANDARDS;
@@ -92,7 +94,19 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<FloorPl
 
   // Use template accent color for headers
   const primaryColor = accentColors.primary;
-  
+
+  // ===== PRELOAD PIN PHOTOS =====
+  // pdfmake 0.3.x never fetches URLs used inline in content: Printer.resolveUrls
+  // walks only docDefinition.images/fonts/attachments/files. Passing pin.photo_url
+  // straight into `{ image: … }` therefore made pdfkit try to read the URL off
+  // disk, so any pin with a photo aborted the whole report. Photos must be
+  // resolved to verified JPEG/PNG data URLs up front.
+  const photoCache = await loadReportImages(
+    data.pins.flatMap(p => [p.photo_url, p.rectification_photo_url]),
+    { compress: true },
+  );
+  const photo = (url?: string): string | null => (url ? photoCache.get(url) ?? null : null);
+
   const content: Content[] = [];
 
   const snags = data.pins.filter(p => p.pin_type === 'snag');
@@ -301,21 +315,25 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<FloorPl
         });
       }
 
-      // Photo comparison
-      if (pin.photo_url && pin.rectification_photo_url) {
+      // Photo comparison — only when BOTH photos actually resolved, otherwise the
+      // single-photo branch below handles whichever one did.
+      const beforePhoto = photo(pin.photo_url);
+      const afterPhoto = photo(pin.rectification_photo_url);
+
+      if (beforePhoto && afterPhoto) {
         content.push(createSectionHeader('Before / After Comparison'));
         content.push({
           columns: [
             {
               stack: [
                 { text: 'BEFORE', fontSize: 10, bold: true, color: COLORS.error, margin: [0, 0, 0, 5] },
-                { image: pin.photo_url, width: 200, height: 150 },
+                { image: beforePhoto, width: 200, height: 150 },
               ],
             },
             {
               stack: [
                 { text: 'AFTER', fontSize: 10, bold: true, color: COLORS.success, margin: [0, 0, 0, 5] },
-                { image: pin.rectification_photo_url, width: 200, height: 150 },
+                { image: afterPhoto, width: 200, height: 150 },
               ],
             },
           ],
@@ -346,10 +364,10 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<FloorPl
             margin: [0, 0, 0, 10],
           });
         }
-      } else if (pin.photo_url) {
+      } else if (beforePhoto || afterPhoto) {
         content.push(createSectionHeader('Photo'));
         content.push({
-          image: pin.photo_url,
+          image: beforePhoto ?? (afterPhoto as string),
           width: 300,
           height: 200,
           margin: [0, 0, 0, 10],
@@ -429,18 +447,11 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<FloorPl
   // Generate blob
   const blob = await generatePdfBlob(docDefinition);
 
-  // Log compliance
-  const complianceChecks = logComplianceCheck('FloorPlanReport', {
-    hasCoverPage: true,
-    logoPlacement: false,
-    standardMargins: true,
-    typographyScale: true,
-    brandColors: true,
-    pageHeaders: true,
-    pageFooters: true,
-    tableStyles: true,
-    pageBreaks: true,
-  });
+  // Log compliance — measured from the definition that was actually built.
+  const complianceChecks = logComplianceCheck(
+    'FloorPlanReport',
+    assessDocumentCompliance(docDefinition, { hasCoverPage: true, hasLogo: false }),
+  );
 
   // Unified naming (F3): sanitised, LOCAL date stamp — no hand-rolled UTC drift.
   const fileName = generateDocumentFilename('Floor_Plan_Report', data.subsectionName);
