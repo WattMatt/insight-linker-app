@@ -16,6 +16,8 @@ import { inspectionSchema } from "@/lib/validation-schemas";
 import { z } from "zod";
 import { useOfflineInspections } from "@/hooks/useOfflineInspections";
 import { offlineDB } from "@/lib/offlineDB";
+import { usePaginatedList } from "@/hooks/usePaginatedList";
+import { ListPagination } from "@/components/ListPagination";
 
 interface Inspection {
   id: string;
@@ -50,9 +52,9 @@ interface Site {
 
 const Inspections = () => {
   const navigate = useNavigate();
-  const [inspections, setInspections] = useState<Inspection[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [offlineRows, setOfflineRows] = useState<Inspection[]>([]);
+  const [offlineLoading, setOfflineLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
@@ -69,97 +71,103 @@ const Inspections = () => {
 
   const { createInspection, deleteInspection, isOnline } = useOfflineInspections();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // ONLINE: server-side paginated page of inspections (joined sites/subsections).
+  // The query is disabled when offline so it never fires without a network — the
+  // offline list comes from IndexedDB instead (see loadOfflineInspections).
+  const {
+    rows: paginatedRows,
+    total: paginatedTotal,
+    page,
+    pageCount,
+    setPage,
+    isLoading: paginatedLoading,
+    isFetching,
+    refetch,
+  } = usePaginatedList<Inspection>({
+    queryKey: ["inspections-list"],
+    enabled: isOnline,
+    pageSize: 25,
+    fetchPage: async ({ from, to }) => {
+      const { data, error, count } = await supabase
+        .from("inspections")
+        .select("*, sites(id, name, client_id, clients(id, name)), subsections(id, name)", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(from, to);
+      if (error) throw error;
+      return { rows: (data || []) as Inspection[], total: count ?? 0 };
+    },
+  });
 
-  const fetchData = async () => {
+  // Sites power the create-dialog dropdown and the offline name mapping. Kept in
+  // local state (not the paginated query) so a previously-loaded list survives
+  // going offline. Previously fetched inside fetchData.
+  const loadSites = async () => {
+    const { data, error } = await supabase
+      .from("sites")
+      .select("id, name, clients(name)")
+      .order("name");
+    if (!error) setSites(data || []);
+  };
+
+  // OFFLINE: show unsynced inspections from IndexedDB (no pagination control).
+  // Preserves the original "offline data only" toast and the read-failure fallback.
+  const loadOfflineInspections = async () => {
     try {
-      // Fetch online data
-      const [inspectionsRes, sitesRes] = await Promise.all([
-        supabase
-          .from("inspections")
-          .select("*, sites(id, name, client_id, clients(id, name)), subsections(id, name)")
-          .order("created_at", { ascending: false }),
-        supabase.from("sites").select("id, name, clients(name)").order("name"),
-      ]);
-
-      if (inspectionsRes.error) throw inspectionsRes.error;
-      if (sitesRes.error) throw sitesRes.error;
-
-      let allInspections = inspectionsRes.data || [];
-
-      // If offline, merge with offline inspections
-      if (!isOnline) {
-        const offlineInspections = await offlineDB.getUnsyncedInspections();
-        // Add offline inspections to the list with all required fields
-        const offlineMapped = offlineInspections.map(offline => {
-          const site = sites.find(s => s.id === offline.site_id);
-          return {
-            id: offline.id,
-            title: offline.title,
-            description: offline.description,
-            status: offline.status,
-            inspection_date: offline.inspection_date,
-            site_id: offline.site_id,
-            subsection_id: null,
-            sites: site ? {
-              id: site.id,
-              name: site.name,
-              client_id: site.clients?.name || '',
-              clients: {
-                id: '',
-                name: site.clients?.name || ''
-              }
-            } : { 
-              id: offline.site_id, 
-              name: 'Unknown Site', 
-              client_id: '', 
-              clients: { id: '', name: '' } 
-            },
-            subsections: undefined,
-          };
-        });
-        allInspections = [...offlineMapped, ...allInspections] as any[];
-      }
-
-      setInspections(allInspections);
-      setSites(sitesRes.data || []);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      
-      // If completely offline, load from IndexedDB
-      if (!isOnline) {
-        try {
-          const offlineInspections = await offlineDB.getUnsyncedInspections();
-          const offlineMapped: Inspection[] = offlineInspections.map(offline => ({
-            id: offline.id,
-            title: offline.title,
-            description: offline.description,
-            status: offline.status,
-            inspection_date: offline.inspection_date,
-            site_id: offline.site_id,
-            subsection_id: null,
-            sites: { 
-              id: offline.site_id, 
-              name: 'Offline Site', 
-              client_id: '', 
-              clients: { id: '', name: '' } 
-            },
-            subsections: undefined,
-          }));
-          setInspections(offlineMapped as any[]);
-          toast.info("Showing offline data only");
-        } catch (dbError) {
-          toast.error("Failed to load offline data");
-        }
-      } else {
-        toast.error("Failed to fetch data");
-      }
+      const offlineInspections = await offlineDB.getUnsyncedInspections();
+      const offlineMapped: Inspection[] = offlineInspections.map(offline => {
+        const site = sites.find(s => s.id === offline.site_id);
+        return {
+          id: offline.id,
+          title: offline.title,
+          description: offline.description,
+          status: offline.status,
+          inspection_date: offline.inspection_date,
+          site_id: offline.site_id,
+          subsection_id: null,
+          sites: site ? {
+            id: site.id,
+            name: site.name,
+            client_id: site.clients?.name || '',
+            clients: { id: '', name: site.clients?.name || '' },
+          } : {
+            id: offline.site_id,
+            name: 'Offline Site',
+            client_id: '',
+            clients: { id: '', name: '' },
+          },
+          subsections: undefined,
+        };
+      });
+      setOfflineRows(offlineMapped);
+      toast.info("Showing offline data only");
+    } catch (dbError) {
+      toast.error("Failed to load offline data");
     } finally {
-      setLoading(false);
+      setOfflineLoading(false);
     }
   };
+
+  // Single refresh path for mutations: refetch the current online page when
+  // online, reload the offline list from IndexedDB when offline.
+  const refresh = () => {
+    if (isOnline) {
+      refetch();
+    } else {
+      loadOfflineInspections();
+    }
+  };
+
+  useEffect(() => {
+    if (isOnline) {
+      loadSites();
+    } else {
+      loadOfflineInspections();
+    }
+  }, [isOnline]);
+
+  const inspections = isOnline ? paginatedRows : offlineRows;
+  const inspectionCount = isOnline ? paginatedTotal : offlineRows.length;
+  const loading = isOnline ? paginatedLoading : offlineLoading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,7 +193,7 @@ const Inspections = () => {
         inspection_date: "",
         site_id: "",
       });
-      fetchData();
+      refresh();
     } catch (error: any) {
       if (error instanceof z.ZodError) {
         error.errors.forEach(err => {
@@ -203,7 +211,7 @@ const Inspections = () => {
 
     try {
       await deleteInspection(id);
-      fetchData();
+      refresh();
     } catch (error) {
       console.error("Error deleting inspection:", error);
       toast.error("Failed to delete inspection");
@@ -241,7 +249,7 @@ const Inspections = () => {
       toast.success("Inspection linked to subsection");
       setAssignOpen(false);
       setAssignTarget(null);
-      fetchData();
+      refresh();
     } catch (err) {
       console.error("Failed to assign subsection", err);
       toast.error("Failed to link inspection");
@@ -365,7 +373,7 @@ const Inspections = () => {
         <CardHeader>
           <CardTitle>Inspection List</CardTitle>
           <CardDescription>
-            {inspections.length} {inspections.length === 1 ? "inspection" : "inspections"} recorded
+            {inspectionCount} {inspectionCount === 1 ? "inspection" : "inspections"} recorded
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -384,6 +392,7 @@ const Inspections = () => {
               )}
             </div>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -463,6 +472,15 @@ const Inspections = () => {
                 ))}
               </TableBody>
             </Table>
+            {isOnline && (
+              <ListPagination
+                page={page}
+                pageCount={pageCount}
+                onPageChange={setPage}
+                disabled={isFetching}
+              />
+            )}
+            </>
           )}
         </CardContent>
       </Card>
