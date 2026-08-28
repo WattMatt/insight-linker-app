@@ -24,6 +24,8 @@ import { ClientCocView } from "@/components/client-portal/ClientCocView";
 import { downloadFile } from "@/lib/fileDownload";
 import { useSiteScores } from "@/hooks/useSiteScores";
 import { SiteHealthBadge } from "@/components/SiteHealthBadge";
+import { HealthFactorRows, describeHealthGaps } from "@/components/HealthFactorRows";
+import { healthBreakdown } from "@/lib/siteHealth";
 import { Site, Subsection } from "@/types/site";
 
 const ClientPortalSiteDetail = () => {
@@ -84,6 +86,21 @@ const ClientPortalSiteDetail = () => {
 
       if (error) throw error;
       return data as Subsection[];
+    },
+  });
+
+  // Snag rows feed the read-only health factor breakdown in the header. RLS scopes the
+  // query, so a portal user only ever sees snag counts for their own sites.
+  const { data: snags = [] } = useQuery({
+    queryKey: ["client-site-snags", siteId],
+    enabled: !!siteId && subsections.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("snags")
+        .select("subsection_id, status, risk_level")
+        .in("subsection_id", subsections.map((s) => s.id));
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
@@ -258,6 +275,21 @@ const ClientPortalSiteDetail = () => {
             <SiteHealthBadge score={siteId ? siteScores?.get(siteId) : undefined} isLoading={scoresLoading} size="lg" />
           </div>
         </CardHeader>
+        {/* What the health % is made of — same canonical math as the badge (healthBreakdown). */}
+        {subsections.length > 0 && (() => {
+          const breakdown = healthBreakdown(subsections, snags, inspections);
+          const gaps = describeHealthGaps(breakdown);
+          return (
+            <CardContent className="border-t pt-4">
+              <div className="max-w-xl">
+                <HealthFactorRows breakdown={breakdown} />
+                <p className="text-xs text-muted-foreground pt-2">
+                  {gaps.length ? `To reach 100%: ${gaps.join(", ")}.` : "All factors complete — 100%."}
+                </p>
+              </div>
+            </CardContent>
+          );
+        })()}
       </Card>
 
       {/* Tabs */}
