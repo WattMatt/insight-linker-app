@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCamera } from "@/hooks/useCamera";
 import { SITE_TYPE_OPTIONS } from "@/lib/siteTypes";
+import { normaliseImageForUpload } from "@/lib/uploadImageNormaliser";
 
 // Mirrors the real columns of public.sites — the previous shape carried
 // description/status/lat/lng, which don't exist on the table, so every save
@@ -72,8 +73,17 @@ export const SiteEditDialog: React.FC<SiteEditDialogProps> = ({
         if (!siteId) return;
         setUploadingImage(true);
         try {
-            const path = `${siteId}/site-image.${file.name.split('.').pop()}`;
-            await supabase.storage.from('site-images').upload(path, file, { upsert: true });
+            // Single conversion gate: HEIC → JPEG, downscale, truthful mime/extension.
+            const normalised = await normaliseImageForUpload(file);
+            if (!normalised.ok) {
+                toast.error(normalised.error.reason);
+                return;
+            }
+            const path = `${siteId}/site-image.${normalised.image.extension}`;
+            await supabase.storage.from('site-images').upload(path, normalised.image.blob, {
+                upsert: true,
+                contentType: normalised.image.mime,
+            });
             const { data } = supabase.storage.from('site-images').getPublicUrl(path);
             await supabase.from('sites').update({ 
                 site_image_url: `${data.publicUrl}?t=${Date.now()}` 

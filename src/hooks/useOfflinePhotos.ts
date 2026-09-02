@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { offlineDB, type OfflinePhoto, type OfflinePhotoType, type OfflinePhotoContextType } from '@/lib/offlineDB';
 import { useCamera } from '@/hooks/useCamera';
 import { getOnline } from '@/lib/onlineStatus';
+import { normaliseImageForUpload } from '@/lib/uploadImageNormaliser';
 
 const MAX_RETRIES = 3;
 const PHOTOS_BUCKET = 'coc-photos';
@@ -55,14 +56,18 @@ const generateThumbnail = (blob: Blob): Promise<Blob | null> => {
   });
 };
 
-const compressImage = (file: File | Blob, quality: 'standard' | 'aggressive' = 'standard'): Promise<Blob> => {
-  const maxWidth = quality === 'aggressive' ? 500 : 800;
-  const jpegQuality = quality === 'aggressive' ? 0.5 : 0.7;
+/**
+ * Extra shrink for slow connections. Input MUST already be a normalised JPEG
+ * (see capturePhoto) — every fallback returns the input unchanged,
+ * which is only safe because the input is already a truthfully-labelled JPEG.
+ */
+const compressJpegAggressively = (blob: Blob): Promise<Blob> => {
+  const maxWidth = 500;
+  const jpegQuality = 0.5;
 
   return new Promise((resolve) => {
-    if (!(file instanceof Blob) || !file.type.startsWith('image/')) { resolve(file); return; }
     const img = new Image();
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(blob);
     img.onload = () => {
       URL.revokeObjectURL(url);
       let width = img.width;
@@ -75,16 +80,18 @@ const compressImage = (file: File | Blob, quality: 'standard' | 'aggressive' = '
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
-      if (!ctx) { resolve(file); return; }
+      if (!ctx) { resolve(blob); return; }
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', jpegQuality);
+      canvas.toBlob((out) => resolve(out || blob), 'image/jpeg', jpegQuality);
     };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(blob); };
     img.src = url;
   });
 };
+
+const extForMime = (mime: string): 'jpg' | 'png' => (mime === 'image/png' ? 'png' : 'jpg');
 
 const getGPSCoordinates = (): Promise<{ latitude: number; longitude: number } | null> => {
   return new Promise((resolve) => {
@@ -138,13 +145,27 @@ export function useOfflinePhotos(
       const file = await takePicture({ preferCamera: true, quality: 90 });
       if (!file) { setIsCapturing(false); return null; }
 
-      const connQuality = getConnectionQuality();
-      const compressionLevel = connQuality === 'cellular' ? 'aggressive' : 'standard';
-
-      const [compressed, gps] = await Promise.all([
-        compressImage(file, compressionLevel),
+      // Single conversion gate (uploadImageNormaliser): HEIC → JPEG, downscale,
+      // and a mime/extension that truthfully describe the stored bytes. The old
+      // bespoke compressor silently passed HEIC bytes through and this record
+      // then hardcoded ".jpg"/"image/jpeg" — the mislabelled-photo defect (A10).
+      const [normalised, gps] = await Promise.all([
+        normaliseImageForUpload(file),
         getGPSCoordinates()
       ]);
+      if (!normalised.ok) {
+        toast.error(normalised.error.reason);
+        return null;
+      }
+      const image = normalised.image;
+
+      // Slow connection: shrink further. Only JPEGs — a PNG kept its format for
+      // transparency, and forcing it through a JPEG canvas would flatten alpha.
+      let compressed = image.blob;
+      if (getConnectionQuality() === 'cellular' && image.mime === 'image/jpeg') {
+        compressed = await compressJpegAggressively(compressed);
+      }
+
       const thumbnail = await generateThumbnail(compressed);
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -156,10 +177,10 @@ export function useOfflinePhotos(
         secondary_context_id: options?.secondaryContextId || null,
         photo_type: photoType,
         file_blob: compressed,
-        file_name: `${contextType}_${photoType}_${Date.now()}.jpg`,
+        file_name: `${contextType}_${photoType}_${Date.now()}.${image.extension}`,
         file_size: compressed.size,
         thumbnail_blob: thumbnail,
-        mime_type: 'image/jpeg',
+        mime_type: image.mime,
         captured_at: new Date().toISOString(),
         captured_by: user?.id || 'unknown',
         latitude: gps?.latitude || null,
@@ -199,8 +220,7 @@ export function useOfflinePhotos(
       );
 
       // Adaptive compression based on connection
-      const connQuality = getConnectionQuality();
-      const compressionLevel = connQuality === 'cellular' ? 'aggressive' : 'standard';
+      const aggressiveSync = getConnectionQuality() === 'cellular';
 
       toast.info(`Syncing ${allUnsynced.length} photo${allUnsynced.length > 1 ? 's' : ''}...`);
       let successCount = 0;
@@ -210,13 +230,14 @@ export function useOfflinePhotos(
         if (photo.retry_count >= MAX_RETRIES) continue;
 
         try {
-          // Re-compress if on slow connection and photo wasn't already aggressively compressed
+          // Re-compress if on slow connection and photo wasn't already aggressively
+          // compressed. JPEG only — see compressJpegAggressively.
           let blobToUpload = photo.file_blob;
-          if (compressionLevel === 'aggressive' && photo.file_size > 100_000) {
-            blobToUpload = await compressImage(photo.file_blob, 'aggressive');
+          if (aggressiveSync && photo.mime_type === 'image/jpeg' && photo.file_size > 100_000) {
+            blobToUpload = await compressJpegAggressively(photo.file_blob);
           }
 
-          const storagePath = `${photo.context_type}/${photo.context_id}/${photo.photo_type}/${photo.id}.jpg`;
+          const storagePath = `${photo.context_type}/${photo.context_id}/${photo.photo_type}/${photo.id}.${extForMime(photo.mime_type)}`;
 
           const { error: uploadError } = await supabase.storage
             .from(PHOTOS_BUCKET)
@@ -290,7 +311,7 @@ export function useOfflinePhotos(
     try {
       const photo = await offlineDB.getOfflinePhoto(id);
       if (photo?.synced && photo.remote_url) {
-        const storagePath = `${photo.context_type}/${photo.context_id}/${photo.photo_type}/${photo.id}.jpg`;
+        const storagePath = `${photo.context_type}/${photo.context_id}/${photo.photo_type}/${photo.id}.${extForMime(photo.mime_type)}`;
         await supabase.storage.from(PHOTOS_BUCKET).remove([storagePath]);
         await supabase.from('offline_photos').delete().eq('id', id);
       }

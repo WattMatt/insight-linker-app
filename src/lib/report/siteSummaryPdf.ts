@@ -1,0 +1,590 @@
+import { supabase } from "@/integrations/supabase/client";
+import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
+import QRCode from "qrcode";
+import { qrRedirectUrl, qrSiteRedirectUrl } from "@/lib/qrBaseUrl";
+import { isCocCertificateCategory, toCocDoc, buildCocCardLines } from "@/lib/cocHierarchy";
+import { matchAssetForSubsection } from "@/lib/report/subsectionAssetMatch";
+import { computeSubsectionVerdict } from "@/lib/subsectionCompliance";
+import {
+  generateReport,
+  createSectionHeader,
+  createInfoTable,
+  createDataTable,
+  createKpiRow,
+} from "@/lib/pdfEngine";
+import { loadCompanyBranding, imageUrlToBase64 } from "@/lib/pdfBranding";
+import { ReportSection, ReportCustomization } from "@/components/pdf-editor/types";
+import { fetchPDFTemplate } from "@/hooks/usePDFTemplateGateway";
+import { buildCocValidationRows, buildInspectionRows } from "@/lib/report/siteSummaryRows";
+
+// Import from SINGLE SOURCE OF TRUTH
+import {
+  HEALTH_METRICS_CARDS,
+  SUMMARY_STAT_ROWS,
+  COC_VALIDATION_COLUMNS,
+  INSPECTION_COLUMNS,
+  SECTION_SPECS,
+  STATUS_COLORS,
+  getAccentPalette,
+  getSectionTitle,
+  getEnabledSections,
+  findSectionSpec,
+  calculateMetrics,
+  calculateCategoryHealth,
+  calculateFortressMetrics,
+  calculateDocumentMetrics,
+  type SubsectionData,
+  type SnagData,
+} from "@/lib/siteSummaryRenderSpec";
+import { computeSiteHealth } from "@/lib/siteHealth";
+import { renderSubsectionGrid } from "@/lib/pdfSubsectionRenderer";
+import type { SubsectionCardData } from "@/lib/subsectionCardSpec";
+import { isSnagOpen } from "@/lib/subsectionStatus";
+
+/**
+ * Headless Site Summary PDF generation, extracted from SiteSummaryReport.tsx so
+ * that BOTH the single-site button and the multi-site bulk generator run the
+ * exact same pipeline. No React, no hooks — callable in a loop over sites.
+ */
+
+export interface SiteSummaryPdfArgs {
+  siteId: string;
+  siteName: string;
+  clientName: string;
+}
+
+interface TemplateConfig {
+  customization: ReportCustomization;
+  sections: ReportSection[];
+}
+
+// Default sections if no template exists in database - ALIGNED WITH SPEC
+const DEFAULT_SECTIONS: ReportSection[] = Object.values(SECTION_SPECS).map(spec => ({
+  id: spec.id,
+  title: spec.defaultTitle,
+  type: spec.type,
+  enabled: true,
+  order: spec.renderPriority,
+  editable: true,
+}));
+
+const DEFAULT_CUSTOMIZATION: Partial<ReportCustomization> = {
+  coverTitle: "Site Summary Report",
+  coverSubtitle: "Comprehensive Site Health & Compliance Overview",
+  accentColor: "blue",
+  includeDate: true,
+  includePageNumbers: true,
+  includeTableOfContents: false,
+};
+
+// Fetch template configuration using the gateway - SINGLE SOURCE OF TRUTH
+const fetchTemplateConfig = async (): Promise<TemplateConfig> => {
+  try {
+    const { customization, sections } = await fetchPDFTemplate('site_summary');
+    return {
+      customization: { ...DEFAULT_CUSTOMIZATION, ...customization } as ReportCustomization,
+      sections: sections?.length > 0 ? sections : DEFAULT_SECTIONS,
+    };
+  } catch (error) {
+    console.log("Error fetching template, using defaults:", error);
+  }
+
+  return {
+    customization: DEFAULT_CUSTOMIZATION as ReportCustomization,
+    sections: DEFAULT_SECTIONS,
+  };
+};
+
+// Transform DB subsection to SubsectionCardData (extended for cards)
+const transformToSubsectionCardData = (
+  sub: any,
+  allSnags: any[],
+  assets: any[],
+  subsectionDocs: any[],
+  today: string,
+): SubsectionCardData => {
+  const subSnags = allSnags.filter(s =>
+    s.subsection_id === sub.id &&
+    isSnagOpen(s.status)
+  );
+
+  // COC-category documents for this subsection (the authoritative per-document model).
+  // Drives BOTH the I/S certificate lines and the Documentation verdict, so they agree.
+  const cocDocs = (subsectionDocs || [])
+    .filter(d => d.subsection_id === sub.id && isCocCertificateCategory(d.document_categories?.name || ''))
+    .map(d => toCocDoc(d));
+  const cocCertificates = buildCocCardLines(cocDocs);
+
+  const verdict = computeSubsectionVerdict({
+    isCocRequired: sub.is_coc_required ?? true,
+    openSnagCount: subSnags.length,
+    meteringStatus: sub.metering_status,
+    meterSerialNumber: sub.meter_serial_number,
+    cocDocs,
+    today,
+  });
+
+  // Encode the STABLE qr-redirect endpoint (NOT the stored qr_code_url PNG, and
+  // NOT a domain-pinned landing URL). The redirect resolves the live domain at
+  // scan time, so this QR survives a frontend domain change. See src/lib/qrBaseUrl.ts.
+  const qrUrl = qrRedirectUrl(sub.id);
+
+  // Resolve the electrical-meter asset the SAME way Asset Verification does:
+  // identity join on the normalized meter serial first, then premises_id/trade_as
+  // name-suffix as fallback. Both surfaces then read the same site_assets.breaker_size.
+  const matchingAsset = matchAssetForSubsection(sub, assets);
+
+  return {
+    id: sub.id,
+    name: sub.name,
+    category: sub.category,
+    cocStatus: sub.coc_status,
+    cocNumber: sub.coc_number,
+    isCocRequired: sub.is_coc_required ?? true,
+    cocCertificates,
+    meteringStatus: sub.metering_status,
+    meterSerialNumber: sub.meter_serial_number,
+    ctRatio: sub.ct_ratio,
+    breakerSize: matchingAsset?.breaker_size || null,
+    snagCount: subSnags.length,
+    isCompliant: verdict.overall,
+    installationReview: verdict.installation,
+    documentation: verdict.documentation,
+    documentationRequired: verdict.documentationRequired,
+    qrCodeUrl: qrUrl,
+    tenantName: sub.tenant_name,
+    snags: subSnags.map(s => ({
+      id: s.id,
+      title: s.title || 'Untitled snag',
+      riskLevel: s.risk_level || 'Medium',
+      status: s.status,
+      description: s.description,
+    })) as SnagData[],
+  };
+};
+
+export async function generateSiteSummaryPdf(
+  { siteId, siteName, clientName }: SiteSummaryPdfArgs
+): Promise<{ blob: Blob; filename: string }> {
+  // Fetch template configuration from database - SINGLE SOURCE OF TRUTH
+  const templateConfig = await fetchTemplateConfig();
+  const { customization, sections } = templateConfig;
+
+  // Debug: Log template configuration being applied
+  console.log('[SiteSummaryReport] Template Config Applied:', {
+    coverTitle: customization.coverTitle,
+    coverSubtitle: customization.coverSubtitle,
+    accentColor: customization.accentColor,
+    includeDate: customization.includeDate,
+    includePageNumbers: customization.includePageNumbers,
+    totalSections: sections.length,
+    enabledSections: sections.filter(s => s.enabled).map(s => s.id),
+    disabledSections: sections.filter(s => !s.enabled).map(s => s.id),
+  });
+
+  // Sort sections using spec function
+  const sortedSections = getEnabledSections(sections);
+
+  // Fetch site and subsection data first to get subsection IDs
+  const [siteRes, subsectionsRes] = await Promise.all([
+    supabase.from("sites").select("*, clients(name, logo_url)").eq("id", siteId).single(),
+    supabase.from("subsections").select("*").eq("site_id", siteId).order("category", { ascending: true }),
+  ]);
+
+  if (siteRes.error) throw siteRes.error;
+  const site = siteRes.data;
+  const subsections = subsectionsRes.data || [];
+  const subsectionIds = subsections.map(s => s.id);
+
+  // Fetch remaining data with proper filtering
+  const [inspectionsRes, docsRes, subsectionDocsRes, assetsRes, checklistRes] = await Promise.all([
+    supabase.from("inspections").select("*").eq("site_id", siteId),
+    supabase.from("site_documents").select("*, site_document_categories(name)").eq("site_id", siteId),
+    // CRITICAL FIX: Filter subsection documents by subsection IDs belonging to this site.
+    // COC fields (coc_*) drive the per-card Initial/Supplementary certificate list.
+    subsectionIds.length > 0
+      ? supabase.from("subsection_documents").select("id, subsection_id, file_name, file_url, category_id, coc_type, coc_number, coc_status, coc_issue_date, coc_expiry_date, document_categories(name)").in("subsection_id", subsectionIds)
+      : Promise.resolve({ data: [], error: null }),
+    // trade_as is required: subsection→asset matching keys on premises_id OR trade_as.
+    supabase.from("site_assets").select("id, meter_serial_number, ct_ratio, breaker_size, premises_id, trade_as, asset_category").eq("site_id", siteId).eq("asset_category", "electrical_meter"),
+    supabase.from("site_marking_checklist").select("section_name, is_checked, status").eq("site_id", siteId),
+  ]);
+
+  const allInspections = inspectionsRes.data || [];
+  const siteAssets = assetsRes.data || [];
+
+  // Fetch snags with full details for card rendering
+  const snagsRes = subsectionIds.length > 0
+    ? await supabase.from("snags").select("id, subsection_id, title, status, risk_level, description").in("subsection_id", subsectionIds)
+    : { data: [], error: null };
+  const allSnags = snagsRes.data || [];
+
+  // Transform subsections to card format with snags, asset breaker size and COC certificates
+  const subsectionDocsData = subsectionDocsRes.data || [];
+  const today = new Date().toISOString().split('T')[0];
+  const subsectionCardData: SubsectionCardData[] = subsections.map(sub =>
+    transformToSubsectionCardData(sub, allSnags, siteAssets, subsectionDocsData, today)
+  );
+
+  // Also create SubsectionData for metrics calculation
+  const subsectionData: SubsectionData[] = subsectionCardData;
+
+  // Calculate metrics using spec function
+  const cocRequired = subsections.filter(s => s.is_coc_required).length;
+  const openSnags = allSnags.filter(snag => isSnagOpen(snag.status)).length;
+  // overallHealth is the unified siteHealth number (siteHealth.ts) so the
+  // production report matches the on-screen Site Health. Pass the full rows:
+  // factorScores needs is_inspection_required (waivers) and json_data (photo
+  // detection) — projecting them away zeroes the inspection factor.
+  // computeSiteHealth scores an empty site 0 — cards render 0%, never a vacuous 100%.
+  const health = computeSiteHealth(subsections, allSnags, allInspections);
+  const metrics = calculateMetrics(subsectionData, {
+    cocRequiredCount: cocRequired,
+    openSnagCount: openSnags,
+    overallHealth: health.score,
+  });
+
+  // Calculate Fortress checklist metrics
+  const checklistItems = checklistRes.data || [];
+  const fortressMetrics = calculateFortressMetrics(checklistItems);
+
+  // Build content based on template sections - USING SPEC CONSTANTS
+  const content: any[] = [];
+
+  // Debug: Log data availability for conditional sections
+  console.log('[SiteSummaryReport] Section Data Availability:', {
+    subsections: subsections.length,
+    siteAssets: siteAssets.length,
+    fortressChecklistItems: checklistItems.length,
+    fortressMetrics,
+    siteDocuments: docsRes.data?.length || 0,
+    subsectionDocuments: subsectionDocsRes.data?.length || 0,
+  });
+
+  // Company branding (Watson Mattheus logo) loaded up-front so the subsection-card
+  // QR codes can embed the centered company logo — consistent with every other QR
+  // surface (QR tab, site QR tab, inspection detail, stored PNG).
+  const companyBranding = await loadCompanyBranding();
+
+  // Process each section in order, only if enabled
+  for (const section of sortedSections) {
+    const spec = findSectionSpec(section.id);
+    const title = getSectionTitle(section);
+
+    console.log(`[SiteSummaryReport] Processing section: ${section.id} (order: ${section.order})`);
+
+    switch (section.id) {
+      case "health-metrics":
+      case "compliance": // Support legacy section ID
+        // Use noTopMargin to push content up and fit more on first page
+        content.push(createSectionHeader(title, 'primary', { noTopMargin: true }));
+        // Use HEALTH_METRICS_CARDS from spec
+        content.push(createKpiRow(
+          HEALTH_METRICS_CARDS.map(card => ({
+            value: card.format(card.getValue(metrics)),
+            label: card.label,
+            color: card.color,
+          }))
+        ));
+        break;
+
+      case "health-by-category": {
+        // Show ALL categories (no silent truncation). createKpiRow splits the
+        // row evenly, so chunk into rows of 4 to keep cards readable.
+        const categoryData = calculateCategoryHealth(subsectionData, getCategoryAbbreviation);
+
+        if (categoryData.length > 0) {
+          content.push(createSectionHeader(title));
+          const CATS_PER_ROW = 4;
+          for (let i = 0; i < categoryData.length; i += CATS_PER_ROW) {
+            content.push(createKpiRow(
+              categoryData.slice(i, i + CATS_PER_ROW).map(cat => ({
+                value: `${cat.percentage}%`,
+                label: cat.abbreviation,
+                color: cat.percentage >= 80 ? STATUS_COLORS.success :
+                       cat.percentage >= 60 ? STATUS_COLORS.warning : STATUS_COLORS.error,
+              }))
+            ));
+          }
+        }
+        break;
+      }
+
+      case "documents-summary": {
+        // Calculate document metrics from fetched documents (subsectionDocsData
+        // is built once above, alongside the subsection cards).
+        const siteDocsData = docsRes.data || [];
+        const docMetrics = calculateDocumentMetrics(siteDocsData, subsectionDocsData);
+        console.log(`[SiteSummaryReport] documents-summary: ${docMetrics.totalDocuments} docs, ${docMetrics.categories.length} categories`);
+
+        if (docMetrics.totalDocuments > 0) {
+          content.push(createSectionHeader(title));
+
+          // Total documents KPI
+          content.push(createKpiRow([
+            { value: docMetrics.totalDocuments.toString(), label: 'Total Documents', color: STATUS_COLORS.info },
+            { value: docMetrics.categories.length.toString(), label: 'Categories', color: STATUS_COLORS.muted },
+          ]));
+
+          // List every document filename grouped under its category.
+          if (docMetrics.categories.length > 0) {
+            content.push({
+              text: 'Documents by Category',
+              fontSize: 10,
+              bold: true,
+              color: '#374151',
+              margin: [0, 8, 0, 6],
+            });
+
+            docMetrics.categories.forEach(cat => {
+              content.push({
+                text: `${cat.categoryName} (${cat.fileCount})`,
+                fontSize: 9,
+                bold: true,
+                color: '#1e3a5f',
+                margin: [0, 6, 0, 2],
+              });
+              content.push({
+                ul: cat.files.map(f => ({ text: f, fontSize: 8, color: '#374151' })),
+                margin: [8, 0, 0, 4],
+              });
+            });
+          }
+        }
+        break;
+      }
+
+      case "summary-statistics":
+      case "site-info": // Support legacy section ID
+        content.push(createSectionHeader(title));
+        // Use SUMMARY_STAT_ROWS from spec
+        content.push(createInfoTable(
+          SUMMARY_STAT_ROWS.map(row => [row.label, row.getValue(metrics)])
+        ));
+        break;
+
+      case "subsection-details":
+      case "subsections": { // Support legacy section ID
+        if (spec?.pageBreakBefore) {
+          content.push({ text: '', pageBreak: 'before' });
+        }
+        // Section header sits directly below page header (no top margin after page break)
+        content.push(createSectionHeader(title, 'primary', { noTopMargin: true }));
+
+        // Use the new 2-column subsection grid renderer with full snag details
+        const accentColor = getAccentPalette(customization.accentColor || 'blue').primary;
+        const subsectionGrid = await renderSubsectionGrid(
+          subsectionCardData,
+          accentColor,
+          companyBranding.logoDataUrl // centered WM company logo inside each card's QR
+        );
+        content.push(subsectionGrid);
+        break;
+      }
+
+      case "coc-validations":
+      case "documents": { // Support legacy section ID
+        // Only subsections that REQUIRE a COC belong here. A subsection marked
+        // "does not require a COC" (e.g. a generator) must never be listed as
+        // Missing, so it is excluded even if it carries a legacy coc_status.
+        const cocSubsections = subsections.filter(s => s.is_coc_required);
+        if (cocSubsections.length > 0) {
+          if (spec?.pageBreakBefore) {
+            content.push({ text: '', pageBreak: 'before' });
+          }
+          content.push(createSectionHeader(title, 'primary'));
+
+          const validationRows = buildCocValidationRows(cocSubsections);
+
+          // Use COC_VALIDATION_COLUMNS from spec
+          content.push(createDataTable(
+            COC_VALIDATION_COLUMNS.map(col => ({
+              header: col.header,
+              field: col.id,
+              width: col.width,
+              alignment: col.alignment,
+            })),
+            validationRows
+          ));
+        }
+        break;
+      }
+
+      case "inspections": {
+        if (allInspections.length > 0) {
+          if (spec?.pageBreakBefore) {
+            content.push({ text: '', pageBreak: 'before' });
+          }
+          content.push(createSectionHeader(title, 'primary'));
+
+          const inspectionRows = buildInspectionRows(allInspections);
+
+          // Use INSPECTION_COLUMNS from spec
+          content.push(createDataTable(
+            INSPECTION_COLUMNS.map(col => ({
+              header: col.header,
+              field: col.id,
+              width: col.width,
+              alignment: col.alignment,
+            })),
+            inspectionRows
+          ));
+        }
+        break;
+      }
+
+      // Skip subsection-qr-codes as it's handled within subsection-details
+      case "subsection-qr-codes":
+        break;
+
+      // Asset Verification now lives in its own dedicated report (Asset
+      // Verification tab); it is intentionally no longer part of the Site
+      // Summary. Legacy section IDs are accepted and skipped.
+      case "asset-verification":
+      case "asset-summary":
+        break;
+
+      case "fortress-checklist":
+        console.log(`[SiteSummaryReport] fortress-checklist: ${fortressMetrics.totalItems} items, progress=${fortressMetrics.overallProgress}%`);
+        if (fortressMetrics.totalItems > 0) {
+          if (spec?.pageBreakBefore) {
+            content.push({ text: '', pageBreak: 'before' });
+          }
+          content.push(createSectionHeader(title, 'primary'));
+
+          // Overall progress summary KPIs
+          content.push(createKpiRow([
+            { value: `${fortressMetrics.overallProgress}%`, label: 'Overall Progress', color: fortressMetrics.overallProgress >= 80 ? STATUS_COLORS.success : fortressMetrics.overallProgress >= 50 ? STATUS_COLORS.warning : STATUS_COLORS.error },
+            { value: fortressMetrics.completedItems.toString(), label: 'Completed', color: STATUS_COLORS.success },
+            { value: fortressMetrics.pendingItems.toString(), label: 'Pending', color: STATUS_COLORS.muted },
+            { value: fortressMetrics.notApplicableItems.toString(), label: 'N/A', color: STATUS_COLORS.info },
+          ]));
+
+          // Section-by-section progress table
+          if (fortressMetrics.sections.length > 0) {
+            content.push({
+              text: 'Section Progress',
+              fontSize: 11,
+              bold: true,
+              color: '#374151',
+              margin: [0, 12, 0, 8],
+            });
+
+            const tableBody = [
+              // Header row with consistent font size
+              [
+                { text: 'Section', bold: true, fontSize: 9, color: '#ffffff' },
+                { text: 'Total', bold: true, fontSize: 9, color: '#ffffff', alignment: 'center' as const },
+                { text: 'Done', bold: true, fontSize: 9, color: '#ffffff', alignment: 'center' as const },
+                { text: 'N/A', bold: true, fontSize: 9, color: '#ffffff', alignment: 'center' as const },
+                { text: 'Progress', bold: true, fontSize: 9, color: '#ffffff', alignment: 'center' as const },
+              ],
+              // Data rows - clean white background with horizontal lines between rows
+              ...fortressMetrics.sections.map((section) => {
+                const progressColor = section.progressPercent >= 80 ? '#16a34a' :
+                                     section.progressPercent >= 50 ? '#ea580c' : '#dc2626';
+
+                return [
+                  { text: section.shortName, fontSize: 9, color: '#374151' },
+                  { text: section.totalItems.toString(), fontSize: 9, alignment: 'center' as const, color: '#374151' },
+                  { text: section.completedItems.toString(), fontSize: 9, alignment: 'center' as const, color: '#16a34a' },
+                  { text: section.notApplicableItems.toString(), fontSize: 9, alignment: 'center' as const, color: '#6b7280' },
+                  { text: `${section.progressPercent}%`, fontSize: 9, alignment: 'center' as const, bold: true, color: progressColor },
+                ];
+              }),
+            ];
+
+            content.push({
+              table: {
+                headerRows: 1,
+                widths: ['*', 60, 60, 60, 70],
+                body: tableBody,
+              },
+              layout: {
+                // Horizontal lines between all rows for clean separation
+                hLineWidth: () => 0.5,
+                vLineWidth: () => 0,
+                hLineColor: () => '#e5e7eb',
+                paddingLeft: () => 10,
+                paddingRight: () => 10,
+                paddingTop: () => 8,
+                paddingBottom: () => 8,
+                // Only header row has dark background, all data rows are white
+                fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : '#ffffff',
+              },
+              margin: [0, 0, 0, 12],
+            });
+          }
+        }
+        break;
+
+      default:
+        // Handle any custom sections
+        if (section.textContent) {
+          content.push(createSectionHeader(title));
+          content.push({ text: section.textContent, fontSize: 10, margin: [0, 0, 0, 10] });
+        }
+        break;
+    }
+  }
+
+  // Report-header branding — prefer the client logo from site data, fall back to the
+  // company logo (companyBranding already loaded above for the subsection-card QR logos).
+  let logoDataUrl = companyBranding.logoDataUrl;
+  if (site?.client_logo_url) {
+    const clientLogo = await imageUrlToBase64(site.client_logo_url);
+    if (clientLogo) logoDataUrl = clientLogo;
+  } else if ((site?.clients as any)?.logo_url) {
+    const clientLogo = await imageUrlToBase64((site.clients as any).logo_url);
+    if (clientLogo) logoDataUrl = clientLogo;
+  }
+
+  // Site-level verification QR for the report cover — encodes the STABLE
+  // qr-redirect endpoint (same indirection as the subsection QR codes above),
+  // so it survives a frontend domain change. See src/lib/qrBaseUrl.ts.
+  let siteQrCodeDataUrl: string | null = null;
+  try {
+    siteQrCodeDataUrl = await QRCode.toDataURL(qrSiteRedirectUrl(siteId), {
+      width: 500,
+      margin: 1,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF',
+      },
+      errorCorrectionLevel: 'H',
+    });
+  } catch (error) {
+    console.error('Failed to generate site QR code:', error);
+  }
+
+  // Use unified PDF engine for generation
+  const result = await generateReport({
+    type: 'site-summary',
+    title: customization.coverTitle || 'Site Summary Report',
+    content,
+    coverPage: {
+      title: customization.coverTitle || 'Site Summary Report',
+      subtitle: customization.coverSubtitle || 'Comprehensive Site Health & Compliance Overview',
+      siteName: siteName,
+      clientName: clientName,
+      reportType: 'Site Summary Report',
+      organizationName: companyBranding.organizationName,
+      logoDataUrl: logoDataUrl,
+      accentColor: customization.accentColor || 'blue',
+      reportDate: new Date(),
+      siteAddress: site?.address || undefined,
+      qrCodeDataUrl: siteQrCodeDataUrl,
+    },
+    options: {
+      includeCoverPage: true,
+      skipCoverPageInHeaderFooter: true,
+      logoDataUrl: logoDataUrl,
+      organizationName: companyBranding.organizationName,
+      filename: `Site_Summary_Report_${siteName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
+    },
+  });
+
+  console.log('[SiteSummaryReport] Generated via pdfEngine:', result.complianceChecks);
+
+  return { blob: result.blob, filename: result.filename };
+}

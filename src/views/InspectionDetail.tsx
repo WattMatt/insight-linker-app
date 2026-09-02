@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useCamera } from "@/hooks/useCamera";
 import { useImageUpload } from "@/hooks/useImageUpload";
+import { normaliseImageForUpload, isHeicSource, applyExtension } from "@/lib/uploadImageNormaliser";
 import { RobustImage } from "@/components/RobustImage";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
 import { Breadcrumbs } from "@/components/Breadcrumb";
@@ -675,13 +676,18 @@ const InspectionDetail = () => {
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const fileExt = file.name.split('.').pop();
+        // Single conversion gate: HEIC → JPEG, downscale, truthful mime/extension.
+        const normalised = await normaliseImageForUpload(file);
+        if (!normalised.ok) {
+          toast.error(normalised.error.reason);
+          continue;
+        }
         const timestamp = Date.now();
-        const fileName = `${subsectionId}/snags/${timestamp}-${i + 1}.${fileExt}`;
+        const fileName = `${subsectionId}/snags/${timestamp}-${i + 1}.${normalised.image.extension}`;
 
         const { data, error } = await supabase.storage
           .from('inspection-photos')
-          .upload(fileName, file);
+          .upload(fileName, normalised.image.blob, { contentType: normalised.image.mime });
 
         if (error) throw error;
 
@@ -1213,8 +1219,12 @@ const InspectionDetail = () => {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
 
-
-        const fileExt = file.name.split('.').pop();
+        // Single conversion gate: HEIC → JPEG, downscale, truthful mime/extension.
+        const normalised = await normaliseImageForUpload(file);
+        if (!normalised.ok) {
+          toast.error(normalised.error.reason);
+          continue;
+        }
 
         // Generate descriptive file name with client/site/subsection info
         const fileName = generateInspectionImagePath({
@@ -1225,12 +1235,12 @@ const InspectionDetail = () => {
           sectionKey,
           itemKey,
           index: i,
-          fileExtension: fileExt || 'jpg'
+          fileExtension: normalised.image.extension
         });
 
         const { data, error } = await supabase.storage
           .from('inspection-photos')
-          .upload(fileName, file);
+          .upload(fileName, normalised.image.blob, { contentType: normalised.image.mime });
 
         if (error) {
           if (process.env.NODE_ENV === 'development') console.error('Upload error:', error);
@@ -1454,12 +1464,30 @@ const InspectionDetail = () => {
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+        // Images go through the single conversion gate (HEIC → JPEG, truthful
+        // label) so the PDF appendix can embed them; non-image documents
+        // (PDFs etc.) upload untouched.
+        let uploadBlob: Blob = file;
+        let uploadName = file.name;
+        let contentType = file.type || undefined;
+        if (file.type.startsWith('image/') || isHeicSource(file)) {
+          const normalised = await normaliseImageForUpload(file);
+          if (!normalised.ok) {
+            toast.error(normalised.error.reason);
+            continue;
+          }
+          uploadBlob = normalised.image.blob;
+          uploadName = applyExtension(file.name, normalised.image.extension);
+          contentType = normalised.image.mime;
+        }
+
+        const safeName = uploadName.replace(/[^a-zA-Z0-9._-]/g, '_');
         const path = `inspections/${inspectionId}/${sectionKey}/${itemKey}/${Date.now()}-${i}-${safeName}`;
 
         const { data, error } = await supabase.storage
           .from('documents')
-          .upload(path, file, { contentType: file.type || undefined });
+          .upload(path, uploadBlob, { contentType });
 
         if (error) throw error;
 
@@ -1467,7 +1495,7 @@ const InspectionDetail = () => {
           .from('documents')
           .getPublicUrl(data.path);
 
-        uploaded.push({ url: urlData.publicUrl, name: file.name, path: data.path });
+        uploaded.push({ url: urlData.publicUrl, name: uploadName, path: data.path });
       }
 
       if (uploaded.length === 0) {

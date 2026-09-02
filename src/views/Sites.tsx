@@ -15,6 +15,7 @@ import { siteSchema } from "@/lib/validation-schemas";
 import { z } from "zod";
 import { RobustImage } from "@/components/RobustImage";
 import { EmptyState } from "@/components/EmptyState";
+import { BulkSiteReportGenerator } from "@/components/BulkSiteReportGenerator";
 import { useSiteScores } from "@/hooks/useSiteScores";
 import { SiteHealthBadge } from "@/components/SiteHealthBadge";
 import { SITE_TYPE_OPTIONS } from "@/lib/siteTypes";
@@ -216,6 +217,12 @@ const Sites = () => {
               : "Manage inspection sites and locations"}
           </p>
         </div>
+        <div className="flex items-center gap-2">
+        {sites.length > 0 && (
+          <BulkSiteReportGenerator
+            sites={sites.map(s => ({ id: s.id, name: s.name, clientName: s.clients?.name || "" }))}
+          />
+        )}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button disabled={clients.length === 0}>
@@ -327,6 +334,7 @@ const Sites = () => {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {clients.length === 0 && (

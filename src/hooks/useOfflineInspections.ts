@@ -4,6 +4,7 @@ import { offlineDB } from '@/lib/offlineDB';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { validateFile, FILE_LIMITS } from '@/lib/fileValidation';
+import { normaliseImageForUpload, applyExtension } from '@/lib/uploadImageNormaliser';
 import { checkStorageAvailable } from '@/lib/storageQuota';
 
 export interface InspectionData {
@@ -119,8 +120,22 @@ export function useOfflineInspections() {
       return;
     }
 
+    // Single conversion gate: HEIC → JPEG, downscale, truthful mime/extension —
+    // BEFORE the blob is uploaded or queued, so replay never ships raw bytes.
+    const normalised = await normaliseImageForUpload(file);
+    if (!normalised.ok) {
+      toast.error(normalised.error.reason);
+      return;
+    }
+    const uploadFile = new File(
+      [normalised.image.blob],
+      applyExtension(file.name, normalised.image.extension),
+      { type: normalised.image.mime }
+    );
+    const uploadPath = applyExtension(path, normalised.image.extension);
+
     // Check storage quota
-    const hasSpace = await checkStorageAvailable(file.size);
+    const hasSpace = await checkStorageAvailable(uploadFile.size);
     if (!hasSpace) {
       return;
     }
@@ -129,7 +144,7 @@ export function useOfflineInspections() {
       try {
         const { error } = await supabase.storage
           .from(bucket)
-          .upload(path, file);
+          .upload(uploadPath, uploadFile, { contentType: normalised.image.mime });
 
         if (error) throw error;
         toast.success('Image uploaded successfully');
@@ -144,13 +159,13 @@ export function useOfflineInspections() {
     await offlineDB.saveImage({
       id: imageId,
       inspection_id: inspectionId || '',
-      blob: file,
-      file_name: file.name,
+      blob: uploadFile,
+      file_name: uploadFile.name,
       created_at: new Date().toISOString(),
       synced: false,
     });
 
-    await queueUpload('UPLOAD_IMAGE', { bucket, path, inspectionId }, file);
+    await queueUpload('UPLOAD_IMAGE', { bucket, path: uploadPath, inspectionId }, uploadFile);
     toast.success('Image saved offline. Will upload when online.');
   }, [isOnline, queueUpload]);
 

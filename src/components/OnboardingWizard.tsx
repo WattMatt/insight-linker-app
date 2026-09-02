@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Camera, ArrowRight, ArrowLeft, CheckCircle2, User, Zap, Shield, ClipboardCheck } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { normaliseImageForUpload } from "@/lib/uploadImageNormaliser";
 
 interface OnboardingWizardProps {
   /** Dialog mode only (legacy overlay gate). Ignored when fullPage is set. */
@@ -82,12 +83,15 @@ export function OnboardingWizard({ open, onComplete, fullPage = false }: Onboard
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const ext = file.name.split(".").pop();
-      const path = `${user.id}/avatar.${ext}`;
+      // Single conversion gate: HEIC → JPEG, downscale, truthful mime/extension.
+      const normalised = await normaliseImageForUpload(file);
+      if (!normalised.ok) throw new Error(normalised.error.reason);
+
+      const path = `${user.id}/avatar.${normalised.image.extension}`;
 
       const { error: uploadError } = await supabase.storage
         .from("profile-images")
-        .upload(path, file, { upsert: true });
+        .upload(path, normalised.image.blob, { upsert: true, contentType: normalised.image.mime });
 
       if (uploadError) throw uploadError;
 

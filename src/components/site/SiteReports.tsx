@@ -3,14 +3,19 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SiteSummaryReport } from "@/components/SiteSummaryReport";
 import { BulkInspectionReportGenerator } from "@/components/site/BulkInspectionReportGenerator";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { Site } from "@/types/site";
-import { supabase } from "@/integrations/supabase/client";
 import { downloadFile } from "@/lib/fileDownload";
-import { storagePathFromUrl } from "@/lib/documents/paths";
+import {
+    fetchSiteReportInventory,
+    deleteSiteReport,
+    deleteSiteReports,
+    type SiteReportRow,
+} from "@/lib/report/siteReportInventory";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { 
@@ -32,46 +37,24 @@ interface SiteReportsProps {
     autoOpenGenerate?: boolean;
 }
 
-interface SavedReport {
-    id: string;
-    file_name: string;
-    file_url: string;
-    category: string;
-    created_at: string;
-}
-
-// Report category names that should be shown in this view
-const REPORT_CATEGORIES = [
-    'Site Summary Reports',
-    'Inspection Reports',
-    'Compliance Reports',
-    'Floor Plan Reports',
-    'Asset Verification Reports',
-    'COC Validation Reports',
-    'Site COC Reports'
-];
+// A report can come from site_documents OR subsection_documents; ids alone can
+// collide across tables, so selection and busy-state key on source + id.
+const reportKey = (r: SiteReportRow) => `${r.source}:${r.id}`;
 
 export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false }) => {
-    const [reports, setReports] = useState<SavedReport[]>([]);
+    const [reports, setReports] = useState<SiteReportRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string } | null>(null);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+    const [bulkDeleting, setBulkDeleting] = useState(false);
 
     const fetchReports = async () => {
         try {
             setLoading(true);
-            
-            // Fetch site documents that match report categories
-            const { data, error } = await supabase
-                .from('site_documents')
-                .select('id, file_name, file_url, category, created_at')
-                .eq('site_id', site.id)
-                .in('category', REPORT_CATEGORIES)
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            setReports(data || []);
+            setReports(await fetchSiteReportInventory(site.id));
+            setSelectedKeys(new Set());
         } catch (error) {
             console.error("Error fetching reports:", error);
             toast.error("Failed to load reports");
@@ -84,35 +67,61 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
         fetchReports();
     }, [site.id]);
 
-    const handleDeleteReport = async (id: string, name: string) => {
-        if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
-        
-        try {
-            setDeleting(id);
-            
-            // Get the stored file reference to delete from storage.
-            // storagePathFromUrl handles both legacy full URLs and bare-path rows.
-            const report = reports.find(r => r.id === id);
-            const path = report?.file_url ? storagePathFromUrl(report.file_url) : null;
-            if (path) {
-                await supabase.storage.from('documents').remove([path]);
-            }
-            
-            const { error } = await supabase
-                .from('site_documents')
-                .delete()
-                .eq('id', id);
+    const handleDeleteReport = async (report: SiteReportRow) => {
+        if (!confirm(`Are you sure you want to delete "${report.file_name}"?`)) return;
 
-            if (error) throw error;
-            
-            toast.success(`${name} deleted`);
-            setReports(prev => prev.filter(r => r.id !== id));
+        const key = reportKey(report);
+        try {
+            setDeleting(key);
+            const result = await deleteSiteReport(report);
+            if (!result.ok) throw new Error(result.error);
+
+            toast.success(`${report.file_name} deleted`);
+            setReports(prev => prev.filter(r => reportKey(r) !== key));
+            setSelectedKeys(prev => {
+                if (!prev.has(key)) return prev;
+                const next = new Set(prev);
+                next.delete(key);
+                return next;
+            });
         } catch (error) {
             console.error("Error deleting report:", error);
             toast.error("Failed to delete report");
         } finally {
             setDeleting(null);
         }
+    };
+
+    const handleDeleteSelected = async () => {
+        const targets = reports.filter(r => selectedKeys.has(reportKey(r)));
+        if (targets.length === 0) return;
+        if (!confirm(`Delete ${targets.length} selected report${targets.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+
+        try {
+            setBulkDeleting(true);
+            const { deleted, failed } = await deleteSiteReports(targets);
+            if (deleted.length > 0) {
+                const deletedKeys = new Set(deleted.map(reportKey));
+                setReports(prev => prev.filter(r => !deletedKeys.has(reportKey(r))));
+                toast.success(`${deleted.length} report${deleted.length > 1 ? 's' : ''} deleted`);
+            }
+            if (failed.length > 0) {
+                console.error("Some reports failed to delete:", failed);
+                toast.error(`${failed.length} report${failed.length > 1 ? 's' : ''} could not be deleted`);
+            }
+            setSelectedKeys(new Set());
+        } finally {
+            setBulkDeleting(false);
+        }
+    };
+
+    const toggleSelected = (report: SiteReportRow, checked: boolean) => {
+        setSelectedKeys(prev => {
+            const next = new Set(prev);
+            if (checked) next.add(reportKey(report));
+            else next.delete(reportKey(report));
+            return next;
+        });
     };
 
     const filteredReports = useMemo(() => {
@@ -224,6 +233,39 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
                         </div>
                     )}
 
+                    {/* Selection toolbar */}
+                    {!readOnly && filteredReports.length > 0 && (
+                        <div className="flex items-center justify-between gap-3">
+                            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                                <Checkbox
+                                    checked={filteredReports.length > 0 && filteredReports.every(r => selectedKeys.has(reportKey(r)))}
+                                    onCheckedChange={(checked) => {
+                                        setSelectedKeys(checked === true
+                                            ? new Set(filteredReports.map(reportKey))
+                                            : new Set());
+                                    }}
+                                />
+                                Select all
+                            </label>
+                            {selectedKeys.size > 0 && (
+                                <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="gap-2"
+                                    onClick={handleDeleteSelected}
+                                    disabled={bulkDeleting}
+                                >
+                                    {bulkDeleting ? (
+                                        <RefreshCw className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                    )}
+                                    Delete selected ({selectedKeys.size})
+                                </Button>
+                            )}
+                        </div>
+                    )}
+
                     {/* Reports List */}
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
@@ -245,11 +287,18 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
                     ) : (
                         <div className="space-y-2">
                             {filteredReports.map((report) => (
-                                <div 
-                                    key={report.id} 
+                                <div
+                                    key={reportKey(report)}
                                     className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border group hover:bg-muted/50 transition-colors gap-3"
                                 >
                                     <div className="flex items-start gap-3 min-w-0">
+                                        {!readOnly && (
+                                            <Checkbox
+                                                className="mt-1"
+                                                checked={selectedKeys.has(reportKey(report))}
+                                                onCheckedChange={(checked) => toggleSelected(report, checked === true)}
+                                            />
+                                        )}
                                         <FileText className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                                         <div className="min-w-0 space-y-1">
                                             <p className="font-medium text-sm truncate">{report.file_name}</p>
@@ -257,6 +306,11 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
                                                 <Badge className={getCategoryColor(report.category)} variant="secondary">
                                                     {report.category.replace(' Reports', '')}
                                                 </Badge>
+                                                {report.subsectionName && (
+                                                    <Badge variant="outline" className="text-xs">
+                                                        {report.subsectionName}
+                                                    </Badge>
+                                                )}
                                                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                                                     <Calendar className="h-3 w-3" />
                                                     {format(new Date(report.created_at), 'MMM d, yyyy')}
@@ -292,10 +346,10 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
                                               size="sm"
                                               variant="ghost"
                                               className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                              onClick={() => handleDeleteReport(report.id, report.file_name)}
-                                              disabled={deleting === report.id}
+                                              onClick={() => handleDeleteReport(report)}
+                                              disabled={deleting === reportKey(report) || bulkDeleting}
                                           >
-                                              {deleting === report.id ? (
+                                              {deleting === reportKey(report) ? (
                                                   <RefreshCw className="h-4 w-4 animate-spin" />
                                               ) : (
                                                   <Trash2 className="h-4 w-4" />

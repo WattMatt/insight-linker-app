@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { normaliseImageForUpload } from "@/lib/uploadImageNormaliser";
 import { Upload, Loader2, Link as LinkIcon, Settings2, Shield, Eye, UserCog, ImageIcon } from "lucide-react";
 
 import { ImageCompressionManager } from "@/components/settings/ImageCompressionManager";
@@ -54,14 +55,21 @@ const Settings = () => {
   const uploadImage = async (file: File, bucket: string, type: 'logo' | 'hero') => {
     try {
       setUploading(true);
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${type}-${Date.now()}.${fileExt}`;
+      // Single conversion gate: keeps a transparent logo as PNG, converts HEIC,
+      // and guarantees the stored label matches the bytes (pdf pipeline relies on it).
+      const normalised = await normaliseImageForUpload(file);
+      if (!normalised.ok) {
+        toast.error(normalised.error.reason);
+        return;
+      }
+      const fileName = `${type}-${Date.now()}.${normalised.image.extension}`;
       const filePath = `${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from(bucket)
-        .upload(filePath, file, {
-          upsert: true
+        .upload(filePath, normalised.image.blob, {
+          upsert: true,
+          contentType: normalised.image.mime
         });
 
       if (uploadError) throw uploadError;
