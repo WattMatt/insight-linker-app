@@ -86,7 +86,7 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
             });
         } catch (error) {
             console.error("Error deleting report:", error);
-            toast.error("Failed to delete report");
+            toast.error(error instanceof Error && error.message ? error.message : "Failed to delete report");
         } finally {
             setDeleting(null);
         }

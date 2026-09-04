@@ -698,12 +698,16 @@ const InspectionDetail = () => {
         uploadedUrls.push(urlData.publicUrl);
       }
 
-      if (editingSnag) {
-        setEditingSnag(prev => ({ ...prev, photos: [...(prev?.photos || []), ...uploadedUrls] }));
-      } else {
-        setNewSnag(prev => ({ ...prev, photos: [...prev.photos, ...uploadedUrls] }));
+      // Every refused file already showed its own error toast; only report
+      // success when something was actually stored.
+      if (uploadedUrls.length > 0) {
+        if (editingSnag) {
+          setEditingSnag(prev => ({ ...prev, photos: [...(prev?.photos || []), ...uploadedUrls] }));
+        } else {
+          setNewSnag(prev => ({ ...prev, photos: [...prev.photos, ...uploadedUrls] }));
+        }
+        toast.success(`${uploadedUrls.length} photo(s) uploaded`);
       }
-      toast.success(`${uploadedUrls.length} photo(s) uploaded`);
     } catch (error: any) {
       if (process.env.NODE_ENV === 'development') console.error("Error uploading snag photos:", error);
 

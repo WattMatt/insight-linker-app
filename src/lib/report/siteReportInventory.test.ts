@@ -8,6 +8,8 @@ const { db, calls } = vi.hoisted(() => ({
     subsection_documents: [] as Row[],
     // Shifted once per row delete; empty queue means success.
     deleteErrors: [] as ({ message: string } | null)[],
+    // Ids whose DELETE is silently filtered to zero rows (what RLS does — no error).
+    deleteDenied: new Set<string>(),
     storageError: null as { message: string } | null,
   },
   calls: [] as string[],
@@ -21,10 +23,16 @@ function builder(table: string) {
     then: (onOk: any, onErr: any) =>
       Promise.resolve({ data: (db as any)[table] ?? [], error: null }).then(onOk, onErr),
     delete: () => ({
-      eq: (_col: string, id: string) => {
-        calls.push(`row-delete:${table}:${id}`);
-        return Promise.resolve({ error: db.deleteErrors.shift() ?? null });
-      },
+      eq: (_col: string, id: string) => ({
+        // PostgREST returns the deleted rows only when .select() is chained;
+        // an RLS-filtered delete returns [] with error null.
+        select: () => {
+          calls.push(`row-delete:${table}:${id}`);
+          const error = db.deleteErrors.shift() ?? null;
+          const data = error ? null : db.deleteDenied.has(id) ? [] : [{ id }];
+          return Promise.resolve({ data, error });
+        },
+      }),
     }),
   };
   return self;
@@ -83,6 +91,7 @@ beforeEach(() => {
   db.site_documents = [];
   db.subsection_documents = [];
   db.deleteErrors = [];
+  db.deleteDenied = new Set();
   db.storageError = null;
   calls.length = 0;
 });
@@ -137,6 +146,20 @@ describe("deleteSiteReport", () => {
 
     expect(result).toEqual({ ok: false, error: "RLS says no" });
     expect(calls).toEqual(["row-delete:site_documents:r1"]);
+  });
+
+  it("does not touch storage when RLS silently filters the delete to zero rows", async () => {
+    // A non-admin staff user deleting a subsection report they did not upload:
+    // PostgREST returns no error and no rows. The blob must survive.
+    db.deleteDenied = new Set(["r2"]);
+
+    const result = await deleteSiteReport(
+      report({ id: "r2", source: "subsection", file_url: "subsections/sub-1/Inspection_Reports/r2.pdf" })
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/not deleted/);
+    expect(calls).toEqual(["row-delete:subsection_documents:r2"]);
   });
 
   it("still succeeds when only the storage removal fails (orphan blob, not a dangling row)", async () => {

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -42,6 +42,19 @@ export const BulkSiteReportGenerator = ({ sites, onComplete }: BulkSiteReportGen
   const [running, setRunning] = useState(false);
   const [runStates, setRunStates] = useState<Record<string, SiteRunState>>({});
   const stopRef = useRef(false);
+  // Navigating away unmounts the dialog but not the async loop; treat unmount as Stop.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+  // Warn before a full page unload while a run is in flight.
+  useEffect(() => {
+    if (!running) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [running]);
 
   const toggleSite = (siteId: string, checked: boolean) => {
     setSelected(prev => {
@@ -73,7 +86,7 @@ export const BulkSiteReportGenerator = ({ sites, onComplete }: BulkSiteReportGen
     let stopped = false;
 
     for (const site of targets) {
-      if (stopRef.current) {
+      if (stopRef.current || !mountedRef.current) {
         stopped = true;
         break;
       }
@@ -105,6 +118,7 @@ export const BulkSiteReportGenerator = ({ sites, onComplete }: BulkSiteReportGen
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
+    if (!mountedRef.current) return; // unmounted mid-run: nothing left to update
     setRunning(false);
 
     if (stopped) {

@@ -69,6 +69,12 @@ export function BulkInspectionReportGenerator({
   // A ref, not state: the run loop is a single async call, so a state value would stay
   // pinned to the render that started it and Stop would never reach the running loop.
   const shouldStopRef = useRef(false);
+  // Navigating away unmounts this component but not the async loop; treat unmount as Stop.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const [skipExisting, setSkipExisting] = useState(true);
   const [onlyWithPhotos, setOnlyWithPhotos] = useState(false);
   
@@ -407,6 +413,7 @@ export function BulkInspectionReportGenerator({
       const allResults: GenerationResult[] = [];
 
       for (let i = 0; i < toProcess.length; i++) {
+        if (!mountedRef.current) break;
         if (shouldStopRef.current) {
           toast.info('Generation stopped by user');
           break;

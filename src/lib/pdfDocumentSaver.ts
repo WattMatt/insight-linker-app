@@ -171,6 +171,9 @@ async function saveToSubsectionDocuments(
 
   // The bucket is PRIVATE: store the storage PATH, not a public URL.
   // Readers mint signed URLs via getDocumentSignedUrl() at display time.
+  // uploaded_by is recorded so the row-level DELETE policy ("Admin or the
+  // uploader") lets the person who generated the report remove it.
+  const { data: { user } } = await supabase.auth.getUser();
   const { error: insertError } = await supabase
     .from("subsection_documents")
     .insert({
@@ -179,6 +182,7 @@ async function saveToSubsectionDocuments(
       file_name: fileName,
       file_url: uploadData.path,
       file_size: blob.size,
+      uploaded_by: user?.id ?? null,
     });
 
   if (insertError) {

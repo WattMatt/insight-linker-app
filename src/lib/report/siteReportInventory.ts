@@ -83,11 +83,19 @@ export interface DeleteReportResult {
  * everything intact; a failed storage remove leaves only an invisible orphaned
  * blob. The reverse order (which this replaces) could leave a listed report
  * whose file no longer exists.
+ *
+ * The delete must PROVE it removed a row: a DELETE that row-level security
+ * filters to nothing comes back with no error, exactly like a real delete.
+ * `.select("id")` returns the deleted rows, so zero rows means "not permitted
+ * (or already gone)" and the storage object is left alone.
  */
 export async function deleteSiteReport(report: SiteReportRow): Promise<DeleteReportResult> {
   const table = report.source === "site" ? "site_documents" : "subsection_documents";
-  const { error } = await supabase.from(table).delete().eq("id", report.id);
+  const { data, error } = await supabase.from(table).delete().eq("id", report.id).select("id");
   if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) {
+    return { ok: false, error: "Report was not deleted — you may not have permission to remove it" };
+  }
 
   const path = report.file_url ? storagePathFromUrl(report.file_url) : null;
   if (path) {
