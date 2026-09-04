@@ -10,6 +10,7 @@ import { normaliseImageForUpload } from "@/lib/uploadImageNormaliser";
 import { Upload, Loader2, Link as LinkIcon, Settings2, Shield, Eye, UserCog, ImageIcon } from "lucide-react";
 
 import { ImageCompressionManager } from "@/components/settings/ImageCompressionManager";
+import { ImageFormatRepairManager } from "@/components/settings/ImageFormatRepairManager";
 import { AutoLogoutSettings } from "@/components/settings/AutoLogoutSettings";
 import PortalManagement from "./PortalManagement";
 import Users from "./Users";
@@ -338,7 +339,8 @@ const Settings = () => {
 
 
 
-      <TabsContent value="image-compression">
+      <TabsContent value="image-compression" className="space-y-6">
+        <ImageFormatRepairManager />
         <ImageCompressionManager />
       </TabsContent>
 
