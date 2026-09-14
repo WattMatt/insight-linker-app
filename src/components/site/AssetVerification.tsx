@@ -19,6 +19,7 @@ import {
   type InspectionRecord,
   type SubsectionNameRecord,
 } from "@/lib/assetVerification";
+import { syncSubsectionSerialsFromRegister, describeSync, type SyncResult } from "./syncSubsectionSerials";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -213,9 +214,25 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
         }
       }
 
+      // Root cause of "linked but no photos" and understated metering: subsections.meter_serial_number
+      // was never populated from the register. Write it through now — blank-only, never overwriting —
+      // exactly as the manual subsection form does (serial + metering_status together).
+      let sync: SyncResult | null = null;
+      try {
+        sync = await syncSubsectionSerialsFromRegister(siteId, parsedAssets);
+      } catch (syncError) {
+        console.error("Subsection serial sync failed:", syncError);
+        toast.warning("Register imported, but meter serials could not be linked to subsections.");
+      }
+
       toast.success(
         `${replaceExisting ? "Replaced register with" : "Imported"} ${parsedAssets.length} electrical meter${parsedAssets.length === 1 ? "" : "s"}`,
       );
+      if (sync) {
+        const summary = describeSync(sync);
+        if (summary.success) toast.success(summary.success);
+        if (summary.warning) toast.warning(summary.warning, { duration: 10000 });
+      }
       setPendingImport(null);
       refetch();
     } catch (error) {

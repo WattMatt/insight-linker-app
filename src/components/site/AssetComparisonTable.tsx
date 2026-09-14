@@ -34,6 +34,7 @@ import {
   type InspectionTenantMatch,
   type ComparisonResult,
 } from "@/lib/assetVerification";
+import { syncSubsectionSerialsFromRegister, describeSync } from "./syncSubsectionSerials";
 
 interface SavedReport { id: string; file_name: string; file_url: string; created_at: string; }
 const REPORT_CATEGORY = getReportCategoryName("asset-verification");
@@ -218,6 +219,24 @@ export const AssetComparisonTable = ({
       if (error) throw error;
       
       toast.success("Asset updated successfully");
+
+      // A serial corrected here used to reach site_assets only, leaving the subsection stale
+      // (and the schematic / metering rate wrong). Write it through, blank-only, same as import.
+      if (field === "meter_serial" && siteId) {
+        try {
+          const summary = describeSync(
+            await syncSubsectionSerialsFromRegister(siteId, [
+              { premises_id: result.asset.premises_id, trade_as: result.asset.trade_as, meter_serial_number: newValue },
+            ]),
+          );
+          if (summary.success) toast.success(summary.success);
+          if (summary.warning) toast.warning(summary.warning, { duration: 10000 });
+        } catch (syncError) {
+          console.error("Subsection serial sync failed:", syncError);
+          toast.warning("Serial saved to the register, but could not be linked to its subsection.");
+        }
+      }
+
       setEditingCell(null);
       onDataUpdated?.();
     } catch (error) {
