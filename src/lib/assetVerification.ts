@@ -62,6 +62,8 @@ export interface AssetForComparison {
   premises_id: string;
   trade_as: string | null;
   meter_serial_number: string | null;
+  /** Previous serial for a swapped meter. Imported from the register and used as a match fallback. */
+  old_meter_serial_number?: string | null;
   ct_ratio: string | null;
   breaker_size: string | null;
   asset_category: string;
@@ -71,6 +73,12 @@ export interface ComparisonResult {
   asset: AssetForComparison;
   inspectionMatch: InspectionTenantMatch | null;
   verified: boolean;
+  /**
+   * True when the only inspection found was filed under the asset's PREVIOUS serial.
+   * The evidence is real but it documents the meter that was replaced, not the one now
+   * installed — surfaced separately so "Verified" never silently means "verified the old meter".
+   */
+  matchedOnOldSerial: boolean;
   ctMatch: MatchStatus;
   breakerMatch: MatchStatus;
   hasDiscrepancy: boolean;
@@ -84,22 +92,37 @@ export function normalizeMeterSerial(serial: string | null | undefined): string 
 }
 
 /**
- * Compare two spec values (CT ratio / breaker size). Unlike serial normalization this
- * keeps the slash, because ratios like "1000/5" are meaningful. Missing or sentinel
- * values on either side yield "na".
+ * Is this value really "no data"? Tested on the bare alphanumerics so that every spelling
+ * of the sentinel collapses to the same thing — "NA", "N/A", "n.a." all become "NA".
+ * The comparison form below keeps a separator, so it can NOT be used for this test:
+ * "N/A" survives there as a distinct token and was previously compared as a real value.
+ */
+function isMissingValue(value: string | null | undefined): boolean {
+  const bare = (value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return !bare || SENTINELS.has(bare);
+}
+
+/**
+ * Canonical form for comparing a CT ratio or breaker size. The separator in a ratio is
+ * meaningful (1000/5 is not 10005) but its spelling is not — the register exports "600/5A"
+ * while the field app captures "600:5A" — so both collapse to a single "/".
+ */
+function canonicalizeSpec(value: string | null | undefined): string {
+  return (value || "").toUpperCase().replace(/:/g, "/").replace(/[^A-Z0-9/]/g, "");
+}
+
+/**
+ * Compare two spec values (CT ratio / breaker size). Missing or sentinel values on either
+ * side yield "na" — never "match" (two blanks are not evidence) and never "mismatch"
+ * (a blank is not a discrepancy worth sending someone to site over).
  */
 export function compareValues(
   assetValue: string | null | undefined,
   inspectionValue: string | null | undefined,
 ): MatchStatus {
-  const normAsset = (assetValue || "").toUpperCase().replace(/[^A-Z0-9/]/g, "").trim();
-  const normInspection = (inspectionValue || "").toUpperCase().replace(/[^A-Z0-9/]/g, "").trim();
+  if (isMissingValue(assetValue) || isMissingValue(inspectionValue)) return "na";
 
-  const assetMissing = !normAsset || SENTINELS.has(normAsset);
-  const inspectionMissing = !normInspection || SENTINELS.has(normInspection);
-  if (assetMissing || inspectionMissing) return "na";
-
-  return normAsset === normInspection ? "match" : "mismatch";
+  return canonicalizeSpec(assetValue) === canonicalizeSpec(inspectionValue) ? "match" : "mismatch";
 }
 
 function readTenants(jsonData: unknown): InspectionTenant[] {
@@ -161,12 +184,18 @@ export function buildComparisonResults(
   assets: AssetForComparison[],
   inspectionMeterMatches: Map<string, InspectionTenantMatch>,
 ): ComparisonResult[] {
+  const lookup = (serial: string | null | undefined): InspectionTenantMatch | null => {
+    const normalized = normalizeMeterSerial(serial);
+    if (!normalized || SENTINELS.has(normalized)) return null;
+    return inspectionMeterMatches.get(normalized) || null;
+  };
+
   return assets.map((asset) => {
-    const normalizedSerial = normalizeMeterSerial(asset.meter_serial_number);
-    const inspectionMatch =
-      normalizedSerial && !SENTINELS.has(normalizedSerial)
-        ? inspectionMeterMatches.get(normalizedSerial) || null
-        : null;
+    // Current serial wins. Only when it finds nothing do we fall back to the serial the
+    // register records for the meter this one replaced.
+    const currentMatch = lookup(asset.meter_serial_number);
+    const oldMatch = currentMatch ? null : lookup(asset.old_meter_serial_number);
+    const inspectionMatch = currentMatch ?? oldMatch;
 
     const ctMatch = inspectionMatch ? compareValues(asset.ct_ratio, inspectionMatch.ctSizeAndRatio) : "na";
     const breakerMatch = inspectionMatch ? compareValues(asset.breaker_size, inspectionMatch.breakerSize) : "na";
@@ -175,6 +204,7 @@ export function buildComparisonResults(
       asset,
       inspectionMatch,
       verified: !!inspectionMatch,
+      matchedOnOldSerial: !!oldMatch,
       ctMatch,
       breakerMatch,
       hasDiscrepancy: ctMatch === "mismatch" || breakerMatch === "mismatch",

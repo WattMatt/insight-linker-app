@@ -17,6 +17,7 @@ const result = (over: Partial<ComparisonResult> = {}): ComparisonResult => ({
   asset: asset(),
   inspectionMatch: null,
   verified: false,
+  matchedOnOldSerial: false,
   ctMatch: "na",
   breakerMatch: "na",
   hasDiscrepancy: false,

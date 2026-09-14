@@ -43,6 +43,32 @@ describe("compareValues", () => {
   it("flags genuine mismatches", () => {
     expect(compareValues("1000/5", "100/5")).toBe("mismatch");
   });
+
+  // Thembi Mall: the register writes "N/A" (with a slash). The old normalizer kept the
+  // slash, so "N/A" never matched the bare "NA" sentinel and was compared as a real value —
+  // producing a green "match" tick against another "N/A", and a false "mismatch" against a
+  // genuine ratio.
+  it("treats N/A in any punctuation as missing data, not a value", () => {
+    expect(compareValues("N/A", "N/A")).toBe("na");
+    expect(compareValues("N/A", "n/a")).toBe("na");
+    expect(compareValues("N.A.", "100/5")).toBe("na");
+    expect(compareValues("N/A", "150/5A")).toBe("na");
+    expect(compareValues("150/5A", "n/a")).toBe("na");
+  });
+
+  // Field techs type "600:5A"; the register exports "600/5A". Same CT ratio, and the old
+  // normalizer stripped the colon but kept the slash, so they never compared equal.
+  it("treats ':' and '/' as the same ratio separator", () => {
+    expect(compareValues("600:5A", "600/5A")).toBe("match");
+    expect(compareValues("250:5A", "250/5A")).toBe("match");
+    expect(compareValues("150:5A", "150:5A")).toBe("match");
+    expect(compareValues("1000 : 5", "1000/5")).toBe("match");
+  });
+
+  it("still flags genuinely different ratios and breakers", () => {
+    expect(compareValues("600:5A", "300/5A")).toBe("mismatch");
+    expect(compareValues("32A", "80A")).toBe("mismatch");
+  });
 });
 
 const inspection = (
@@ -161,6 +187,54 @@ describe("buildComparisonResults", () => {
     );
     const [r] = buildComparisonResults([asset({ meter_serial_number: "NA" })], matches);
     expect(r.verified).toBe(false);
+  });
+
+  // The register already carries the previous serial for swapped meters, but matching
+  // ignored it — so every replaced meter read "Not Verified" despite the inspection
+  // being on file under the old number.
+  it("falls back to the previous serial when the current one has no inspection", () => {
+    const matches = buildInspectionMeterMatches(
+      [inspection("i1", null, [{ meterSerialNumber: "OLD-999", ctSizeAndRatio: "1000/5" }])],
+      [],
+    );
+    const [r] = buildComparisonResults(
+      [asset({ meter_serial_number: "NEW-111", old_meter_serial_number: "OLD-999" })],
+      matches,
+    );
+    expect(r.verified).toBe(true);
+    expect(r.matchedOnOldSerial).toBe(true);
+  });
+
+  it("prefers the current serial and does not flag an old-serial match when it hits", () => {
+    const matches = buildInspectionMeterMatches(
+      [inspection("i1", null, [
+        { meterSerialNumber: "NEW-111", shopName: "current" },
+        { meterSerialNumber: "OLD-999", shopName: "previous" },
+      ])],
+      [],
+    );
+    const [r] = buildComparisonResults(
+      [asset({ meter_serial_number: "NEW-111", old_meter_serial_number: "OLD-999" })],
+      matches,
+    );
+    expect(r.verified).toBe(true);
+    expect(r.matchedOnOldSerial).toBe(false);
+    expect(r.inspectionMatch?.shopName).toBe("current");
+  });
+
+  it("ignores a sentinel or absent previous serial", () => {
+    const matches = buildInspectionMeterMatches(
+      [inspection("i1", null, [{ meterSerialNumber: "MTR001" }])],
+      [],
+    );
+    const [a] = buildComparisonResults(
+      [asset({ meter_serial_number: "UNKNOWN", old_meter_serial_number: "NA" })],
+      matches,
+    );
+    expect(a.verified).toBe(false);
+    const [b] = buildComparisonResults([asset({ meter_serial_number: "UNKNOWN" })], matches);
+    expect(b.verified).toBe(false);
+    expect(b.matchedOnOldSerial).toBe(false);
   });
 });
 

@@ -5,6 +5,8 @@
  * identifier generation, and block→subsection matching — are dependency-free and unit-testable.
  */
 
+import { matchAssetForSubsection } from "@/lib/report/subsectionAssetMatch";
+
 export interface BlockLike {
   id: string;
   block_identifier: string;
@@ -101,4 +103,86 @@ export function computeAutoMatches(
     }
   }
   return result;
+}
+
+/** Serial spellings that carry no identity. Parity with SENTINELS in assetVerification.ts. */
+const SERIAL_SENTINELS = new Set(["NA", "TBC"]);
+
+export interface AssetRowLike {
+  premises_id?: string | null;
+  trade_as?: string | null;
+  meter_serial_number?: string | null;
+  old_meter_serial_number?: string | null;
+}
+
+export interface SubsectionSerialSource {
+  name?: string | null;
+  meter_serial_number?: string | null;
+}
+
+/**
+ * Normalized meter serials worth trying for a subsection, best first.
+ *
+ * The Schematic tab used to read `subsections.meter_serial_number` and nothing else. That
+ * column is a stale duplicate: the asset-register import writes `site_assets` only, and so
+ * does the inline editor on the Asset Verification tab — neither ever back-fills the
+ * subsection. A shop whose register row AND inspection both carried the serial therefore
+ * still resolved to nothing, and its block silently lost the photo link (Thembi Mall
+ * SHOP 019B / Molatelo Pharmacy). We now also take the serial off the matching register
+ * row, reusing the same subsection→asset matcher the reports use, plus the previous serial
+ * so a swapped meter still reaches its inspection.
+ */
+export function resolveSubsectionSerials(
+  subsection: SubsectionSerialSource,
+  assets: AssetRowLike[],
+): string[] {
+  const serials: string[] = [];
+  const add = (value: string | null | undefined) => {
+    const normalized = normalizeToken(value);
+    if (!normalized || SERIAL_SENTINELS.has(normalized) || serials.includes(normalized)) return;
+    serials.push(normalized);
+  };
+
+  add(subsection.meter_serial_number);
+
+  const asset = matchAssetForSubsection(subsection, assets);
+  if (asset) {
+    add(asset.meter_serial_number);
+    add(asset.old_meter_serial_number);
+  }
+
+  return serials;
+}
+
+export interface PhotoRef {
+  url: string;
+  label: string;
+}
+
+/**
+ * Photos stored on an inspection's section items (`json_data.<section>.<item>.photos[]`).
+ *
+ * `countInspectionPhotos` has always counted these as real photos, so the Reports tab shows
+ * them — but the Schematic tab only ever read the three tenant images, which is why a
+ * subsection could hold dozens of photos and still offer no link. `tenants` and
+ * `generalInfo` are skipped: tenant images arrive through the serial match instead.
+ */
+export function collectSectionItemPhotos(jsonData: unknown): PhotoRef[] {
+  if (!jsonData || typeof jsonData !== "object") return [];
+  const photos: PhotoRef[] = [];
+
+  for (const [sectionKey, section] of Object.entries(jsonData as Record<string, unknown>)) {
+    if (sectionKey === "tenants" || sectionKey === "generalInfo") continue;
+    if (!section || typeof section !== "object") continue;
+
+    for (const [itemKey, item] of Object.entries(section as Record<string, unknown>)) {
+      const itemPhotos = (item as { photos?: unknown } | null)?.photos;
+      if (!Array.isArray(itemPhotos)) continue;
+      for (const url of itemPhotos) {
+        if (typeof url === "string" && url) photos.push({ url, label: `${sectionKey} — ${itemKey}` });
+      }
+    }
+  }
+
+  return photos;
 }

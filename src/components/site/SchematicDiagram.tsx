@@ -32,9 +32,10 @@ import { toast } from "sonner";
 import { 
   Upload, 
   Plus, 
-  Trash2, 
-  Eye, 
-  Link2, 
+  Trash2,
+  Eye,
+  EyeOff,
+  Link2,
   Unlink, 
   Move,
   Camera,
@@ -60,6 +61,10 @@ import {
   nextBlockIdentifier,
   computeAutoMatches,
   matchSubsectionId,
+  resolveSubsectionSerials,
+  collectSectionItemPhotos,
+  type AssetRowLike,
+  type PhotoRef,
 } from "@/lib/schematicMatching";
 import { resolveDocumentUrl } from "@/lib/documents/documentUrl";
 
@@ -149,6 +154,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [blocks, setBlocks] = useState<SchematicBlock[]>([]);
   const [subsections, setSubsections] = useState<Subsection[]>([]);
   const [inspections, setInspections] = useState<any[]>([]);
+  // The register rows. The schematic needs these because subsections.meter_serial_number is
+  // not maintained by the asset import — see resolveSubsectionSerials.
+  const [assets, setAssets] = useState<AssetRowLike[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -813,6 +821,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         setBlocks((payload.schematic_blocks ?? []) as SchematicBlock[]);
         setSubsections((payload.subsections ?? []) as Subsection[]);
         setInspections((payload.inspections ?? []) as any[]);
+        setAssets((payload.site_assets ?? []) as AssetRowLike[]);
         return;
       }
 
@@ -864,6 +873,21 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       if (inspError) throw inspError;
       setInspections(inspData || []);
+
+      // Non-fatal: the register only ENRICHES serial resolution. A client-portal role
+      // without SELECT on site_assets must still get its schematic, falling back to
+      // subsections.meter_serial_number rather than failing the whole tab.
+      const { data: assetData, error: assetError } = await supabase
+        .from("site_assets")
+        .select("premises_id, trade_as, meter_serial_number, old_meter_serial_number")
+        .eq("site_id", siteId);
+
+      if (assetError) {
+        if (process.env.NODE_ENV === 'development') console.warn("Asset register unavailable for schematic matching:", assetError);
+        setAssets([]);
+      } else {
+        setAssets((assetData || []) as AssetRowLike[]);
+      }
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error loading schematic data:", error);
       toast.error("Failed to load schematic data");
@@ -926,16 +950,48 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return matches;
   }, [inspections, subsections]);
 
-  // Get asset photos for a subsection
-  const getAssetPhotos = (subsectionId: string | null): InspectionTenantMatch | null => {
-    if (!subsectionId) return null;
-    
-    const subsection = subsections.find(s => s.id === subsectionId);
-    if (!subsection?.meter_serial_number) return null;
-    
-    const normalizedSerial = subsection.meter_serial_number.toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
-    return inspectionMeterMatches.get(normalizedSerial) || null;
-  };
+  /**
+   * Every photo reachable for a subsection, with enough context to explain an empty result.
+   *
+   * Two independent sources, unioned:
+   *   1. The tenant record whose meter serial matches. These live on the board's EMB
+   *      inspection rather than the shop's own, so the serial really is the only join —
+   *      but it is resolved via resolveSubsectionSerials, which also consults the asset
+   *      register instead of trusting subsections.meter_serial_number alone.
+   *   2. Section-item photos on the subsection's own inspections, reached by the
+   *      inspections.subsection_id FK. The tab previously ignored these entirely.
+   */
+  const evidenceBySubsection = useMemo(() => {
+    const bySubsection = new Map<
+      string,
+      { photos: PhotoRef[]; serialsTried: string[]; tenantMatch: InspectionTenantMatch | null }
+    >();
+
+    subsections.forEach(subsection => {
+      const serialsTried = resolveSubsectionSerials(subsection, assets);
+      const tenantMatch =
+        serialsTried.map(serial => inspectionMeterMatches.get(serial)).find(Boolean) ?? null;
+
+      const photos: PhotoRef[] = [];
+      if (tenantMatch?.meterImage) photos.push({ url: tenantMatch.meterImage, label: "Meter Photo" });
+      if (tenantMatch?.breakerImage) photos.push({ url: tenantMatch.breakerImage, label: "Breaker Photo" });
+      if (tenantMatch?.ctRatioImage) photos.push({ url: tenantMatch.ctRatioImage, label: "CT Ratio Photo" });
+
+      inspections
+        .filter(inspection => inspection.subsection_id === subsection.id)
+        .forEach(inspection => photos.push(...collectSectionItemPhotos(inspection.json_data)));
+
+      bySubsection.set(subsection.id, { photos, serialsTried, tenantMatch });
+    });
+
+    return bySubsection;
+  }, [subsections, assets, inspections, inspectionMeterMatches]);
+
+  /** Why does this linked block offer no photos? Shown on the muted marker's tooltip. */
+  const explainNoPhotos = (serialsTried: string[]): string =>
+    serialsTried.length === 0
+      ? "No meter serial on this subsection or its asset-register row, so inspection photos cannot be matched."
+      : `No inspection photos found. Serial(s) tried: ${serialsTried.join(", ")}.`;
 
   // Handle file upload — creates the first schematic OR replaces the existing PDF.
   // site_schematics is UNIQUE(site_id), so a replace MUST update the existing row; the old
@@ -1141,16 +1197,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   };
 
   // Handle viewing photos
-  const handleViewPhoto = (type: 'meter' | 'ct' | 'breaker', photos: InspectionTenantMatch) => {
-    const photoMap = {
-      meter: { url: photos.meterImage, title: "Meter Photo" },
-      ct: { url: photos.ctRatioImage, title: "CT Ratio Photo" },
-      breaker: { url: photos.breakerImage, title: "Breaker Photo" },
-    };
-
-    const photo = photoMap[type];
+  const handleViewPhoto = (photo: PhotoRef) => {
     if (photo.url) {
-      setViewerImage({ url: photo.url, title: photo.title });
+      setViewerImage({ url: photo.url, title: photo.label });
       setImageViewerOpen(true);
     }
   };
@@ -1855,8 +1904,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                   Only blocks belonging to the current page are shown (multi-page schematics). */}
               {blocks.filter(block => (block.page_number ?? 1) === pageNumber).map(block => {
                 const isLinked = !!block.subsection_id;
-                const photos = getAssetPhotos(block.subsection_id);
-                const hasPhotos = photos && (photos.meterImage || photos.ctRatioImage || photos.breakerImage);
+                const evidence = block.subsection_id ? evidenceBySubsection.get(block.subsection_id) : undefined;
+                const photos = evidence?.photos ?? [];
+                const hasPhotos = photos.length > 0;
 
                 // Block positions are stored as percentages (0-100)
                 // Use CSS % positioning for resolution-independent alignment
@@ -1906,36 +1956,48 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                     </>
                   )}
 
-                  {/* Action buttons for linked blocks with photos */}
+                  {/* Photo access for linked blocks. Every reachable photo is listed, not just
+                      the three tenant images the tab used to be limited to. */}
                   {isLinked && hasPhotos && !isEditMode && (
                     <div className="absolute -top-3 -right-3 z-10">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <button className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/80 shadow-sm">
+                          <button
+                            className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/80 shadow-sm"
+                            title={`${photos.length} photo${photos.length === 1 ? "" : "s"}`}
+                          >
                             <Eye className="h-3 w-3" />
                           </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                          {photos.meterImage && (
-                            <DropdownMenuItem onClick={() => handleViewPhoto('meter', photos)}>
-                              <Gauge className="h-4 w-4 mr-2" />
-                              Meter Photo
+                        <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                          {photos.map((photo, photoIdx) => (
+                            <DropdownMenuItem key={`${photo.url}-${photoIdx}`} onClick={() => handleViewPhoto(photo)}>
+                              {photo.label === "Meter Photo" ? (
+                                <Gauge className="h-4 w-4 mr-2" />
+                              ) : photo.label === "Breaker Photo" ? (
+                                <Zap className="h-4 w-4 mr-2" />
+                              ) : (
+                                <Camera className="h-4 w-4 mr-2" />
+                              )}
+                              {photo.label}
                             </DropdownMenuItem>
-                          )}
-                          {photos.breakerImage && (
-                            <DropdownMenuItem onClick={() => handleViewPhoto('breaker', photos)}>
-                              <Zap className="h-4 w-4 mr-2" />
-                              Breaker Photo
-                            </DropdownMenuItem>
-                          )}
-                          {photos.ctRatioImage && (
-                            <DropdownMenuItem onClick={() => handleViewPhoto('ct', photos)}>
-                              <Camera className="h-4 w-4 mr-2" />
-                              CT Ratio Photo
-                            </DropdownMenuItem>
-                          )}
+                          ))}
                         </DropdownMenuContent>
                       </DropdownMenu>
+                    </div>
+                  )}
+
+                  {/* Linked but nothing to show. Previously this rendered nothing at all, so a
+                      correct link and a broken photo lookup were indistinguishable on screen. */}
+                  {isLinked && !hasPhotos && !isEditMode && (
+                    <div className="absolute -top-3 -right-3 z-10">
+                      <button
+                        className="h-5 w-5 rounded-full bg-muted text-muted-foreground border border-border flex items-center justify-center shadow-sm cursor-help"
+                        title={explainNoPhotos(evidence?.serialsTried ?? [])}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <EyeOff className="h-3 w-3" />
+                      </button>
                     </div>
                   )}
 

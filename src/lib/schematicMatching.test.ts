@@ -5,6 +5,8 @@ import {
   nextBlockIdentifier,
   matchSubsectionId,
   computeAutoMatches,
+  resolveSubsectionSerials,
+  collectSectionItemPhotos,
   type BlockLike,
   type SubsectionLike,
 } from "./schematicMatching";
@@ -112,5 +114,67 @@ describe("computeAutoMatches", () => {
       { id: "b2", block_identifier: "DB-001", subsection_id: null },
     ];
     expect(computeAutoMatches(blocks, subs)).toEqual([]);
+  });
+});
+
+describe("resolveSubsectionSerials", () => {
+  // Thembi Mall SHOP 019B: the register carries 35267842 and the EMB inspection carries a
+  // tenant with that serial, but subsections.meter_serial_number was never populated —
+  // the asset import writes site_assets only. The schematic found nothing and hid the icon.
+  it("falls back to the register row's serial when the subsection column is blank", () => {
+    const assets = [
+      { premises_id: "TB - SHOP 019B", trade_as: "TB - MOLATELO PHARMACY", meter_serial_number: "35267842" },
+      { premises_id: "TB - SHOP 001", trade_as: "TB - DEBONAIRS", meter_serial_number: "35753496" },
+    ];
+    expect(resolveSubsectionSerials({ name: "SHOP 019B", meter_serial_number: null }, assets))
+      .toEqual(["35267842"]);
+  });
+
+  it("prefers the subsection's own serial, then the register's, then the previous meter", () => {
+    const assets = [
+      { premises_id: "SHOP 1", meter_serial_number: "NEW-1", old_meter_serial_number: "OLD-1" },
+    ];
+    expect(resolveSubsectionSerials({ name: "SHOP 1", meter_serial_number: "SUB-1" }, assets))
+      .toEqual(["SUB1", "NEW1", "OLD1"]);
+  });
+
+  it("drops blanks, sentinels and duplicates", () => {
+    const assets = [{ premises_id: "SHOP 1", meter_serial_number: "M-1", old_meter_serial_number: "NA" }];
+    expect(resolveSubsectionSerials({ name: "SHOP 1", meter_serial_number: "m1" }, assets))
+      .toEqual(["M1"]);
+    expect(resolveSubsectionSerials({ name: "SHOP 1", meter_serial_number: "TBC" }, []))
+      .toEqual([]);
+  });
+
+  it("returns nothing when neither the subsection nor any register row has a serial", () => {
+    expect(resolveSubsectionSerials({ name: "SHOP 9", meter_serial_number: null }, []))
+      .toEqual([]);
+  });
+});
+
+describe("collectSectionItemPhotos", () => {
+  it("returns section-item photos, which the schematic could never surface before", () => {
+    const json = {
+      generalInfo: { shopNumber: "019B" },
+      distributionBoard: { mainSwitch: { photos: ["db1.jpg", "db2.jpg"] } },
+      cabling: { supply: { photos: ["cable.jpg"] } },
+      tenants: [{ meterSerialNumber: "X", meterImage: "meter.jpg" }],
+    };
+    const photos = collectSectionItemPhotos(json);
+    expect(photos.map((p) => p.url)).toEqual(["db1.jpg", "db2.jpg", "cable.jpg"]);
+    // generalInfo and tenants are excluded — tenant images arrive via the serial match.
+    expect(photos.some((p) => p.url === "meter.jpg")).toBe(false);
+  });
+
+  it("labels each photo with its section and item so the menu is readable", () => {
+    const photos = collectSectionItemPhotos({ distributionBoard: { mainSwitch: { photos: ["a.jpg"] } } });
+    expect(photos[0].label).toBe("distributionBoard — mainSwitch");
+  });
+
+  it("tolerates malformed json_data", () => {
+    expect(collectSectionItemPhotos(null)).toEqual([]);
+    expect(collectSectionItemPhotos("nope")).toEqual([]);
+    expect(collectSectionItemPhotos({ section: { item: { photos: "not-an-array" } } })).toEqual([]);
+    expect(collectSectionItemPhotos({ section: null })).toEqual([]);
   });
 });

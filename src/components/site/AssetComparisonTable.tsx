@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Search, CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon, Eye, Loader2, Pencil, Check, X, Trash2 } from "lucide-react";
+import { Search, CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon, Eye, Loader2, Pencil, Check, X, Trash2, History } from "lucide-react";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { storagePathFromUrl } from "@/lib/documents/paths";
 import { RobustImage } from "@/components/RobustImage";
@@ -109,10 +109,10 @@ export const AssetComparisonTable = ({
 
     switch (filter) {
       case "verified":
-        filtered = filtered.filter((r) => r.verified && !r.hasDiscrepancy);
+        filtered = filtered.filter((r) => r.verified && !r.hasDiscrepancy && !r.matchedOnOldSerial);
         break;
       case "discrepancies":
-        filtered = filtered.filter((r) => r.hasDiscrepancy);
+        filtered = filtered.filter((r) => r.hasDiscrepancy && !r.matchedOnOldSerial);
         break;
       case "unverified":
         filtered = filtered.filter((r) => !r.verified);
@@ -143,8 +143,11 @@ export const AssetComparisonTable = ({
     return {
       total: comparisonResults.length,
       verified: verified.length,
-      verifiedNoDiscrepancy: verified.filter((r) => !r.hasDiscrepancy).length,
-      discrepancies: comparisonResults.filter((r) => r.hasDiscrepancy).length,
+      // A meter matched only on its predecessor's serial is evidence about the OLD meter,
+      // so it is kept out of the headline Verified and Discrepancy figures.
+      verifiedNoDiscrepancy: verified.filter((r) => !r.hasDiscrepancy && !r.matchedOnOldSerial).length,
+      previousMeter: comparisonResults.filter((r) => r.matchedOnOldSerial).length,
+      discrepancies: comparisonResults.filter((r) => r.hasDiscrepancy && !r.matchedOnOldSerial).length,
       unverified: comparisonResults.filter((r) => !r.verified).length,
       withImages: withImages.length,
     };
@@ -156,6 +159,17 @@ export const AssetComparisonTable = ({
         <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
           <XCircle className="h-3 w-3 mr-1" />
           Not Verified
+        </Badge>
+      );
+    }
+    // Matched only via the register's previous serial: the inspection documents the meter
+    // that was replaced, so it must not read as a plain "Verified". Ranked above the
+    // discrepancy check because new-meter specs vs old-meter readings will differ by design.
+    if (result.matchedOnOldSerial) {
+      return (
+        <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50" title="Matched on the previous meter serial — evidence is for the replaced meter">
+          <History className="h-3 w-3 mr-1" />
+          Prev. Meter
         </Badge>
       );
     }
@@ -483,6 +497,9 @@ export const AssetComparisonTable = ({
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{stats.verifiedNoDiscrepancy}</div>
             <div className="text-xs text-muted-foreground">via inspections</div>
+            {stats.previousMeter > 0 && (
+              <div className="text-xs text-blue-600 mt-1">+{stats.previousMeter} via previous meter</div>
+            )}
           </CardContent>
         </Card>
         
