@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Search, CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon, Eye, Loader2, Pencil, Check, X, Trash2, History } from "lucide-react";
+import { Search, CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon, Eye, Loader2, Pencil, Check, X, Trash2, History, ArrowLeftRight, Wand2 } from "lucide-react";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { storagePathFromUrl } from "@/lib/documents/paths";
 import { RobustImage } from "@/components/RobustImage";
@@ -28,20 +28,34 @@ import { PDFComplianceCheck } from "@/lib/pdfMakeUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
-  normalizeMeterSerial,
-  buildComparisonResults,
-  type AssetForComparison as Asset,
+  summarizeResults,
+  siteShopLabel,
+  meterRowLabel,
   type InspectionTenantMatch,
   type ComparisonResult,
 } from "@/lib/assetVerification";
+import { updateMeterRow, updateSubsection, applySiteValuesToRegister, siteCorrections } from "./siteDataWrites";
 import { syncSubsectionSerialsFromRegister, describeSync } from "./syncSubsectionSerials";
+
+/** What the site says about a register row: the shop it is tied to, then the board meter row. */
+function foundOnSite(r: ComparisonResult): string[] {
+  const lines: string[] = [];
+  if (r.siteShop) lines.push(siteShopLabel(r.siteShop));
+  if (r.inspectionMatch) lines.push(meterRowLabel(r.inspectionMatch));
+  return lines;
+}
+
+const LINKED_BY_LABEL = { shop: "by shop number", serial: "by meter serial", old_serial: "by previous serial" } as const;
 
 interface SavedReport { id: string; file_name: string; file_url: string; created_at: string; }
 const REPORT_CATEGORY = getReportCategoryName("asset-verification");
 
 interface AssetComparisonTableProps {
-  assets: Asset[];
-  inspectionMeterMatches: Map<string, InspectionTenantMatch>;
+  /** Computed once by AssetVerification so every surface shows the same reconciliation. */
+  comparisonResults: ComparisonResult[];
+  /** Meters found on site that no register row is tied to. */
+  unregisteredMeters: InspectionTenantMatch[];
+  siteId: string;
   siteName: string;
   companyLogoUrl?: string | null;
   onDataUpdated?: () => void;
@@ -56,8 +70,9 @@ type EditingCell = {
 } | null;
 
 export const AssetComparisonTable = ({
-  assets,
-  inspectionMeterMatches,
+  comparisonResults,
+  unregisteredMeters,
+  siteId,
   siteName,
   companyLogoUrl,
   onDataUpdated,
@@ -68,11 +83,6 @@ export const AssetComparisonTable = ({
   const [imageDialog, setImageDialog] = useState<{ url: string; title: string } | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string; blob?: Blob; complianceChecks?: PDFComplianceCheck; isObjectUrl?: boolean } | null>(null);
   const [savingToDocuments, setSavingToDocuments] = useState(false);
-  const siteId = useMemo(() => {
-    // Extract siteId from URL or other context if available
-    const match = window.location.pathname.match(/sites\/([a-f0-9-]+)/);
-    return match ? match[1] : undefined;
-  }, []);
   const [generating, setGenerating] = useState(false);
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
   const [saving, setSaving] = useState(false);
@@ -91,12 +101,6 @@ export const AssetComparisonTable = ({
   }, [siteId]);
   useEffect(() => { fetchSavedReports(); }, [fetchSavedReports]);
 
-  // Build comparison results - status is computed from inspections, never persisted.
-  const comparisonResults = useMemo(
-    () => buildComparisonResults(assets, inspectionMeterMatches),
-    [assets, inspectionMeterMatches],
-  );
-
   // Release the preview blob URL when it changes or the table unmounts.
   useEffect(() => {
     return () => {
@@ -110,13 +114,13 @@ export const AssetComparisonTable = ({
 
     switch (filter) {
       case "verified":
-        filtered = filtered.filter((r) => r.verified && !r.hasDiscrepancy && !r.matchedOnOldSerial);
+        filtered = filtered.filter((r) => r.status === "verified");
         break;
       case "discrepancies":
-        filtered = filtered.filter((r) => r.hasDiscrepancy && !r.matchedOnOldSerial);
+        filtered = filtered.filter((r) => r.status === "mismatch" || r.status === "wrong_meter");
         break;
       case "unverified":
-        filtered = filtered.filter((r) => !r.verified);
+        filtered = filtered.filter((r) => r.status === "unverified");
         break;
     }
 
@@ -126,33 +130,18 @@ export const AssetComparisonTable = ({
         const assetName = r.asset.premises_id?.toLowerCase() || "";
         const tradeName = r.asset.trade_as?.toLowerCase() || "";
         const meterSerial = r.asset.meter_serial_number?.toLowerCase() || "";
-        const shopName = r.inspectionMatch?.shopName?.toLowerCase() || "";
-        return assetName.includes(searchLower) || tradeName.includes(searchLower) || 
-               meterSerial.includes(searchLower) || shopName.includes(searchLower);
+        const onSite = foundOnSite(r).join(" ").toLowerCase();
+        const siteSerial = r.siteSerial?.toLowerCase() || "";
+        return assetName.includes(searchLower) || tradeName.includes(searchLower) ||
+               meterSerial.includes(searchLower) || onSite.includes(searchLower) || siteSerial.includes(searchLower);
       });
     }
 
     return filtered;
   }, [comparisonResults, filter, search]);
 
-  // Stats
-  const stats = useMemo(() => {
-    const verified = comparisonResults.filter((r) => r.verified);
-    const withImages = comparisonResults.filter((r) => 
-      r.inspectionMatch?.meterImage || r.inspectionMatch?.ctRatioImage || r.inspectionMatch?.breakerImage
-    );
-    return {
-      total: comparisonResults.length,
-      verified: verified.length,
-      // A meter matched only on its predecessor's serial is evidence about the OLD meter,
-      // so it is kept out of the headline Verified and Discrepancy figures.
-      verifiedNoDiscrepancy: verified.filter((r) => !r.hasDiscrepancy && !r.matchedOnOldSerial).length,
-      previousMeter: comparisonResults.filter((r) => r.matchedOnOldSerial).length,
-      discrepancies: comparisonResults.filter((r) => r.hasDiscrepancy && !r.matchedOnOldSerial).length,
-      unverified: comparisonResults.filter((r) => !r.verified).length,
-      withImages: withImages.length,
-    };
-  }, [comparisonResults]);
+  // One definition of every count, shared with the tab header and the PDF.
+  const stats = useMemo(() => summarizeResults(comparisonResults), [comparisonResults]);
 
   const getStatusBadge = (result: ComparisonResult) => {
     if (!result.verified) {
@@ -171,6 +160,16 @@ export const AssetComparisonTable = ({
         <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50" title="Matched on the previous meter serial — evidence is for the replaced meter">
           <History className="h-3 w-3 mr-1" />
           Prev. Meter
+        </Badge>
+      );
+    }
+    // The register quotes a serial that the site places on another premises: not a
+    // verification of anything, and the other meter's CT/breaker are not compared.
+    if (result.status === "wrong_meter") {
+      return (
+        <Badge variant="outline" className="text-red-600 border-red-300 bg-red-50" title={`On site this meter belongs to ${result.belongsTo?.premisesId}`}>
+          <ArrowLeftRight className="h-3 w-3 mr-1" />
+          Wrong meter
         </Badge>
       );
     }
@@ -247,59 +246,48 @@ export const AssetComparisonTable = ({
     }
   };
 
+  // Edits to the site side go to the meter row itself (by its id), or to the shop
+  // subsection when the site serial came from the shop and there is no board row.
   const handleSaveInspectionEdit = async (result: ComparisonResult, field: string, newValue: string) => {
-    if (!result.inspectionMatch) return;
-    
+    const row = result.inspectionMatch;
+    if (!row && !(field === "meter_serial" && result.siteShop)) return;
+
     setSaving(true);
     try {
-      // Fetch the current inspection data
-      const { data: inspection, error: fetchError } = await supabase
-        .from("inspections")
-        .select("json_data")
-        .eq("id", result.inspectionMatch.inspectionId)
-        .single();
-        
-      if (fetchError) throw fetchError;
-      
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const jsonData = (inspection?.json_data as any) || {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tenants = (jsonData.tenants as any[]) || [];
-      
-      // Find the tenant with matching meter serial
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tenantIndex = tenants.findIndex((t: any) => {
-        const tenantSerial = normalizeMeterSerial(t.meterSerialNumber as string);
-        const matchSerial = normalizeMeterSerial(result.inspectionMatch?.meterSerialNumber);
-        return tenantSerial === matchSerial;
-      });
-      
-      if (tenantIndex === -1) {
-        toast.error("Could not find matching tenant in inspection");
-        return;
+      if (row) {
+        await updateMeterRow(row.inspectionId, row, {
+          ...(field === "meter_serial" && { meterSerialNumber: newValue }),
+          ...(field === "ct_ratio" && { ctSizeAndRatio: newValue }),
+          ...(field === "breaker_size" && { breakerSize: newValue }),
+        });
+      } else if (result.siteShop) {
+        await updateSubsection(result.siteShop.id, { meter_serial_number: newValue });
       }
-      
-      // Update the specific field in the tenant
-      if (field === "meter_serial") tenants[tenantIndex].meterSerialNumber = newValue;
-      if (field === "ct_ratio") tenants[tenantIndex].ctSizeAndRatio = newValue;
-      if (field === "breaker_size") tenants[tenantIndex].breakerSize = newValue;
-      
-      // Save the updated json_data
-      const { error: updateError } = await supabase
-        .from("inspections")
-        .update({ json_data: { ...jsonData, tenants } })
-        .eq("id", result.inspectionMatch.inspectionId);
-        
-      if (updateError) throw updateError;
-      
-      toast.success("Inspection updated successfully");
+      toast.success("Site record updated");
       setEditingCell(null);
       onDataUpdated?.();
     } catch (error) {
       console.error("Error updating inspection:", error);
-      toast.error("Failed to update inspection");
+      toast.error(error instanceof Error ? error.message : "Failed to update inspection");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // The site is the truth: copy its serial / CT / breaker into the register row.
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const handleApplySiteValues = async (result: ComparisonResult) => {
+    setApplyingId(result.asset.id);
+    try {
+      const changed = await applySiteValuesToRegister(result);
+      const labels: Record<string, string> = { meter_serial_number: "serial", ct_ratio: "CT ratio", breaker_size: "breaker" };
+      toast.success(`${result.asset.premises_id}: register ${Object.keys(changed).map((k) => labels[k]).join(", ")} updated from site`);
+      onDataUpdated?.();
+    } catch (error) {
+      console.error("Error applying site values:", error);
+      toast.error("Could not update the register");
+    } finally {
+      setApplyingId(null);
     }
   };
 
@@ -318,6 +306,7 @@ export const AssetComparisonTable = ({
         siteName,
         comparisonResults,
         stats,
+        unregisteredMeters,
         companyLogoUrl,
       });
       
@@ -470,7 +459,7 @@ export const AssetComparisonTable = ({
               renderEditInput("inspection")
             ) : (
               <>
-                <span className="text-xs text-muted-foreground">Inspection: {inspectionValue}</span>
+                <span className="text-xs text-muted-foreground">Site: {inspectionValue}</span>
                 {!readOnly && (
                   <Button
                     variant="ghost"
@@ -531,7 +520,10 @@ export const AssetComparisonTable = ({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-600">{stats.discrepancies}</div>
-            <div className="text-xs text-muted-foreground">CT/Breaker mismatch</div>
+            <div className="text-xs text-muted-foreground">serial, CT or breaker</div>
+            {stats.wrongMeter > 0 && (
+              <div className="text-xs text-red-600 mt-1">incl. {stats.wrongMeter} wrong meter{stats.wrongMeter === 1 ? "" : "s"}</div>
+            )}
           </CardContent>
         </Card>
         
@@ -544,7 +536,12 @@ export const AssetComparisonTable = ({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">{stats.unverified}</div>
-            <div className="text-xs text-muted-foreground">no inspection match</div>
+            <div className="text-xs text-muted-foreground">nothing found on site</div>
+            {unregisteredMeters.length > 0 && (
+              <div className="text-xs text-orange-600 mt-1" title="See the Shops on site tab">
+                {unregisteredMeters.length} site meter{unregisteredMeters.length === 1 ? "" : "s"} not in register
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -628,7 +625,7 @@ export const AssetComparisonTable = ({
                 <TableHead>Asset (Premises ID)</TableHead>
                 <TableHead>Trade As</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Inspection Source</TableHead>
+                <TableHead>Found on site</TableHead>
                 <TableHead>Meter Serial</TableHead>
                 <TableHead>CT Ratio</TableHead>
                 <TableHead>Breaker Size</TableHead>
@@ -654,18 +651,44 @@ export const AssetComparisonTable = ({
                       </span>
                     </TableCell>
                     <TableCell>{getStatusBadge(result)}</TableCell>
-                    <TableCell>
-                      {result.inspectionMatch ? (
+                    <TableCell className="max-w-[260px]">
+                      {result.belongsTo ? (
                         <div className="space-y-1">
-                          <div className="text-sm font-medium">
-                            {result.inspectionMatch.subsectionName || 
-                             result.inspectionMatch.shopName || 
-                             result.inspectionMatch.shopNumber || 
-                             "Inspection"}
+                          <div className="text-sm font-medium text-red-600">
+                            This serial is {result.belongsTo.premisesId}&rsquo;s meter
                           </div>
+                          <div className="text-xs text-muted-foreground">{result.belongsTo.label}</div>
                           <div className="text-xs text-muted-foreground">
-                            {result.inspectionMatch.inspectionTitle}
+                            Give this premises its shop number under Shops on site, or correct its serial.
                           </div>
+                        </div>
+                      ) : result.verified ? (
+                        <div className="space-y-1">
+                          {foundOnSite(result).map((line, i) => (
+                            <div key={i} className={i === 0 ? "text-sm font-medium" : "text-xs text-muted-foreground"}>
+                              {line}
+                            </div>
+                          ))}
+                          {result.linkedBy && (
+                            <div className="text-[11px] text-muted-foreground">{LINKED_BY_LABEL[result.linkedBy]}</div>
+                          )}
+                          {!readOnly && Object.keys(siteCorrections(result)).length > 0 && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-xs mt-1"
+                              onClick={() => handleApplySiteValues(result)}
+                              disabled={applyingId === result.asset.id}
+                              title="Copy the serial, CT ratio and breaker found on site into the register"
+                            >
+                              {applyingId === result.asset.id ? (
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              ) : (
+                                <Wand2 className="h-3 w-3 mr-1" />
+                              )}
+                              Use site values
+                            </Button>
+                          )}
                         </div>
                       ) : (
                         <span className="text-sm text-muted-foreground">-</span>
@@ -677,8 +700,8 @@ export const AssetComparisonTable = ({
                         idx,
                         "meter_serial",
                         result.asset.meter_serial_number,
-                        result.inspectionMatch?.meterSerialNumber,
-                        result.verified ? "match" : "na"
+                        result.siteSerial,
+                        result.serialMatch
                       )}
                     </TableCell>
                     <TableCell>
@@ -702,7 +725,7 @@ export const AssetComparisonTable = ({
                       )}
                     </TableCell>
                     <TableCell>
-                      {result.inspectionMatch && (result.inspectionMatch.meterImage || result.inspectionMatch.ctRatioImage || result.inspectionMatch.breakerImage) ? (
+                      {result.status !== "wrong_meter" && result.inspectionMatch && (result.inspectionMatch.meterImage || result.inspectionMatch.ctRatioImage || result.inspectionMatch.breakerImage) ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm" className="h-8 gap-1">

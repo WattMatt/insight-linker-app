@@ -14,6 +14,8 @@ const FILL_OK = "#E1F5EE";
 const FILL_WARN = "#FAEEDA";
 const TEXT_OK = "#0F6E56";
 const TEXT_WARN = "#854F0B";
+const FILL_BAD = "#FCEBEB";
+const TEXT_BAD = "#A32D2D";
 
 const hcell = (t: string): any => ({ text: t, bold: true, fontSize: 7, color: "#FFFFFF", fillColor: "#0C447C" });
 
@@ -88,9 +90,9 @@ export function buildAssetVerificationReportDocDef(
       text: [
         { text: `${s.verified} verified`, color: "#0F6E56" },
         { text: "      ·      ", color: "#B4B2A9" },
-        { text: `${s.discrepancies} mismatches`, color: "#854F0B" },
+        { text: `${s.discrepancies} with discrepancies`, color: "#854F0B" },
         { text: "      ·      ", color: "#B4B2A9" },
-        { text: `${s.unverified} no inspection`, color: "#A32D2D" },
+        { text: `${s.unverified} not found on site`, color: "#A32D2D" },
       ],
       fontSize: 11,
     },
@@ -103,8 +105,8 @@ export function buildAssetVerificationReportDocDef(
         [
           tintedKpiCard({ label: "Total assets", value: String(s.total), sub: "in register", tone: "slate", contentWidth: 146 }),
           tintedKpiCard({ label: "Verified", value: String(s.verified), sub: `${s.verificationPct}% of total`, tone: toneForPct(s.verificationPct), barPct: s.verificationPct, contentWidth: 146 }),
-          tintedKpiCard({ label: "Discrepancies", value: String(s.discrepancies), sub: "value mismatches", tone: s.discrepancies ? "amber" : "green", contentWidth: 146 }),
-          tintedKpiCard({ label: "Not verified", value: String(s.unverified), sub: "no inspection match", tone: s.unverified ? "red" : "green", contentWidth: 146 }),
+          tintedKpiCard({ label: "Discrepancies", value: String(s.discrepancies), sub: s.wrongMeter ? `incl. ${s.wrongMeter} wrong meter${s.wrongMeter === 1 ? "" : "s"}` : "serial, CT or breaker", tone: s.discrepancies ? "amber" : "green", contentWidth: 146 }),
+          tintedKpiCard({ label: "Not verified", value: String(s.unverified), sub: "not found on site", tone: s.unverified ? "red" : "green", contentWidth: 146 }),
         ],
       ],
     },
@@ -117,16 +119,25 @@ export function buildAssetVerificationReportDocDef(
     { text: model.narrative, fontSize: 11, margin: [0, 0, 0, 12] },
     kpiRow,
     { text: "Issues & exceptions", fontSize: 12, bold: true, margin: [0, 4, 0, 4] },
-    { text: `Value mismatches (${model.discrepancyRows.length})`, fontSize: 9, color: "#A32D2D" },
+    {
+      text: `Discrepancies (${model.discrepancyRows.length} ${model.discrepancyRows.length === 1 ? "item" : "items"} across ${s.discrepancies} ${s.discrepancies === 1 ? "asset" : "assets"})`,
+      fontSize: 9,
+      color: "#A32D2D",
+    },
     model.discrepancyRows.length
       ? {
-          ul: model.discrepancyRows.map((d) => `${d.premisesId} — ${d.field}: register ${d.registerValue} vs inspection ${d.inspectionValue}`),
+          ul: model.discrepancyRows.map((d) => `${d.premisesId} — ${d.field}: register ${d.registerValue} vs site ${d.inspectionValue}`),
           fontSize: 9,
           margin: [0, 0, 0, 6],
         }
       : { text: "—", fontSize: 9, margin: [0, 0, 0, 6] },
-    { text: `Assets without matching inspection (${model.unverifiedRows.length})`, fontSize: 9, color: "#A32D2D" },
-    { text: model.unverifiedRows.map((u) => u.premisesId).join(" · ") || "—", fontSize: 9 },
+    { text: `Assets not found on site (${model.unverifiedRows.length})`, fontSize: 9, color: "#A32D2D" },
+    { text: model.unverifiedRows.map((u) => u.premisesId).join(" · ") || "—", fontSize: 9, margin: [0, 0, 0, 6] },
+    { text: `Meters on site not in the register (${model.unregisteredRows.length})`, fontSize: 9, color: "#A32D2D" },
+    {
+      text: model.unregisteredRows.map((u) => `${u.board} ${u.shopName} (${u.meterSerial})`).join(" · ") || "—",
+      fontSize: 9,
+    },
   ];
 
   // Reference thumbnails (already fetched + compressed by the generator and keyed by source URL).
@@ -144,13 +155,21 @@ export function buildAssetVerificationReportDocDef(
   };
 
   const verifiedTable = (): Content => {
-    const head = ["Premises ID", "Trade as", "Status", "Inspection source", "Meter serial", "CT ratio", "Breaker", "Reference images"].map(hcell);
+    const head = ["Premises ID", "Trade as", "Status", "Found on site", "Meter serial", "CT ratio", "Breaker", "Reference images"].map(hcell);
+    const statusStyle = (r: AvReportModel["verifiedRows"][number]) =>
+      r.statusLabel === "Wrong meter"
+        ? { color: TEXT_BAD, fillColor: FILL_BAD }
+        : r.mismatch
+          ? { color: TEXT_WARN, fillColor: FILL_WARN }
+          : { color: TEXT_OK, fillColor: FILL_OK };
     const body = model.verifiedRows.map((r) => [
       { text: r.premisesId, fontSize: 7 },
       { text: r.tradeAs, fontSize: 7 },
-      { text: r.mismatch ? "Mismatch" : "Verified", fontSize: 7, color: r.mismatch ? TEXT_WARN : TEXT_OK, fillColor: r.mismatch ? FILL_WARN : FILL_OK },
-      { text: r.source, fontSize: 7 },
-      { text: r.meterSerial, fontSize: 7 },
+      { text: r.statusLabel, fontSize: 7, ...statusStyle(r) },
+      { text: r.source, fontSize: 7, color: r.statusLabel === "Wrong meter" ? TEXT_BAD : undefined },
+      r.siteSerial
+        ? { text: [{ text: `${r.meterSerial}\n` }, { text: `site ${r.siteSerial}`, bold: true }], fontSize: 7, fillColor: FILL_WARN, color: TEXT_WARN }
+        : { text: r.meterSerial, fontSize: 7 },
       { text: r.ctRatio, fontSize: 7, fillColor: r.ctMismatch ? FILL_WARN : null, color: r.ctMismatch ? TEXT_WARN : undefined },
       { text: r.breaker, fontSize: 7, fillColor: r.breakerMismatch ? FILL_WARN : null, color: r.breakerMismatch ? TEXT_WARN : undefined },
       imagesCell(r),
@@ -160,14 +179,14 @@ export function buildAssetVerificationReportDocDef(
   };
 
   const discrepancyTable = (): Content => {
-    const head = ["Premises ID", "Field", "Register value", "Inspection value"].map(hcell);
+    const head = ["Premises ID", "Field", "Register value", "Found on site"].map(hcell);
     const body = model.discrepancyRows.map((d) => [
       { text: d.premisesId, fontSize: 7 },
       { text: d.field, fontSize: 7 },
       { text: d.registerValue, fontSize: 7 },
       { text: d.inspectionValue, fontSize: 7, color: TEXT_WARN },
     ]);
-    if (!body.length) body.push([{ text: "No value mismatches.", fontSize: 7, colSpan: 4 } as any, {}, {}, {}]);
+    if (!body.length) body.push([{ text: "No discrepancies.", fontSize: 7, colSpan: 4 } as any, {}, {}, {}]);
     return { table: { headerRows: 1, widths: [90, 90, "*", "*"], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
   };
 
@@ -180,18 +199,34 @@ export function buildAssetVerificationReportDocDef(
       { text: u.ctRatio, fontSize: 7 },
       { text: u.breaker, fontSize: 7 },
     ]);
-    if (!body.length) body.push([{ text: "Every register asset has a matching inspection.", fontSize: 7, colSpan: 5 } as any, {}, {}, {}, {}]);
+    if (!body.length) body.push([{ text: "Every register asset was found on site.", fontSize: 7, colSpan: 5 } as any, {}, {}, {}, {}]);
     return { table: { headerRows: 1, widths: [90, "*", 100, 80, 80], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
   };
 
+  const unregisteredTable = (): Content => {
+    const head = ["Board", "Shop number", "Shop name", "Meter serial", "CT ratio", "Breaker"].map(hcell);
+    const body = model.unregisteredRows.map((u) => [
+      { text: u.board, fontSize: 7 },
+      { text: u.shopNumber, fontSize: 7 },
+      { text: u.shopName, fontSize: 7 },
+      { text: u.meterSerial, fontSize: 7 },
+      { text: u.ctRatio, fontSize: 7 },
+      { text: u.breaker, fontSize: 7 },
+    ]);
+    if (!body.length) body.push([{ text: "Every meter found on site is in the register.", fontSize: 7, colSpan: 6 } as any, {}, {}, {}, {}, {}]);
+    return { table: { headerRows: 1, widths: [110, 80, "*", 100, 70, 70], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
+  };
+
   const tablesBlock: Content[] = [
-    { text: "Verified against inspection data", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
+    { text: "Checked against what was found on site", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
     verifiedTable(),
     { text: "Reference images are low-resolution thumbnails — log in to the app for the full-size meter, CT and breaker photos.", fontSize: 7, italics: true, color: "#5F5E5A", margin: [0, 0, 0, 8] },
-    { text: "Value mismatches", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
+    { text: "Discrepancies", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
     discrepancyTable(),
-    { text: "Assets without matching inspection", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
+    { text: "Assets not found on site", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
     unverifiedTable(),
+    { text: "Meters on site not in the register", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
+    unregisteredTable(),
   ];
 
   // Built through createBaseDocDefinition for the same reason as the COC report:

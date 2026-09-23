@@ -2629,6 +2629,7 @@ export type Database = {
           name: string
           qr_code_url: string | null
           qr_disabled: boolean
+          shop_number: string | null
           site_id: string
           tenant_name: string | null
           updated_at: string
@@ -2659,6 +2660,7 @@ export type Database = {
           name: string
           qr_code_url?: string | null
           qr_disabled?: boolean
+          shop_number?: string | null
           site_id: string
           tenant_name?: string | null
           updated_at?: string
@@ -2689,6 +2691,7 @@ export type Database = {
           name?: string
           qr_code_url?: string | null
           qr_disabled?: boolean
+          shop_number?: string | null
           site_id?: string
           tenant_name?: string | null
           updated_at?: string

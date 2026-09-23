@@ -13,16 +13,26 @@ const asset = (over: Partial<ComparisonResult["asset"]> = {}): ComparisonResult[
   ...over,
 });
 
-const result = (over: Partial<ComparisonResult> = {}): ComparisonResult => ({
-  asset: asset(),
-  inspectionMatch: null,
-  verified: false,
-  matchedOnOldSerial: false,
-  ctMatch: "na",
-  breakerMatch: "na",
-  hasDiscrepancy: false,
-  ...over,
-});
+const result = (over: Partial<ComparisonResult> = {}): ComparisonResult => {
+  const base: ComparisonResult = {
+    asset: asset(),
+    inspectionMatch: null,
+    siteShop: null,
+    linkedBy: null,
+    siteSerial: null,
+    serialMatch: "na",
+    belongsTo: null,
+    status: "unverified",
+    verified: false,
+    matchedOnOldSerial: false,
+    ctMatch: "na",
+    breakerMatch: "na",
+    hasDiscrepancy: false,
+    ...over,
+  };
+  if (!over.status) base.status = !base.verified ? "unverified" : base.hasDiscrepancy ? "mismatch" : "verified";
+  return base;
+};
 
 const stats = (over: Partial<Parameters<typeof buildAssetVerificationReportModel>[0]["stats"]> = {}) => ({
   total: 0,
@@ -112,5 +122,61 @@ describe("buildAssetVerificationReportModel", () => {
     });
     expect(m.unverifiedRows).toHaveLength(1);
     expect(m.unverifiedRows[0]).toMatchObject({ premisesId: "P9", tradeAs: "—", ctRatio: "—" });
+  });
+
+  // 204 Oxford: the register row for the escalator quotes Missfit Boxing's meter serial.
+  it("reports a wrong meter as a discrepancy naming where the meter really is, without its photos", () => {
+    const m = buildAssetVerificationReportModel({
+      siteName: "204 Oxford", generatedAt: "d", referenceNumber: "r",
+      stats: stats({ total: 1, discrepancies: 1 }),
+      comparisonResults: [
+        result({
+          verified: true,
+          hasDiscrepancy: true,
+          status: "wrong_meter",
+          asset: asset({ premises_id: "OX - ESCELATOR UP", meter_serial_number: "34445082" }),
+          belongsTo: { premisesId: "OX - F03", label: "SHOP F03 · MISSFIT BOXING" },
+          inspectionMatch: { inspectionId: "i", inspectionTitle: "t", subsectionId: null, meterSerialNumber: "34445082", meterImage: "https://x/m.jpg" },
+        }),
+      ],
+    });
+    expect(m.verifiedRows[0]).toMatchObject({ statusLabel: "Wrong meter", meterImage: null });
+    expect(m.discrepancyRows).toEqual([
+      { premisesId: "OX - ESCELATOR UP", field: "Meter", registerValue: "34445082", inspectionValue: "on site this is OX - F03's meter (SHOP F03 · MISSFIT BOXING)" },
+    ]);
+    expect(m.summary.wrongMeter).toBe(1);
+  });
+
+  it("reports a register serial that differs from the site serial", () => {
+    const m = buildAssetVerificationReportModel({
+      siteName: "204 Oxford", generatedAt: "d", referenceNumber: "r",
+      stats: stats({ total: 1, discrepancies: 1 }),
+      comparisonResults: [
+        result({
+          verified: true,
+          hasDiscrepancy: true,
+          linkedBy: "shop",
+          serialMatch: "mismatch",
+          siteSerial: "35753503",
+          asset: asset({ premises_id: "OX - G01-G06", meter_serial_number: "35753143" }),
+          siteShop: { id: "s1", name: "SHOP G01-G06", tenant_name: "TURN 'N TENDER" },
+        }),
+      ],
+    });
+    expect(m.verifiedRows[0]).toMatchObject({ siteSerial: "35753503", source: "SHOP G01-G06 · TURN 'N TENDER" });
+    expect(m.discrepancyRows[0]).toMatchObject({ field: "Meter serial", registerValue: "35753143", inspectionValue: "35753503" });
+  });
+
+  it("lists meters found on site with no register entry", () => {
+    const m = buildAssetVerificationReportModel({
+      siteName: "Site A", generatedAt: "d", referenceNumber: "r", comparisonResults: [], stats: stats(),
+      unregisteredMeters: [
+        { inspectionId: "i", inspectionTitle: "t", subsectionId: null, subsectionName: "Main DB C", shopName: "DB Sub F1", meterSerialNumber: "35753144", ctSizeAndRatio: "250/5A", breakerSize: "250A" },
+      ],
+    });
+    expect(m.unregisteredRows).toEqual([
+      { board: "Main DB C", shopNumber: "—", shopName: "DB Sub F1", meterSerial: "35753144", ctRatio: "250/5A", breaker: "250A" },
+    ]);
+    expect(m.narrative).toContain("1 meter was found on site with no register entry");
   });
 });

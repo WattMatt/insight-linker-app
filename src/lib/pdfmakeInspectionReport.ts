@@ -25,6 +25,7 @@ import { toPdfSafeBlob } from './pdf/loadReportImage';
 import { scorePercentage, isPassStatus, isFailStatus } from './report/inspectionScore';
 import { savePDFToDocuments } from './pdfDocumentSaver';
 import { parseDocumentFileRef } from './documents/documentUrl';
+import { meterRowHeading } from './assetVerification';
 
 // Type definitions
 type Content = any;
@@ -1279,7 +1280,7 @@ function createTenantCardContent(
 
   // Tenant header
   tenantStack.push({
-    text: `${idx + 1}. ${tenant.shopName}${tenant.shopNumber ? ` (${tenant.shopNumber})` : ''}`,
+    text: `${idx + 1}. ${meterRowHeading(tenant.shopNumber, tenant.shopName)}`,
     fontSize: 12,
     bold: true,
     color: REPORT_COLORS.primary,
