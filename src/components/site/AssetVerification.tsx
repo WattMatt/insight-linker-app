@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Zap, Trash2, RefreshCw, ShieldCheck, Gauge, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Upload, Zap, Trash2, RefreshCw, ShieldCheck, Gauge, AlertTriangle, CheckCircle2, Store } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,13 +11,17 @@ import * as XLSX from "xlsx";
 import { AssetTable } from "./AssetTable";
 import { AssetComparisonTable } from "./AssetComparisonTable";
 import { MeterRegister } from "./MeterRegister";
+import { SiteShopsEditor } from "./SiteShopsEditor";
 import {
   parseAssetRows,
   buildInspectionMeterMatches,
+  buildInspectionMeterRows,
   buildComparisonResults,
+  summarizeResults,
+  findUnregisteredMeters,
   type ParsedAsset,
   type InspectionRecord,
-  type SubsectionNameRecord,
+  type SiteShop,
 } from "@/lib/assetVerification";
 import { syncSubsectionSerialsFromRegister, describeSync, type SyncResult } from "./syncSubsectionSerials";
 import {
@@ -57,6 +61,8 @@ interface SiteAssetRow {
 }
 
 const MAX_IMPORT_BYTES = 10 * 1024 * 1024; // 10MB
+// Stable empty default so an unloaded query does not hand the memos a new array every render.
+const NO_ROWS: never[] = [];
 
 export const AssetVerification = ({ siteId, siteName, readOnly = false, accessToken }: AssetVerificationProps) => {
   const [uploading, setUploading] = useState(false);
@@ -87,7 +93,7 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
   });
 
   const {
-    data: assetsDirect = [],
+    data: assetsDirect = NO_ROWS,
     isLoading: assetsLoading,
     isError: assetsError,
     refetch,
@@ -107,7 +113,7 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
   });
 
   // Fetch inspections with tenant data (meter serial, CT ratio, breaker, images)
-  const { data: inspectionsDirect = [] } = useQuery({
+  const { data: inspectionsDirect = NO_ROWS } = useQuery({
     queryKey: ["site-inspections-tenants", siteId],
     enabled: !isPublic,
     queryFn: async () => {
@@ -115,22 +121,27 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
         .from("inspections")
         .select("id, title, subsection_id, json_data")
         .eq("site_id", siteId)
-        .not("json_data", "is", null);
+        .not("json_data", "is", null)
+        // Deterministic: when two inspections record the same meter, the newest one is used.
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data || [];
     },
   });
 
-  // Fetch subsection names for display purposes
-  const { data: subsectionsDirect = [] } = useQuery({
+  // Subsections are the shops (and boards) found on site: name, shop number, tenant and the
+  // meter serial captured there. They tie register rows to site data by shop number.
+  const { data: subsectionsDirect = NO_ROWS } = useQuery({
     queryKey: ["site-subsections-names", siteId],
     enabled: !isPublic,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("subsections")
-        .select("id, name")
-        .eq("site_id", siteId);
+        .select("id, name, tenant_name, meter_serial_number, shop_number")
+        .eq("site_id", siteId)
+        .is("deleted_at", null)
+        .order("name");
 
       if (error) throw error;
       return data || [];
@@ -138,30 +149,54 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
   });
 
   // Resolve from the RPC payload in public mode, otherwise from the direct queries.
-  const assets = ((isPublic ? review?.site_assets ?? [] : assetsDirect) as unknown) as SiteAssetRow[];
-  const inspectionsWithTenants = (
-    isPublic ? ((review?.inspections ?? []) as InspectionRecord[]).filter((i) => i.json_data != null) : inspectionsDirect
-  ) as InspectionRecord[];
-  const subsections = (isPublic ? ((review?.subsections ?? []) as SubsectionNameRecord[]) : subsectionsDirect) as SubsectionNameRecord[];
+  // Memoized so the reconciliation below only re-runs when the data actually changes.
+  const assets = useMemo(
+    () => ((isPublic ? review?.site_assets ?? [] : assetsDirect) as unknown) as SiteAssetRow[],
+    [isPublic, review, assetsDirect],
+  );
+  const inspectionsWithTenants = useMemo(
+    () =>
+      (isPublic
+        ? ((review?.inspections ?? []) as InspectionRecord[]).filter((i) => i.json_data != null)
+        : inspectionsDirect) as InspectionRecord[],
+    [isPublic, review, inspectionsDirect],
+  );
+  const subsections = useMemo(
+    () => (isPublic ? ((review?.subsections ?? []) as SiteShop[]) : subsectionsDirect) as SiteShop[],
+    [isPublic, review, subsectionsDirect],
+  );
   const isLoading = isPublic ? reviewLoading : assetsLoading;
   const isError = isPublic ? reviewError : assetsError;
   const retry = () => (isPublic ? refetchReview() : refetch());
 
   // Electrical-only: water meters are out of scope for this feature.
-  const electricalAssets = assets.filter((a) => a.asset_category === "electrical_meter");
+  const electricalAssets = useMemo(() => assets.filter((a) => a.asset_category === "electrical_meter"), [assets]);
 
   const inspectionMeterMatches = useMemo(
     () => buildInspectionMeterMatches(inspectionsWithTenants, subsections),
     [inspectionsWithTenants, subsections],
   );
-
-  // Same definition as the verification table's green "Verified" card: matched AND no discrepancy.
-  const verifiedCount = useMemo(
-    () =>
-      buildComparisonResults(electricalAssets, inspectionMeterMatches).filter((r) => r.verified && !r.hasDiscrepancy)
-        .length,
-    [electricalAssets, inspectionMeterMatches],
+  const meterRows = useMemo(
+    () => buildInspectionMeterRows(inspectionsWithTenants, subsections),
+    [inspectionsWithTenants, subsections],
   );
+
+  // One reconciliation for every surface (cards, table, shops tab, PDF) so they can never disagree.
+  const comparisonResults = useMemo(
+    () => buildComparisonResults(electricalAssets, inspectionMeterMatches, subsections),
+    [electricalAssets, inspectionMeterMatches, subsections],
+  );
+  const unregisteredMeters = useMemo(
+    () => findUnregisteredMeters(meterRows, comparisonResults),
+    [meterRows, comparisonResults],
+  );
+  const verifiedCount = useMemo(() => summarizeResults(comparisonResults).verifiedNoDiscrepancy, [comparisonResults]);
+
+  const refreshSiteData = () => {
+    refetch();
+    queryClient.invalidateQueries({ queryKey: ["site-inspections-tenants", siteId] });
+    queryClient.invalidateQueries({ queryKey: ["site-subsections-names", siteId] });
+  };
 
   const parseExcelFile = async (file: File): Promise<ParsedAsset[]> => {
     const buffer = await file.arrayBuffer();
@@ -429,6 +464,15 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
               <ShieldCheck className="h-4 w-4" />
               Verification
             </TabsTrigger>
+            <TabsTrigger value="site-shops" className="gap-2">
+              <Store className="h-4 w-4" />
+              Shops on site
+              {unregisteredMeters.length > 0 && (
+                <Badge variant="secondary" className="ml-1" title="Meters found on site with no register row">
+                  {unregisteredMeters.length}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="meter-register" className="gap-2">
               <Gauge className="h-4 w-4" />
               Meter Register
@@ -444,14 +488,23 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
 
           <TabsContent value="verification">
             <AssetComparisonTable
-              assets={electricalAssets}
-              inspectionMeterMatches={inspectionMeterMatches}
+              comparisonResults={comparisonResults}
+              unregisteredMeters={unregisteredMeters}
+              siteId={siteId}
               siteName={siteName}
               readOnly={readOnly}
-              onDataUpdated={() => {
-                refetch();
-                queryClient.invalidateQueries({ queryKey: ["site-inspections-tenants", siteId] });
-              }}
+              onDataUpdated={refreshSiteData}
+            />
+          </TabsContent>
+
+          <TabsContent value="site-shops">
+            <SiteShopsEditor
+              siteShops={subsections}
+              meterRows={meterRows}
+              comparisonResults={comparisonResults}
+              unregisteredMeters={unregisteredMeters}
+              readOnly={readOnly}
+              onDataUpdated={refreshSiteData}
             />
           </TabsContent>
 

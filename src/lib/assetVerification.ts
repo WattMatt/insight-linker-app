@@ -45,6 +45,8 @@ export interface SubsectionNameRecord {
 export interface InspectionTenantMatch {
   inspectionId: string;
   inspectionTitle: string;
+  /** The tenant row's own id inside json_data.tenants — the stable handle for edits. */
+  tenantId?: string;
   subsectionId: string | null;
   subsectionName?: string;
   shopName?: string;
@@ -69,9 +71,46 @@ export interface AssetForComparison {
   asset_category: string;
 }
 
+/**
+ * A shop (subsection) as recorded on site. At line-shop sites the subsection IS the shop:
+ * its name usually carries the shop number ("SHOP G01-G06") and it holds the meter serial
+ * captured on site. `shop_number`, when set, overrides whatever the name implies.
+ */
+export interface SiteShop {
+  id: string;
+  name: string;
+  tenant_name?: string | null;
+  meter_serial_number?: string | null;
+  shop_number?: string | null;
+}
+
+/**
+ * How the register row was tied to what is on site:
+ *   shop       — same shop number (subsection or board meter row); the site serial is the truth
+ *   serial     — no shop link; the register serial was found on a board meter row
+ *   old_serial — only the register's PREVIOUS serial was found
+ */
+export type LinkedBy = "shop" | "serial" | "old_serial";
+
+export type VerificationStatus = "verified" | "mismatch" | "wrong_meter" | "prev_meter" | "unverified";
+
 export interface ComparisonResult {
   asset: AssetForComparison;
+  /** The board meter row used as evidence (CT, breaker, photos). */
   inspectionMatch: InspectionTenantMatch | null;
+  /** The site shop this register row is linked to (or, on a serial link, the shop holding that serial). */
+  siteShop: SiteShop | null;
+  linkedBy: LinkedBy | null;
+  /** The meter serial found on site for this premises — the truth the register is checked against. */
+  siteSerial: string | null;
+  serialMatch: MatchStatus;
+  /**
+   * Set when the register serial was found on site but on ANOTHER premises' meter. The row is
+   * then a discrepancy, never "verified", and CT/breaker are not compared (they belong to a
+   * different meter). `label` names where the meter really is, e.g. "OX - G01-G06".
+   */
+  belongsTo: { premisesId: string; label: string } | null;
+  status: VerificationStatus;
   verified: boolean;
   /**
    * True when the only inspection found was filed under the asset's PREVIOUS serial.
@@ -89,6 +128,58 @@ const SENTINELS = new Set(["NA", "TBC"]);
 /** Normalize a meter serial for identity matching: uppercase, alphanumerics only. */
 export function normalizeMeterSerial(serial: string | null | undefined): string {
   return (serial || "").toUpperCase().replace(/[^A-Z0-9]/g, "").trim();
+}
+
+/**
+ * The key two serials are joined on. Field staff annotate the serial box ("35727818 METER OFF",
+ * "34445064 TO BE REPLACED"), so when a serial contains a run of 6+ digits that run IS the
+ * serial. Otherwise it falls back to the normalized form. Sentinels and blanks give "".
+ */
+export function meterKey(serial: string | null | undefined): string {
+  const normalized = normalizeMeterSerial(serial);
+  if (!normalized || SENTINELS.has(normalized)) return "";
+  const digits = (serial || "").match(/\d{6,}/);
+  return digits ? digits[0] : normalized;
+}
+
+// "G01-G06", "G13A - G15", "G16 & G17", "GF 07", "N103-104", "SH1001": one or more shop
+// numbers (0–3 letters, digits, optional letter suffix) joined by - & / or ,
+const SHOP_NUMBER_SHAPE = /^[A-Z]{0,3}\s?\d+[A-Z]?(\s*[-&/,]\s*[A-Z]{0,3}\s?\d+[A-Z]?)*$/;
+
+const stripShopWord = (s: string) => s.replace(/^SHOP\b\.?\s*/, "");
+const compact = (s: string) => s.replace(/[^A-Z0-9]/g, "");
+
+/**
+ * Comparable shop number for a register premises id: drops the site prefix ("OX - G01-G06"
+ * → "G01G06") and any "SHOP" word, keeping alphanumerics only.
+ */
+export function premisesShopCode(premisesId: string | null | undefined): string {
+  const s = (premisesId || "").toUpperCase().trim().replace(/^[A-Z]{1,4}\s+-\s+/, "");
+  return compact(stripShopWord(s));
+}
+
+/** Comparable form of a shop number typed by a person ("Shop G01 - G06" → "G01G06"). */
+export function shopNumberCode(shopNumber: string | null | undefined): string {
+  return compact(stripShopWord((shopNumber || "").toUpperCase().trim()));
+}
+
+/**
+ * The shop number a subsection stands for. An explicit `shop_number` always wins. Otherwise
+ * it is read from the name, but only when the name IS a shop number ("SHOP G01-G06", "N201",
+ * "Shop S101") — never from descriptive names like "Main DB F1 1st Floor North".
+ */
+export function siteShopCode(shop: Pick<SiteShop, "name" | "shop_number">): string {
+  if (shop.shop_number && shop.shop_number.trim()) return shopNumberCode(shop.shop_number);
+  const rest = stripShopWord((shop.name || "").toUpperCase().trim());
+  return SHOP_NUMBER_SHAPE.test(rest) ? compact(rest) : "";
+}
+
+/** Display form of a site shop: "SHOP G01-G06 · TURN 'N TENDER". */
+export function siteShopLabel(shop: SiteShop): string {
+  const number = shop.shop_number?.trim();
+  const name = shop.name.trim();
+  const head = number && shopNumberCode(number) !== shopNumberCode(name) ? `${number} · ${name}` : name;
+  return shop.tenant_name?.trim() ? `${head} · ${shop.tenant_name.trim()}` : head;
 }
 
 /**
@@ -122,8 +213,21 @@ export function compareValues(
 ): MatchStatus {
   if (isMissingValue(assetValue) || isMissingValue(inspectionValue)) return "na";
 
-  return canonicalizeSpec(assetValue) === canonicalizeSpec(inspectionValue) ? "match" : "mismatch";
+  let a = canonicalizeSpec(assetValue);
+  let b = canonicalizeSpec(inspectionValue);
+  // "40A" vs "40A DP": the field records the pole count, the register rarely does. A pole
+  // count only one side states is not a discrepancy; two different pole counts still are.
+  const aPole = a.match(POLE_SUFFIX);
+  const bPole = b.match(POLE_SUFFIX);
+  if (!aPole !== !bPole) {
+    a = a.replace(POLE_SUFFIX, "");
+    b = b.replace(POLE_SUFFIX, "");
+  }
+  return a === b ? "match" : "mismatch";
 }
+
+// Trailing pole designation on a breaker size: SP/DP/TP/FP or 1P–4P ("63A DP", "100A TP").
+const POLE_SUFFIX = /(?<=A)(SP|DP|TP|FP|[1-4]P)$/;
 
 function readTenants(jsonData: unknown): InspectionTenant[] {
   if (!jsonData || typeof jsonData !== "object") return [];
@@ -136,79 +240,336 @@ function hasAnyImage(t: { meterImage?: string; ctRatioImage?: string; breakerIma
 }
 
 /**
- * Build a map of normalized meter serial -> inspection tenant data. When a serial appears
- * more than once, the first occurrence wins unless a later one carries images and the
- * incumbent has none.
+ * Every board meter row on the site that carries a usable serial, in inspection order. The
+ * tenant row id is kept so an edit targets that row, not "whichever row has this serial".
+ */
+export function buildInspectionMeterRows(
+  inspections: InspectionRecord[],
+  subsections: SubsectionNameRecord[],
+): InspectionTenantMatch[] {
+  const rows: InspectionTenantMatch[] = [];
+
+  inspections.forEach((inspection) => {
+    const subsection = subsections.find((s) => s.id === inspection.subsection_id);
+
+    readTenants(inspection.json_data).forEach((tenant) => {
+      if (!meterKey(tenant.meterSerialNumber)) return;
+      rows.push({
+        inspectionId: inspection.id,
+        inspectionTitle: inspection.title,
+        tenantId: tenant.id,
+        subsectionId: inspection.subsection_id,
+        subsectionName: subsection?.name,
+        shopName: tenant.shopName,
+        shopNumber: tenant.shopNumber,
+        meterSerialNumber: tenant.meterSerialNumber as string,
+        ctSizeAndRatio: tenant.ctSizeAndRatio,
+        breakerSize: tenant.breakerSize,
+        meterImage: tenant.meterImage,
+        ctRatioImage: tenant.ctRatioImage,
+        breakerImage: tenant.breakerImage,
+      });
+    });
+  });
+
+  return rows;
+}
+
+/**
+ * Build a map of meter key -> board meter row. When a serial appears more than once, the
+ * first occurrence wins unless a later one carries images and the incumbent has none.
  */
 export function buildInspectionMeterMatches(
   inspections: InspectionRecord[],
   subsections: SubsectionNameRecord[],
 ): Map<string, InspectionTenantMatch> {
   const matches = new Map<string, InspectionTenantMatch>();
-
-  inspections.forEach((inspection) => {
-    const subsection = subsections.find((s) => s.id === inspection.subsection_id);
-
-    readTenants(inspection.json_data).forEach((tenant) => {
-      if (!tenant.meterSerialNumber) return;
-      const normalizedSerial = normalizeMeterSerial(tenant.meterSerialNumber);
-      if (!normalizedSerial || SENTINELS.has(normalizedSerial)) return;
-
-      const existing = matches.get(normalizedSerial);
-      const upgradeToImages = hasAnyImage(tenant) && existing != null && !hasAnyImage(existing);
-
-      if (!existing || upgradeToImages) {
-        matches.set(normalizedSerial, {
-          inspectionId: inspection.id,
-          inspectionTitle: inspection.title,
-          subsectionId: inspection.subsection_id,
-          subsectionName: subsection?.name,
-          shopName: tenant.shopName,
-          shopNumber: tenant.shopNumber,
-          meterSerialNumber: tenant.meterSerialNumber,
-          ctSizeAndRatio: tenant.ctSizeAndRatio,
-          breakerSize: tenant.breakerSize,
-          meterImage: tenant.meterImage,
-          ctRatioImage: tenant.ctRatioImage,
-          breakerImage: tenant.breakerImage,
-        });
-      }
-    });
-  });
-
+  for (const row of buildInspectionMeterRows(inspections, subsections)) {
+    const key = meterKey(row.meterSerialNumber);
+    const existing = matches.get(key);
+    if (!existing || (hasAnyImage(row) && !hasAnyImage(existing))) matches.set(key, row);
+  }
   return matches;
 }
 
-/** Reconcile each asset against the inspection match map. Status is computed, never stored. */
+/**
+ * Heading for a meter row in the inspection report: "G01-G06 – TurnTender" (shop number, then
+ * name, as a shop is known on site: "Shop 1 – Shoprite"). When the shop number box only repeats
+ * the name — common in field data ("Turn Tender") — the name is printed once.
+ */
+export function meterRowHeading(shopNumber: string | null | undefined, shopName: string | null | undefined): string {
+  const number = (shopNumber || "").trim();
+  const name = (shopName || "").trim();
+  if (!number) return name;
+  if (!name || shopNumberCode(number) === shopNumberCode(name)) return name || number;
+  return `${number} – ${name}`;
+}
+
+/** Display form of a board meter row: "Main DB C · G01-G06 · TurnTender". */
+export function meterRowLabel(row: InspectionTenantMatch): string {
+  const parts = [row.subsectionName?.trim(), row.shopNumber?.trim(), row.shopName?.trim()].filter(Boolean) as string[];
+  // Field staff often type the shop name into the shop number box; don't print it twice.
+  const deduped = parts.filter((p, i) => i === 0 || shopNumberCode(p) !== shopNumberCode(parts[i - 1]));
+  return deduped.join(" · ") || "Inspection";
+}
+
+// Something on site that states a shop number: a subsection, or a board meter row whose
+// shop number box holds a real number (it often holds the shop NAME, which cannot link).
+interface IdentityCandidate {
+  code: string;
+  key: string;
+  shop: SiteShop | null;
+  row: InspectionTenantMatch | null;
+  label: string;
+}
+
+/**
+ * Reconcile each register row against what was found on site. Status is computed, never stored.
+ *
+ * The site is the truth. Serial-only matching (the original design) trusted the REGISTER's
+ * serial to say which meter a premises has, so a register with swapped serials matched every
+ * premises to its neighbour's meter — at 204 Oxford the register row for Turn 'n Tender showed
+ * "Verified" against the meter row for DB F3A. So:
+ *
+ *   1. Shop link. A register row is tied to the site shop with the same shop number (a
+ *      subsection, else a board meter row whose shop number is a real number). Rows whose
+ *      serial also agrees are paired first, so duplicate shop numbers resolve by serial;
+ *      a lone remaining pair links even when the serials differ — that is the point: the
+ *      register serial is then reported as wrong.
+ *   2. Serial fallback, for register rows with no shop link. A serial that the site places
+ *      on ANOTHER premises is a "wrong meter", never a verification, and its CT/breaker are
+ *      not compared (they belong to the other meter).
+ *   3. Previous-serial fallback, kept separate as before.
+ */
 export function buildComparisonResults(
   assets: AssetForComparison[],
   inspectionMeterMatches: Map<string, InspectionTenantMatch>,
+  siteShops: SiteShop[] = [],
 ): ComparisonResult[] {
-  const lookup = (serial: string | null | undefined): InspectionTenantMatch | null => {
-    const normalized = normalizeMeterSerial(serial);
-    if (!normalized || SENTINELS.has(normalized)) return null;
-    return inspectionMeterMatches.get(normalized) || null;
+  const candidates: IdentityCandidate[] = [
+    ...siteShops.map((shop) => ({
+      code: siteShopCode(shop),
+      key: meterKey(shop.meter_serial_number),
+      shop,
+      row: null,
+      label: siteShopLabel(shop),
+    })),
+    ...[...inspectionMeterMatches.values()].map((row) => ({
+      code: /\d/.test(row.shopNumber || "") ? shopNumberCode(row.shopNumber) : "",
+      key: meterKey(row.meterSerialNumber),
+      shop: null,
+      row,
+      label: meterRowLabel(row),
+    })),
+  ].filter((c) => c.code);
+
+  const shopByKey = new Map<string, SiteShop>();
+  for (const shop of siteShops) {
+    const key = meterKey(shop.meter_serial_number);
+    if (key && !shopByKey.has(key)) shopByKey.set(key, shop);
+  }
+
+  const codeOf = new Map(assets.map((a) => [a.id, premisesShopCode(a.premises_id)]));
+  const linked = new Map<string, IdentityCandidate>();
+  const taken = new Set<IdentityCandidate>();
+  const take = (assetId: string, c: IdentityCandidate) => {
+    linked.set(assetId, c);
+    // The same meter is often recorded twice (its subsection and its board row); one link claims both.
+    for (const other of candidates) if (other === c || (c.key && other.key === c.key)) taken.add(other);
+  };
+  const freeFor = (a: AssetForComparison) => {
+    const code = codeOf.get(a.id);
+    return code ? candidates.filter((c) => c.code === code && !taken.has(c)) : [];
+  };
+
+  // 1a. Shop number AND serial (current or previous) agree.
+  for (const a of assets) {
+    const keys = [meterKey(a.meter_serial_number), meterKey(a.old_meter_serial_number)].filter(Boolean);
+    const hit = freeFor(a).find((c) => c.key && keys.includes(c.key));
+    if (hit) take(a.id, hit);
+  }
+  // 1b. Shop number agrees, serial does not — only when unambiguous on both sides.
+  for (const a of assets) {
+    if (linked.has(a.id)) continue;
+    const code = codeOf.get(a.id);
+    if (!code) continue;
+    const rivals = assets.filter((b) => !linked.has(b.id) && codeOf.get(b.id) === code);
+    if (rivals.length !== 1) continue;
+    const free = freeFor(a);
+    const shops = free.filter((c) => c.shop);
+    const pick = shops.length === 1 ? shops[0] : shops.length === 0 && free.length === 1 ? free[0] : null;
+    if (pick) take(a.id, pick);
+  }
+
+  // Which premises the site says each linked meter belongs to.
+  const owners = new Map<string, { assetId: string; premisesId: string; label: string }>();
+  for (const a of assets) {
+    const c = linked.get(a.id);
+    if (c?.key) owners.set(c.key, { assetId: a.id, premisesId: a.premises_id, label: c.label });
+  }
+
+  const compareSpecs = (asset: AssetForComparison, row: InspectionTenantMatch | null) => ({
+    ctMatch: row ? compareValues(asset.ct_ratio, row.ctSizeAndRatio) : ("na" as MatchStatus),
+    breakerMatch: row ? compareValues(asset.breaker_size, row.breakerSize) : ("na" as MatchStatus),
+  });
+
+  const result = (
+    asset: AssetForComparison,
+    fields: Omit<ComparisonResult, "asset" | "status" | "verified" | "hasDiscrepancy">,
+  ): ComparisonResult => {
+    const hasDiscrepancy =
+      !!fields.belongsTo ||
+      fields.serialMatch === "mismatch" ||
+      fields.ctMatch === "mismatch" ||
+      fields.breakerMatch === "mismatch";
+    const found = !!(fields.inspectionMatch || fields.siteShop);
+    const status: VerificationStatus = !found
+      ? "unverified"
+      : fields.belongsTo
+        ? "wrong_meter"
+        : fields.matchedOnOldSerial
+          ? "prev_meter"
+          : hasDiscrepancy
+            ? "mismatch"
+            : "verified";
+    return { asset, ...fields, status, verified: found, hasDiscrepancy };
   };
 
   return assets.map((asset) => {
-    // Current serial wins. Only when it finds nothing do we fall back to the serial the
-    // register records for the meter this one replaced.
-    const currentMatch = lookup(asset.meter_serial_number);
-    const oldMatch = currentMatch ? null : lookup(asset.old_meter_serial_number);
-    const inspectionMatch = currentMatch ?? oldMatch;
-
-    const ctMatch = inspectionMatch ? compareValues(asset.ct_ratio, inspectionMatch.ctSizeAndRatio) : "na";
-    const breakerMatch = inspectionMatch ? compareValues(asset.breaker_size, inspectionMatch.breakerSize) : "na";
-
-    return {
-      asset,
-      inspectionMatch,
-      verified: !!inspectionMatch,
-      matchedOnOldSerial: !!oldMatch,
-      ctMatch,
-      breakerMatch,
-      hasDiscrepancy: ctMatch === "mismatch" || breakerMatch === "mismatch",
+    const currentKey = meterKey(asset.meter_serial_number);
+    const oldKey = meterKey(asset.old_meter_serial_number);
+    const ownedByOther = (key: string) => {
+      const owner = key ? owners.get(key) : undefined;
+      return owner && owner.assetId !== asset.id ? owner : undefined;
     };
+
+    // 1. Shop link: the site serial is the truth.
+    const link = linked.get(asset.id);
+    if (link) {
+      let siteKey = link.key;
+      let siteSerial = (link.shop ? link.shop.meter_serial_number : link.row?.meterSerialNumber) ?? null;
+      let row = link.row ?? (siteKey ? inspectionMeterMatches.get(siteKey) ?? null : null);
+      // The shop was found but no usable serial was recorded on it ("METER NOT MARKED"):
+      // use the register serial's meter row, unless the site puts that meter elsewhere.
+      if (!siteKey && currentKey && !ownedByOther(currentKey)) {
+        row = inspectionMeterMatches.get(currentKey) ?? null;
+        if (row) {
+          siteKey = currentKey;
+          siteSerial = row.meterSerialNumber;
+        }
+      }
+      const matchedOnOldSerial = !!siteKey && siteKey !== currentKey && siteKey === oldKey;
+      return result(asset, {
+        inspectionMatch: row,
+        siteShop: link.shop ?? (siteKey ? shopByKey.get(siteKey) ?? null : null),
+        linkedBy: "shop",
+        siteSerial: siteKey ? siteSerial : null,
+        serialMatch: !siteKey || !currentKey ? "na" : siteKey === currentKey || matchedOnOldSerial ? "match" : "mismatch",
+        belongsTo: null,
+        matchedOnOldSerial,
+        ...compareSpecs(asset, row),
+      });
+    }
+
+    // 2. Serial fallback — unless the site says this meter is another premises'.
+    const owner = ownedByOther(currentKey);
+    if (owner) {
+      return result(asset, {
+        inspectionMatch: inspectionMeterMatches.get(currentKey) ?? null,
+        siteShop: shopByKey.get(currentKey) ?? null,
+        linkedBy: "serial",
+        siteSerial: null,
+        serialMatch: "na",
+        belongsTo: { premisesId: owner.premisesId, label: owner.label },
+        matchedOnOldSerial: false,
+        ctMatch: "na",
+        breakerMatch: "na",
+      });
+    }
+    const currentRow = currentKey ? inspectionMeterMatches.get(currentKey) ?? null : null;
+    const currentShop = currentKey ? shopByKey.get(currentKey) ?? null : null;
+    if (currentRow || currentShop) {
+      return result(asset, {
+        inspectionMatch: currentRow,
+        siteShop: currentShop,
+        linkedBy: "serial",
+        siteSerial: currentRow?.meterSerialNumber ?? currentShop?.meter_serial_number ?? null,
+        serialMatch: "match",
+        belongsTo: null,
+        matchedOnOldSerial: false,
+        ...compareSpecs(asset, currentRow),
+      });
+    }
+
+    // 3. Previous serial: evidence about the meter this one replaced.
+    const oldRow = oldKey && !ownedByOther(oldKey) ? inspectionMeterMatches.get(oldKey) ?? null : null;
+    return result(asset, {
+      inspectionMatch: oldRow,
+      siteShop: null,
+      linkedBy: oldRow ? "old_serial" : null,
+      siteSerial: oldRow?.meterSerialNumber ?? null,
+      serialMatch: "na",
+      belongsTo: null,
+      matchedOnOldSerial: !!oldRow,
+      ...compareSpecs(asset, oldRow),
+    });
+  });
+}
+
+export interface VerificationStats {
+  total: number;
+  /** Anything found on site for the row (includes mismatches, wrong meters, previous meters). */
+  verified: number;
+  verifiedNoDiscrepancy: number;
+  /** Rows with at least one discrepancy (value or serial mismatch, or wrong meter). */
+  discrepancies: number;
+  wrongMeter: number;
+  serialMismatches: number;
+  previousMeter: number;
+  unverified: number;
+  withImages: number;
+}
+
+/** The one definition of every headline count, shared by the tab, the table and the PDF. */
+export function summarizeResults(results: ComparisonResult[]): VerificationStats {
+  const count = (pred: (r: ComparisonResult) => boolean) => results.filter(pred).length;
+  return {
+    total: results.length,
+    verified: count((r) => r.verified),
+    verifiedNoDiscrepancy: count((r) => r.status === "verified"),
+    discrepancies: count((r) => r.status === "mismatch" || r.status === "wrong_meter"),
+    wrongMeter: count((r) => r.status === "wrong_meter"),
+    serialMismatches: count((r) => r.serialMatch === "mismatch"),
+    previousMeter: count((r) => r.status === "prev_meter"),
+    unverified: count((r) => r.status === "unverified"),
+    withImages: count((r) => !!r.inspectionMatch && hasAnyImage(r.inspectionMatch) && r.status !== "wrong_meter"),
+  };
+}
+
+/**
+ * Board meter rows that no register row accounts for — meters on site that are missing from
+ * the register (or registered under a mistyped serial). One entry per meter.
+ */
+export function findUnregisteredMeters(
+  meterRows: InspectionTenantMatch[],
+  results: ComparisonResult[],
+): InspectionTenantMatch[] {
+  // A meter counts as registered only when a register row is actually tied to it. A register
+  // row that merely quotes its serial against the wrong premises does not account for it.
+  const accounted = new Set<string>();
+  for (const r of results) {
+    if (r.status === "wrong_meter") continue;
+    for (const s of [r.siteSerial, r.inspectionMatch?.meterSerialNumber]) {
+      const key = meterKey(s);
+      if (key) accounted.add(key);
+    }
+  }
+  const seen = new Set<string>();
+  return meterRows.filter((row) => {
+    const key = meterKey(row.meterSerialNumber);
+    if (!key || accounted.has(key) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 

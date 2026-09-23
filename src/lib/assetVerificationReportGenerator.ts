@@ -14,7 +14,7 @@ import { generateDocumentFilename } from "./documentDesignStandards";
 import { generatePdfBlob } from "./pdfMakeConfig";
 import { loadCompanyBranding, imageUrlToBase64, formatPdfDate, generateReferenceNumber } from "./pdfBranding";
 import { PDFComplianceCheck, createComplianceResult } from "./pdfMakeUtils";
-import type { ComparisonResult } from "./assetVerification";
+import type { ComparisonResult, InspectionTenantMatch, VerificationStats } from "./assetVerification";
 import { buildAssetVerificationReportModel } from "./assetVerificationReportModel";
 import { buildAssetVerificationReportDocDef } from "./assetVerificationReport";
 import { loadImagesSimple } from "./simpleImageLoader";
@@ -23,14 +23,9 @@ export interface InspectionGeneratorOptions {
   siteName: string;
   clientName?: string;
   comparisonResults: ComparisonResult[];
-  stats: {
-    total: number;
-    verified: number;
-    verifiedNoDiscrepancy: number;
-    discrepancies: number;
-    unverified: number;
-    withImages: number;
-  };
+  stats: VerificationStats;
+  /** Meters found on site that no register row is tied to. */
+  unregisteredMeters?: InspectionTenantMatch[];
   companyLogoUrl?: string | null;
 }
 
@@ -41,7 +36,7 @@ export interface InspectionGeneratorOptions {
 export async function generateInspectionBasedReport(
   options: InspectionGeneratorOptions
 ): Promise<{ blob: Blob; filename: string; complianceChecks: PDFComplianceCheck }> {
-  const { siteName, clientName, comparisonResults, stats, companyLogoUrl } = options;
+  const { siteName, clientName, comparisonResults, stats, unregisteredMeters, companyLogoUrl } = options;
 
   // Branding: explicit logo override, else the company branding logo, else the renderer's text fallback.
   const logoDataUrl = companyLogoUrl
@@ -55,6 +50,7 @@ export async function generateInspectionBasedReport(
     referenceNumber: generateReferenceNumber("AVR"),
     comparisonResults,
     stats,
+    unregisteredMeters,
   });
 
   // Resolve compressed reference thumbnails (meter / CT / breaker) for every verified asset that

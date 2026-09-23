@@ -5,6 +5,14 @@ import {
   buildInspectionMeterMatches,
   buildComparisonResults,
   parseAssetRows,
+  meterKey,
+  premisesShopCode,
+  meterRowHeading,
+  siteShopCode,
+  summarizeResults,
+  buildInspectionMeterRows,
+  findUnregisteredMeters,
+  type SiteShop,
   type InspectionRecord,
   type SubsectionNameRecord,
   type AssetForComparison,
@@ -274,5 +282,198 @@ describe("parseAssetRows (electrical-only)", () => {
 
   it("returns empty for sheets with no recognizable section/header", () => {
     expect(parseAssetRows([["random"], ["", "junk", "data"]])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Shop identity. Fixture is the real 204 Oxford data (2026-09-23): the register's serials for
+// the Main DB C sub-boards are swapped, the Main DB C inspection and the shop subsections agree
+// with each other. The site is the truth.
+// ---------------------------------------------------------------------------------------------
+
+describe("compareValues — breaker pole designation", () => {
+  it("ignores a pole count only one side records", () => {
+    expect(compareValues("40A", "40A DP")).toBe("match");
+    expect(compareValues("63A TP", "63A")).toBe("match");
+  });
+  it("still flags different ratings or different pole counts", () => {
+    expect(compareValues("40A", "63A DP")).toBe("mismatch");
+    expect(compareValues("80A", "60A SP")).toBe("mismatch");
+    expect(compareValues("63A SP", "63A TP")).toBe("mismatch");
+  });
+});
+
+describe("shop numbers and meter keys", () => {
+  it("reads the shop number from a register premises id", () => {
+    expect(premisesShopCode("OX - G01-G06")).toBe("G01G06");
+    expect(premisesShopCode("OX - DB - D")).toBe("DBD");
+    expect(premisesShopCode("OX - GF 07")).toBe("GF07");
+  });
+
+  it("reads a shop number from a subsection name only when the name is one", () => {
+    expect(siteShopCode({ name: "SHOP G01-G06" })).toBe("G01G06");
+    expect(siteShopCode({ name: "SHOP G13A - G15" })).toBe("G13AG15");
+    expect(siteShopCode({ name: "SHOP G16 & G17" })).toBe("G16G17");
+    expect(siteShopCode({ name: "Shop S101" })).toBe("S101");
+    expect(siteShopCode({ name: "N202A-201A" })).toBe("N202A201A");
+    expect(siteShopCode({ name: "Main DB F1 1st Floor North" })).toBe("");
+    expect(siteShopCode({ name: "MED SUITE 1" })).toBe("");
+    expect(siteShopCode({ name: "1ST FLOOR SOUTH" })).toBe("");
+  });
+
+  it("lets an explicit shop number override the name", () => {
+    expect(siteShopCode({ name: "Main DB F1 1st Floor North", shop_number: "DB-F1" })).toBe("DBF1");
+    expect(siteShopCode({ name: "MED SUITE 1", shop_number: "Medical Suite 01" })).toBe("MEDICALSUITE01");
+  });
+
+  it("heads a meter row 'shop number – name', printing a repeated name once", () => {
+    expect(meterRowHeading("Shop 1", "Shoprite")).toBe("Shop 1 – Shoprite");
+    expect(meterRowHeading("G01-G06", "TurnTender")).toBe("G01-G06 – TurnTender");
+    expect(meterRowHeading("Turn Tender", "TurnTender")).toBe("TurnTender");
+    expect(meterRowHeading("", "Misfit")).toBe("Misfit");
+    expect(meterRowHeading("N205", "")).toBe("N205");
+  });
+
+  it("keys a serial on its digit run so field annotations still match", () => {
+    expect(meterKey("35727818 METER OFF")).toBe("35727818");
+    expect(meterKey("34445064 TO BE REPLACED")).toBe("34445064");
+    expect(meterKey("N/A")).toBe("");
+    expect(meterKey("")).toBe("");
+  });
+});
+
+describe("buildComparisonResults — the site is the truth (204 Oxford, Main DB C)", () => {
+  const dbc = (id: string, shopName: string, serial: string, ct: string, breaker: string, shopNumber = shopName) => ({
+    id, shopName, shopNumber, meterSerialNumber: serial, ctSizeAndRatio: ct, breakerSize: breaker, meterImage: `m-${id}`,
+  });
+  const inspections: InspectionRecord[] = [
+    {
+      id: "i-dbc",
+      title: "EMB",
+      subsection_id: "s-dbc",
+      json_data: {
+        tenants: [
+          dbc("t5", "TurnTender", "35753503", "250/5A", "250A", "Turn Tender"),
+          dbc("t6", "DB D (Sub BB)", "35753506", "250/5A", "250A"),
+          dbc("t7", "Trabella", "35753504", "200/5A", "250A"),
+          dbc("t12", "DB F 3A", "35753143", "250/5A", "250A"),
+          dbc("t13", "DB Sub F1", "35753144", "250/5A", "250A"),
+          dbc("t2", "Misfit", "34445082", "N/A", "63A"),
+        ],
+      },
+    },
+  ];
+  const subs: SubsectionNameRecord[] = [{ id: "s-dbc", name: "Main DB C" }];
+  const shops: SiteShop[] = [
+    { id: "s1", name: "SHOP G01-G06", tenant_name: "TURN 'N TENDER", meter_serial_number: "35753503" },
+    { id: "s2", name: "SHOP N105", tenant_name: "TRABELLA PIZZERIA", meter_serial_number: "35753504" },
+    { id: "s3", name: "SHOP F03", tenant_name: "MISSFIT BOXING", meter_serial_number: "34445082" },
+    { id: "s4", name: "Main DB F1 1st Floor North", tenant_name: "Main DB", meter_serial_number: "35753144" },
+  ];
+  const reg = (id: string, premises_id: string, serial: string, ct: string, breaker: string): AssetForComparison => ({
+    id, premises_id, trade_as: null, meter_serial_number: serial, ct_ratio: ct, breaker_size: breaker, asset_category: "electrical_meter",
+  });
+  const register = [
+    reg("a-tt", "OX - G01-G06", "35753143", "250/5A", "250A"),
+    reg("a-n105", "OX - N105", "35753144", "150/5A", "160A"),
+    reg("a-f03", "OX - F03", "34445190", "N/A", "63A"),
+    reg("a-esc", "OX - ESCELATOR UP", "34445082", "N/A", "30A"),
+    reg("a-dbf1", "OX - DB-F1", "35753503", "400/5A", "400A"),
+    reg("a-dbd", "OX - DB - D", "35753506", "200/5A", "200A"),
+  ];
+  const matches = buildInspectionMeterMatches(inspections, subs);
+  const run = (s: SiteShop[] = shops) => new Map(buildComparisonResults(register, matches, s).map((r) => [r.asset.id, r]));
+
+  it("no longer verifies Turn 'n Tender against the DB F3A meter", () => {
+    const tt = run().get("a-tt")!;
+    expect(tt.linkedBy).toBe("shop");
+    expect(tt.status).toBe("mismatch");
+    expect(tt.serialMatch).toBe("mismatch");
+    expect(tt.siteSerial).toBe("35753503");
+    expect(tt.inspectionMatch?.shopName).toBe("TurnTender");
+    expect(tt.inspectionMatch?.tenantId).toBe("t5");
+  });
+
+  it("reports the site serial for a shop whose register serial is wrong", () => {
+    const n105 = run().get("a-n105")!;
+    expect(n105.siteSerial).toBe("35753504");
+    expect(n105.inspectionMatch?.shopName).toBe("Trabella");
+    expect(n105.ctMatch).toBe("mismatch"); // 150/5A registered, 200/5A on site
+  });
+
+  it("marks a register serial that the site places on another shop as a wrong meter", () => {
+    const esc = run().get("a-esc")!;
+    expect(esc.status).toBe("wrong_meter");
+    expect(esc.verified).toBe(true);
+    expect(esc.belongsTo?.premisesId).toBe("OX - F03");
+    expect(esc.ctMatch).toBe("na");
+    expect(esc.breakerMatch).toBe("na"); // the 63A belongs to Missfit, not the escalator
+
+    const dbf1 = run().get("a-dbf1")!;
+    expect(dbf1.status).toBe("wrong_meter");
+    expect(dbf1.belongsTo?.premisesId).toBe("OX - G01-G06");
+  });
+
+  it("links a board to its register row once someone gives the subsection a shop number", () => {
+    const withShopNumber = shops.map((s) => (s.id === "s4" ? { ...s, shop_number: "DB-F1" } : s));
+    const dbf1 = run(withShopNumber).get("a-dbf1")!;
+    expect(dbf1.linkedBy).toBe("shop");
+    expect(dbf1.siteSerial).toBe("35753144");
+    expect(dbf1.inspectionMatch?.shopName).toBe("DB Sub F1");
+    expect(dbf1.breakerMatch).toBe("mismatch"); // 400A registered, 250A on site
+    // …and Trabella's register serial 35753144 now reads as DB-F1's meter
+    expect(run(withShopNumber).get("a-n105")!.status).toBe("mismatch");
+  });
+
+  it("still verifies by serial where nothing on site contradicts it", () => {
+    const dbd = run().get("a-dbd")!;
+    expect(dbd.linkedBy).toBe("serial");
+    expect(dbd.serialMatch).toBe("match");
+    expect(dbd.status).toBe("mismatch"); // 200/5A vs 250/5A is a real value mismatch
+  });
+
+  it("links through a board meter row's shop number when it is a real number", () => {
+    const rows = buildInspectionMeterMatches(
+      [{ id: "i", title: "EMB", subsection_id: null, json_data: { tenants: [{ id: "x", shopName: "Crazy Store", shopNumber: "L03A", meterSerialNumber: "36402545" }] } }],
+      [],
+    );
+    const res = new Map(
+      buildComparisonResults(
+        [reg("l03", "OX - L03", "36402545", "N/A", ""), reg("l03a", "OX - L03A", "34445208", "N/A", "80A")],
+        rows,
+      ).map((r) => [r.asset.id, r]),
+    );
+    expect(res.get("l03a")!.siteSerial).toBe("36402545");
+    expect(res.get("l03a")!.serialMatch).toBe("mismatch");
+    expect(res.get("l03")!.status).toBe("wrong_meter");
+  });
+
+  it("resolves a duplicated shop number by serial", () => {
+    const dupShops: SiteShop[] = [
+      { id: "g9a", name: "SHOP G09", tenant_name: "NOT IN USE", meter_serial_number: "34445163" },
+      { id: "g9b", name: "SHOP G09", tenant_name: "SCAPE GOAT", meter_serial_number: "34617963" },
+    ];
+    const res = buildComparisonResults(
+      [reg("p1", "OX - G09", "34617963", "N/A", "80A"), reg("p2", "OX - G09", "34445163", "N/A", "63A")],
+      new Map(),
+      dupShops,
+    );
+    expect(res.map((r) => r.siteShop?.id)).toEqual(["g9b", "g9a"]);
+    expect(res.every((r) => r.status === "verified")).toBe(true);
+  });
+
+  it("counts every status once, and lists meters on site that are not in the register", () => {
+    const results = buildComparisonResults(register, matches, shops);
+    const stats = summarizeResults(results);
+    expect(stats.total).toBe(6);
+    expect(stats.wrongMeter).toBe(2);
+    expect(stats.verifiedNoDiscrepancy + stats.discrepancies + stats.previousMeter + stats.unverified).toBe(6);
+
+    const rows = buildInspectionMeterRows(inspections, subs);
+    const missing = findUnregisteredMeters(rows, results).map((r) => r.shopName);
+    // Both sub-board meters appear in the register only as OTHER premises' (wrong) serials —
+    // 35753143 as Turn 'n Tender's, 35753144 as Trabella's — so neither has a register row tied
+    // to it. DB D's meter is tied to OX - DB - D and is not listed.
+    expect(missing).toEqual(["DB F 3A", "DB Sub F1"]);
   });
 });

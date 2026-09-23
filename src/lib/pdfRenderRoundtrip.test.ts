@@ -107,6 +107,15 @@ import { generateFloorPlanReport } from './floorPlanReportGenerator';
 import { generateFortressChecklistPdf } from './fortressChecklistReportGenerator';
 import { generateCalendarPdf } from './calendarReportGenerator';
 import { generateInspectionTemplatePdf } from './inspectionTemplateReportGenerator';
+import { buildAssetVerificationReportDocDef } from './assetVerificationReport';
+import { buildAssetVerificationReportModel } from './assetVerificationReportModel';
+import {
+  buildInspectionMeterMatches,
+  buildInspectionMeterRows,
+  buildComparisonResults,
+  summarizeResults,
+  findUnregisteredMeters,
+} from './assetVerification';
 
 const HOSTILE = 'Ω/km — <script>alert(1)</script> “quotes” 🔥';
 
@@ -236,6 +245,38 @@ describe('G1 render round-trips — %PDF- magic bytes + page counts', () => {
     const large = await pdfInfo(await generatePdfBlob(buildSiteCocReportDocDef(model(40))));
     expect(large.magic).toBe('%PDF-');
     expect(large.pages).toBeGreaterThan(small.pages);
+  });
+
+  it('asset verification report renders every status, incl. wrong meters and unregistered meters', async () => {
+    const inspections = [{
+      id: 'i1', title: 'EMB', subsection_id: 'b1',
+      json_data: { tenants: [
+        { id: 't1', shopName: `TurnTender ${HOSTILE}`, shopNumber: 'Turn Tender', meterSerialNumber: '35753503', ctSizeAndRatio: '250/5A', breakerSize: '250A' },
+        { id: 't2', shopName: 'DB Sub F1', meterSerialNumber: '35753144', ctSizeAndRatio: '250/5A', breakerSize: '250A' },
+      ] },
+    }];
+    const shops = [
+      { id: 'b1', name: 'Main DB C' },
+      { id: 's1', name: 'SHOP G01-G06', tenant_name: "TURN 'N TENDER", meter_serial_number: '35753503' },
+    ];
+    const asset = (id: string, premises_id: string, serial: string) => ({
+      id, premises_id, trade_as: HOSTILE, meter_serial_number: serial, ct_ratio: '400/5A', breaker_size: '400A', asset_category: 'electrical_meter',
+    });
+    const results = buildComparisonResults(
+      [asset('a1', 'OX - G01-G06', '35753143'), asset('a2', 'OX - DB-F1', '35753503'), asset('a3', 'OX - SOLAR', '32910033')],
+      buildInspectionMeterMatches(inspections, shops),
+      shops,
+    );
+    expect(results.map((r) => r.status)).toEqual(['mismatch', 'wrong_meter', 'unverified']);
+    const model = buildAssetVerificationReportModel({
+      siteName: `204 Oxford ${HOSTILE}`, generatedAt: '23 September 2026', referenceNumber: 'AVR-TEST',
+      comparisonResults: results, stats: summarizeResults(results),
+      unregisteredMeters: findUnregisteredMeters(buildInspectionMeterRows(inspections, shops), results),
+    });
+    expect(model.unregisteredRows.map((u) => u.meterSerial)).toEqual(['35753144']);
+    const info = await pdfInfo(await generatePdfBlob(buildAssetVerificationReportDocDef(model, null)));
+    expect(info.magic).toBe('%PDF-');
+    expect(info.pages).toBeGreaterThanOrEqual(4);
   });
 
   it('floor plan report renders a real PDF', async () => {
