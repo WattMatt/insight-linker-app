@@ -118,6 +118,11 @@ export interface ComparisonResult {
    * installed — surfaced separately so "Verified" never silently means "verified the old meter".
    */
   matchedOnOldSerial: boolean;
+  /**
+   * True for the second and later copies of the same register row (same premises, same serial)
+   * — left behind by a re-import whose cleanup failed. Copies share the first one's link.
+   */
+  duplicateRow: boolean;
   ctMatch: MatchStatus;
   breakerMatch: MatchStatus;
   hasDiscrepancy: boolean;
@@ -138,6 +143,9 @@ export function normalizeMeterSerial(serial: string | null | undefined): string 
 export function meterKey(serial: string | null | undefined): string {
   const normalized = normalizeMeterSerial(serial);
   if (!normalized || SENTINELS.has(normalized)) return "";
+  // A value with no digits at all ("COMMON AREA", "METER NOT MARKED NEW SHOP") is a note,
+  // not a serial — it must never link two records or be written into the register.
+  if (!/\d/.test(normalized)) return "";
   const digits = (serial || "").match(/\d{6,}/);
   return digits ? digits[0] : normalized;
 }
@@ -213,8 +221,9 @@ export function compareValues(
 ): MatchStatus {
   if (isMissingValue(assetValue) || isMissingValue(inspectionValue)) return "na";
 
-  let a = canonicalizeSpec(assetValue);
-  let b = canonicalizeSpec(inspectionValue);
+  // Breaking capacity ("150 A 25kA") is not part of the rating; "200/5" and "200/5A" are one ratio.
+  let a = canonicalizeSpec(assetValue).replace(BREAKING_CAPACITY, "").replace(RATIO_AMPS, "");
+  let b = canonicalizeSpec(inspectionValue).replace(BREAKING_CAPACITY, "").replace(RATIO_AMPS, "");
   // "40A" vs "40A DP": the field records the pole count, the register rarely does. A pole
   // count only one side states is not a discrepancy; two different pole counts still are.
   const aPole = a.match(POLE_SUFFIX);
@@ -228,6 +237,24 @@ export function compareValues(
 
 // Trailing pole designation on a breaker size: SP/DP/TP/FP or 1P–4P ("63A DP", "100A TP").
 const POLE_SUFFIX = /(?<=A)(SP|DP|TP|FP|[1-4]P)$/;
+const RATIO_AMPS = /(?<=\d\/\d+)A$/;
+const BREAKING_CAPACITY = /(?<=A|P)\d+(\.\d+)?KA$/;
+
+/**
+ * The form a site value is written into the register in, or null when the site value is not a
+ * single clean rating ("80A TBC not marked", "160 A - Refrigeration, 250 A - Main Switch") and
+ * needs a person to read it. Breaker: "63 A 3kA" → "63A", "63A 3P" keeps its pole count.
+ * CT: "300:5" → "300/5A".
+ */
+export function registerSpecValue(field: "ct_ratio" | "breaker_size", value: string | null | undefined): string | null {
+  const v = (value || "").trim();
+  if (field === "breaker_size") {
+    const m = v.match(/^(\d+(?:\.\d+)?)\s*A\s*(SP|DP|TP|FP|[1-4]P)?\s*(?:\d+(?:\.\d+)?\s*kA)?$/i);
+    return m ? `${m[1]}A${m[2] ? ` ${m[2].toUpperCase()}` : ""}` : null;
+  }
+  const m = v.match(/^(\d+)\s*[/:]\s*(\d+)\s*A?$/i);
+  return m ? `${m[1]}/${m[2]}A` : null;
+}
 
 function readTenants(jsonData: unknown): InspectionTenant[] {
   if (!jsonData || typeof jsonData !== "object") return [];
@@ -393,7 +420,11 @@ export function buildComparisonResults(
     if (linked.has(a.id)) continue;
     const code = codeOf.get(a.id);
     if (!code) continue;
-    const rivals = assets.filter((b) => !linked.has(b.id) && codeOf.get(b.id) === code);
+    // Rivals are distinct meters: identical copies of this row (a double import) are not rivals.
+    const same = (b: AssetForComparison) =>
+      (b.premises_id || "").trim().toUpperCase() === (a.premises_id || "").trim().toUpperCase() &&
+      meterKey(b.meter_serial_number) === meterKey(a.meter_serial_number);
+    const rivals = assets.filter((b) => !linked.has(b.id) && codeOf.get(b.id) === code && !(b !== a && same(b)));
     if (rivals.length !== 1) continue;
     const free = freeFor(a);
     const shops = free.filter((c) => c.shop);
@@ -401,11 +432,36 @@ export function buildComparisonResults(
     if (pick) take(a.id, pick);
   }
 
+  // Duplicate register rows (same premises, same serial — a re-import whose cleanup failed) are
+  // one meter: every copy shares the first copy's link, so none is reported as "wrong meter"
+  // against itself and a correction reaches all of them.
+  const twinKey = (a: AssetForComparison) => {
+    const key = meterKey(a.meter_serial_number);
+    return key ? `${(a.premises_id || "").trim().toUpperCase()}|${key}` : "";
+  };
+  const firstOfTwin = new Map<string, AssetForComparison>();
+  const duplicates = new Set<string>();
+  for (const a of assets) {
+    const k = twinKey(a);
+    if (!k) continue;
+    const first = firstOfTwin.get(k);
+    if (!first) {
+      firstOfTwin.set(k, a);
+      continue;
+    }
+    duplicates.add(a.id);
+    const link = linked.get(first.id) ?? linked.get(a.id);
+    if (link) {
+      linked.set(first.id, link);
+      linked.set(a.id, link);
+    }
+  }
+
   // Which premises the site says each linked meter belongs to.
   const owners = new Map<string, { assetId: string; premisesId: string; label: string }>();
   for (const a of assets) {
     const c = linked.get(a.id);
-    if (c?.key) owners.set(c.key, { assetId: a.id, premisesId: a.premises_id, label: c.label });
+    if (c?.key && !owners.has(c.key)) owners.set(c.key, { assetId: a.id, premisesId: a.premises_id, label: c.label });
   }
 
   const compareSpecs = (asset: AssetForComparison, row: InspectionTenantMatch | null) => ({
@@ -415,7 +471,7 @@ export function buildComparisonResults(
 
   const result = (
     asset: AssetForComparison,
-    fields: Omit<ComparisonResult, "asset" | "status" | "verified" | "hasDiscrepancy">,
+    fields: Omit<ComparisonResult, "asset" | "status" | "verified" | "hasDiscrepancy" | "duplicateRow">,
   ): ComparisonResult => {
     const hasDiscrepancy =
       !!fields.belongsTo ||
@@ -432,7 +488,7 @@ export function buildComparisonResults(
           : hasDiscrepancy
             ? "mismatch"
             : "verified";
-    return { asset, ...fields, status, verified: found, hasDiscrepancy };
+    return { asset, ...fields, status, verified: found, hasDiscrepancy, duplicateRow: duplicates.has(asset.id) };
   };
 
   return assets.map((asset) => {
@@ -440,7 +496,8 @@ export function buildComparisonResults(
     const oldKey = meterKey(asset.old_meter_serial_number);
     const ownedByOther = (key: string) => {
       const owner = key ? owners.get(key) : undefined;
-      return owner && owner.assetId !== asset.id ? owner : undefined;
+      const samePremises = owner && owner.premisesId.trim().toUpperCase() === (asset.premises_id || "").trim().toUpperCase();
+      return owner && owner.assetId !== asset.id && !samePremises ? owner : undefined;
     };
 
     // 1. Shop link: the site serial is the truth.
@@ -528,6 +585,8 @@ export interface VerificationStats {
   previousMeter: number;
   unverified: number;
   withImages: number;
+  /** Extra copies of register rows (same premises and serial imported twice). */
+  duplicateRows: number;
 }
 
 /** The one definition of every headline count, shared by the tab, the table and the PDF. */
@@ -543,6 +602,7 @@ export function summarizeResults(results: ComparisonResult[]): VerificationStats
     previousMeter: count((r) => r.status === "prev_meter"),
     unverified: count((r) => r.status === "unverified"),
     withImages: count((r) => !!r.inspectionMatch && hasAnyImage(r.inspectionMatch) && r.status !== "wrong_meter"),
+    duplicateRows: count((r) => r.duplicateRow),
   };
 }
 
@@ -648,4 +708,26 @@ export function parseAssetRows(rows: (string | number)[][]): ParsedAsset[] {
   }
 
   return parsed;
+}
+
+/**
+ * The register fields that differ from what was found on site, as the values to write — the
+ * "Use site values" action and the bulk correction share this one definition. Nothing is
+ * proposed for a wrong meter or a previous-meter match. A serial is only written when the site
+ * holds a real one (a 6+ digit run), and annotations are dropped ("35727818 METER OFF" →
+ * "35727818").
+ */
+export function siteCorrections(result: ComparisonResult): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (result.status === "wrong_meter" || result.matchedOnOldSerial) return out;
+  const siteDigits = (result.siteSerial || "").match(/\d{6,}/);
+  if (result.serialMatch === "mismatch" && siteDigits) out.meter_serial_number = siteDigits[0];
+  const row = result.inspectionMatch;
+  if (!row) return out;
+  const hasValue = (v: string | null | undefined) => compareValues("x", v) !== "na";
+  const ct = registerSpecValue("ct_ratio", row.ctSizeAndRatio);
+  if (ct && (result.ctMatch === "mismatch" || !hasValue(result.asset.ct_ratio))) out.ct_ratio = ct;
+  const breaker = registerSpecValue("breaker_size", row.breakerSize);
+  if (breaker && (result.breakerMatch === "mismatch" || !hasValue(result.asset.breaker_size))) out.breaker_size = breaker;
+  return out;
 }

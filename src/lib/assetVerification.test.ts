@@ -6,6 +6,8 @@ import {
   buildComparisonResults,
   parseAssetRows,
   meterKey,
+  siteCorrections,
+  registerSpecValue,
   premisesShopCode,
   meterRowHeading,
   siteShopCode,
@@ -475,5 +477,110 @@ describe("buildComparisonResults — the site is the truth (204 Oxford, Main DB 
     // 35753143 as Turn 'n Tender's, 35753144 as Trabella's — so neither has a register row tied
     // to it. DB D's meter is tied to OX - DB - D and is not listed.
     expect(missing).toEqual(["DB F 3A", "DB Sub F1"]);
+  });
+});
+
+describe("site notes are never serials", () => {
+  it("gives no key to a value without digits", () => {
+    expect(meterKey("COMMON AREA")).toBe("");
+    expect(meterKey("METER NOT MARKED NEW SHOP")).toBe("");
+  });
+
+  it("does not link or correct through a note in the serial box", () => {
+    const [r] = buildComparisonResults(
+      [{ id: "a", premises_id: "OX - N106", trade_as: null, meter_serial_number: "34445000", ct_ratio: null, breaker_size: null, asset_category: "electrical_meter" }],
+      new Map(),
+      [{ id: "s", name: "N106", tenant_name: "Denshé", meter_serial_number: "METER NOT MARKED NEW SHOP" }],
+    );
+    expect(r.linkedBy).toBe("shop");
+    expect(r.siteSerial).toBeNull();
+    expect(siteCorrections(r)).toEqual({});
+  });
+});
+
+describe("siteCorrections", () => {
+  const base = { id: "a", trade_as: null, asset_category: "electrical_meter" };
+  const row = (serial: string, ct: string, breaker: string) =>
+    buildInspectionMeterMatches(
+      [{ id: "i", title: "EMB", subsection_id: null, json_data: { tenants: [{ id: "t", shopName: "X", meterSerialNumber: serial, ctSizeAndRatio: ct, breakerSize: breaker }] } }],
+      [],
+    );
+
+  it("proposes the site serial, CT and breaker for a shop-linked row", () => {
+    const [r] = buildComparisonResults(
+      [{ ...base, premises_id: "OX - G01-G06", meter_serial_number: "35753143", ct_ratio: "200/5A", breaker_size: "200A" }],
+      row("35753503 METER OFF", "250/5A", "250A"),
+      [{ id: "s", name: "SHOP G01-G06", meter_serial_number: "35753503 METER OFF" }],
+    );
+    expect(siteCorrections(r)).toEqual({ meter_serial_number: "35753503", ct_ratio: "250/5A", breaker_size: "250A" });
+  });
+
+  it("fills a register blank or TBC from the site, but leaves agreeing values alone", () => {
+    const [r] = buildComparisonResults(
+      [{ ...base, premises_id: "OX - S101", meter_serial_number: "34445184", ct_ratio: "N/A", breaker_size: "TBC" }],
+      row("34445184", "N/A", "63A DP"),
+    );
+    expect(siteCorrections(r)).toEqual({ breaker_size: "63A DP" });
+  });
+
+  it("proposes nothing for a wrong meter", () => {
+    const results = buildComparisonResults(
+      [
+        { ...base, id: "f03", premises_id: "OX - F03", meter_serial_number: "34445190", ct_ratio: "N/A", breaker_size: "63A" },
+        { ...base, id: "esc", premises_id: "OX - ESCELATOR UP", meter_serial_number: "34445082", ct_ratio: "N/A", breaker_size: "30A" },
+      ],
+      row("34445082", "N/A", "63A"),
+      [{ id: "s", name: "SHOP F03", meter_serial_number: "34445082" }],
+    );
+    expect(results[1].status).toBe("wrong_meter");
+    expect(siteCorrections(results[1])).toEqual({});
+    expect(siteCorrections(results[0])).toEqual({ meter_serial_number: "34445082" });
+  });
+});
+
+describe("registerSpecValue and breaking capacity", () => {
+  it("writes clean ratings and refuses notes", () => {
+    expect(registerSpecValue("breaker_size", "63 A 3kA")).toBe("63A");
+    expect(registerSpecValue("breaker_size", "63A 3p")).toBe("63A 3P");
+    expect(registerSpecValue("breaker_size", "20 A")).toBe("20A");
+    expect(registerSpecValue("breaker_size", "80A  TBC not marked")).toBeNull();
+    expect(registerSpecValue("breaker_size", "160 A 15kA - Refrigeration, 250 A 36kA - Main Switch")).toBeNull();
+    expect(registerSpecValue("ct_ratio", "300:5")).toBe("300/5A");
+    expect(registerSpecValue("ct_ratio", "N/A")).toBeNull();
+  });
+  it("does not count breaking capacity as a mismatch", () => {
+    expect(compareValues("150A", "150 A 25kA")).toBe("match");
+    expect(compareValues("100A", "63 A 3kA")).toBe("mismatch");
+  });
+});
+
+describe("duplicate register rows (a re-import whose cleanup failed)", () => {
+  const reg = (id: string, breaker: string) => ({
+    id, premises_id: "CPB - SHOP 114", trade_as: null, meter_serial_number: "34445216", ct_ratio: "N/A", breaker_size: breaker, asset_category: "electrical_meter",
+  });
+  const rows = buildInspectionMeterMatches(
+    [{ id: "i", title: "EMB", subsection_id: null, json_data: { tenants: [{ id: "t", shopName: "Markham", meterSerialNumber: "34445216", breakerSize: "80A" }] } }],
+    [],
+  );
+  const shops = [{ id: "s", name: "SHOP 114", meter_serial_number: "34445216" }];
+
+  it("links every copy the same way, never as a wrong meter against itself", () => {
+    const results = buildComparisonResults([reg("a", "60A"), reg("b", "80A")], rows, shops);
+    expect(results.map((r) => r.status)).toEqual(["mismatch", "verified"]);
+    expect(results.map((r) => r.linkedBy)).toEqual(["shop", "shop"]);
+    expect(results.map((r) => r.duplicateRow)).toEqual([false, true]);
+    expect(summarizeResults(results).duplicateRows).toBe(1);
+  });
+
+  it("still shop-links a duplicated row whose register serial is wrong", () => {
+    const wrong = { ...reg("a", "80A"), meter_serial_number: "11111111" };
+    const results = buildComparisonResults([wrong, { ...wrong, id: "b" }], rows, shops);
+    expect(results.map((r) => r.serialMatch)).toEqual(["mismatch", "mismatch"]);
+    expect(results.map((r) => siteCorrections(r).meter_serial_number)).toEqual(["34445216", "34445216"]);
+  });
+
+  it("treats 200/5 and 200/5A as the same ratio", () => {
+    expect(compareValues("200/5A", "200:5")).toBe("match");
+    expect(compareValues("150/5", "150/5A")).toBe("match");
   });
 });

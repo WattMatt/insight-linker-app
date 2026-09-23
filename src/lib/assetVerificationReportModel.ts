@@ -210,6 +210,7 @@ export function buildAssetVerificationReportModel(input: AvReportInput): AvRepor
     (summary.wrongMeter ? ` (${summary.wrongMeter} of them quote another premises' meter)` : "") +
     `, and ${summary.unverified} ${summary.unverified === 1 ? "has" : "have"} no matching site record. ` +
     (summary.unregistered ? `${plural(summary.unregistered, "meter was", "meters were")} found on site with no register entry. ` : "") +
+    (stats.duplicateRows ? `The register lists ${plural(stats.duplicateRows, "row", "rows")} twice (same premises and serial). ` : "") +
     `Overall verification is ${verificationPct}%.`;
 
   return {

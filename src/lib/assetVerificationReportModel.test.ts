@@ -25,6 +25,7 @@ const result = (over: Partial<ComparisonResult> = {}): ComparisonResult => {
     status: "unverified",
     verified: false,
     matchedOnOldSerial: false,
+    duplicateRow: false,
     ctMatch: "na",
     breakerMatch: "na",
     hasDiscrepancy: false,

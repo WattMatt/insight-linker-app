@@ -644,6 +644,11 @@ export const AssetComparisonTable = ({
                   <TableRow key={result.asset.id} className="group">
                     <TableCell>
                       <div className="font-medium text-sm">{result.asset.premises_id}</div>
+                      {result.duplicateRow && (
+                        <div className="text-[11px] text-muted-foreground" title="The register holds this premises and serial more than once (imported twice)">
+                          duplicate register row
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">

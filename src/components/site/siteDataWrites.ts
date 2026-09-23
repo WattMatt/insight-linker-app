@@ -4,12 +4,13 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import {
-  meterKey,
   normalizeMeterSerial,
-  compareValues,
+  siteCorrections,
   type ComparisonResult,
   type InspectionTenant,
 } from "@/lib/assetVerification";
+
+export { siteCorrections };
 
 export type SubsectionPatch = Partial<{
   name: string;
@@ -59,29 +60,6 @@ export async function updateMeterRow(
     .update({ json_data: { ...jsonData, tenants } as never })
     .eq("id", inspectionId);
   if (updateError) throw updateError;
-}
-
-/**
- * The register fields that differ from what was found on site, as the values to write.
- * Serial annotations ("35727818 METER OFF") are written as the bare serial.
- */
-export function siteCorrections(result: ComparisonResult): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (result.status === "wrong_meter" || result.matchedOnOldSerial) return out;
-  if (result.serialMatch === "mismatch" && result.siteSerial) {
-    out.meter_serial_number = meterKey(result.siteSerial) || result.siteSerial.trim();
-  }
-  const row = result.inspectionMatch;
-  if (row && result.ctMatch === "mismatch" && row.ctSizeAndRatio) out.ct_ratio = row.ctSizeAndRatio.trim();
-  if (row && result.breakerMatch === "mismatch" && row.breakerSize) out.breaker_size = row.breakerSize.trim();
-  // A register blank that the site fills is a correction too.
-  if (row && !result.asset.ct_ratio?.trim() && row.ctSizeAndRatio && compareValues("x", row.ctSizeAndRatio) !== "na") {
-    out.ct_ratio = row.ctSizeAndRatio.trim();
-  }
-  if (row && !result.asset.breaker_size?.trim() && row.breakerSize && compareValues("x", row.breakerSize) !== "na") {
-    out.breaker_size = row.breakerSize.trim();
-  }
-  return out;
 }
 
 /** Write the site's serial / CT / breaker into the register row. Returns what was changed. */
