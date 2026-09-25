@@ -1246,7 +1246,11 @@ Read-only site list filtered by client_id
 
 #### `/client-portal/sites/:siteId` (ClientPortalSiteDetail)
 
-Read-only version of SiteDetail with `readOnly={true}` props passed to child components
+Read-only version of SiteDetail with `readOnly={true}` props passed to child components.
+Header shows the canonical health badge (`useSiteScores`) plus a read-only factor
+breakdown (`HealthFactorRows` over `healthBreakdown()`: snags / inspections / metering
+counts and points, with a "to reach 100%" line). The per-shop outstanding drill-down is
+deliberately admin-only — see `docs/SCORING.md`.
 
 #### `/client-portal/subsections/:subsectionId` (ClientPortalSubsectionDetail)
 

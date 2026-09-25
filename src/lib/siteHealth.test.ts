@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   isMetered, isSnagResolved, isInspectionCompleted,
   factorScores, siteHealthScore, computeSiteHealth, readiness, getHealthBand,
+  subsectionReadiness, healthBreakdown,
   DEFAULT_WEIGHTS,
 } from './siteHealth';
 
@@ -139,6 +140,81 @@ describe('computeSiteHealth — the canonical entry point', () => {
     // one subsection, metered, inspection-waived, zero snags → all factors 100 → score 100
     const subs = [sub('a', { metering_status: 'Installed', is_inspection_required: false })];
     expect(computeSiteHealth(subs, [], []).score).toBe(100);
+  });
+});
+
+describe('subsectionReadiness — per-subsection outstanding detail', () => {
+  it('reports metered/blocked/inspected/openSnags per subsection', () => {
+    const subs = [
+      sub('ok', { metering_status: 'Installed' }),
+      sub('snagged', { metering_status: 'Installed' }),
+      sub('bare'),
+    ];
+    const snags = [
+      { subsection_id: 'snagged', status: 'Open', risk_level: 'Critical' },
+      { subsection_id: 'snagged', status: 'Open', risk_level: 'Low' },
+      { subsection_id: 'snagged', status: 'Rectified', risk_level: 'High' },
+    ];
+    const insp = [withPhoto('ok'), withPhoto('snagged')];
+    const rows = subsectionReadiness(subs, snags, insp);
+    expect(rows).toHaveLength(3);
+    const byId = Object.fromEntries(rows.map(r => [r.id, r]));
+    expect(byId.ok).toMatchObject({ metered: true, blocked: false, inspected: true, openSnags: 0, ready: true });
+    // resolved snag neither blocks nor counts as open
+    expect(byId.snagged).toMatchObject({ metered: true, blocked: true, inspected: true, openSnags: 2, ready: false });
+    expect(byId.bare).toMatchObject({ metered: false, blocked: false, inspected: false, openSnags: 0, ready: false });
+  });
+  it('waived subsections count as inspected', () => {
+    const rows = subsectionReadiness([sub('a', { metering_status: 'Installed', is_inspection_required: false })], [], []);
+    expect(rows[0]).toMatchObject({ inspected: true, ready: true });
+  });
+  it('readiness() aggregates exactly what subsectionReadiness reports', () => {
+    const subs = [sub('a', { metering_status: 'Installed' }), sub('b')];
+    const snags = [{ subsection_id: 'a', status: 'Open', risk_level: 'High' }];
+    const insp = [withPhoto('a')];
+    const rows = subsectionReadiness(subs, snags, insp);
+    const agg = readiness(subs, snags, insp);
+    expect(agg.ready).toBe(rows.filter(r => r.ready).length);
+    expect(agg.failing.metering).toBe(rows.filter(r => !r.metered).length);
+    expect(agg.failing.snags).toBe(rows.filter(r => r.blocked).length);
+    expect(agg.failing.inspection).toBe(rows.filter(r => !r.inspected).length);
+  });
+});
+
+describe('healthBreakdown — factor counts and weighted points', () => {
+  it('mirrors factorScores and shows done/total per factor', () => {
+    // YARONA-shaped: 28 subs all metered, 26/28 inspected, 7 snags none resolved
+    const subs = Array.from({ length: 28 }, (_, i) => sub(`s${i}`, { metering_status: 'Installed' }));
+    const insp = Array.from({ length: 26 }, (_, i) => withPhoto(`s${i}`));
+    const snags = Array.from({ length: 7 }, (_, i) => ({ subsection_id: `s${i % 3}`, status: 'Open' }));
+    const b = healthBreakdown(subs, snags, insp);
+    const byKey = Object.fromEntries(b.map(f => [f.key, f]));
+    expect(byKey.snags).toMatchObject({ done: 0, total: 7, factor: 0, maxPoints: 40 });
+    expect(byKey.snags.points).toBe(0);
+    expect(byKey.inspections).toMatchObject({ done: 26, total: 28, factor: 93, maxPoints: 35 });
+    expect(byKey.inspections.points).toBeCloseTo(32.55, 1);
+    expect(byKey.metering).toMatchObject({ done: 28, total: 28, factor: 100, maxPoints: 25 });
+    expect(byKey.metering.points).toBeCloseTo(25, 5);
+    // the displayed points reconcile with the headline score
+    const score = computeSiteHealth(subs, snags, insp).score;
+    const ptsSum = b.reduce((acc, f) => acc + f.points, 0);
+    expect(Math.round(ptsSum)).toBe(score);
+  });
+  it('a site with no snags shows 0/0 done but full points (vacuous pass)', () => {
+    const subs = [sub('a', { metering_status: 'Installed' })];
+    const b = healthBreakdown(subs, [], [withPhoto('a')]);
+    const snagsRow = b.find(f => f.key === 'snags')!;
+    expect(snagsRow).toMatchObject({ done: 0, total: 0, factor: 100 });
+    expect(snagsRow.points).toBeCloseTo(40, 5);
+  });
+  it('an unpopulated site earns zero points everywhere', () => {
+    const b = healthBreakdown([], [], []);
+    expect(b.every(f => f.points === 0 && f.factor === 0)).toBe(true);
+  });
+  it('waived subsections are excluded from the inspection denominator', () => {
+    const subs = [sub('a'), sub('b', { is_inspection_required: false })];
+    const b = healthBreakdown(subs, [], [withPhoto('a')]);
+    expect(b.find(f => f.key === 'inspections')).toMatchObject({ done: 1, total: 1, factor: 100 });
   });
 });
 

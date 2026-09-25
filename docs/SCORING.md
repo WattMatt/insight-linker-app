@@ -1,6 +1,6 @@
 # Site Scoring — the one process
 
-_Last updated: 2026-07-08._
+_Last updated: 2026-07-17._
 
 ## The canonical number
 
@@ -11,6 +11,16 @@ computeSiteHealth(subsections, snags, inspections)  →  { score, factors }
 ```
 
 (0 for an empty site, see convention 1; internally `siteHealthScore(factorScores(...))`).
+
+Two derived views of the SAME math (never re-derive these by hand in a component):
+
+- `healthBreakdown(subsections, snags, inspections)` — the score decomposed per factor:
+  done/total counts, 0–100 factor, weight, points earned / max points. Rendered by the
+  shared [`HealthFactorRows`](../src/components/HealthFactorRows.tsx) component
+  (`describeHealthGaps()` produces the "to reach 100%: resolve N snags (+X pts)…" line).
+- `subsectionReadiness(...)` — per-subsection `{metered, blocked, inspected, openSnags,
+  ready}` rows; `readiness()` is its aggregate. Powers the outstanding-by-subsection
+  drill-down on the admin dashboard.
 
 Weighted factors (defaults): **snags 40%** (resolved / total snags), **inspections 35%**
 (photo-populated / inspection-required subsections), **metering 25%** (metered / total
@@ -39,15 +49,23 @@ NOT part of this score.
 5. **Reports never invent a health number.** `calculateMetrics()` requires
    `overallHealth` as an input (0 for an empty site); the caller must pass the
    canonical `computeSiteHealth()` result. There is deliberately no fallback formula.
+6. **Score-affecting mutations verify affected rows.** Supabase `.update()`/`.delete()`
+   under RLS returns SUCCESS with zero rows when the session is signed-out/expired —
+   snag closures were silently lost this way for weeks while the UI toasted success
+   (2026-07-16 incident: YARONA frozen at 58%). Every snag mutation appends
+   `.select()` and treats zero returned rows as a loud error ("Not saved — your
+   session may have expired"). Apply the same pattern to any new mutation that feeds
+   the score.
 
 ## Where scores come from at runtime
 
 | Surface | Source |
 | --- | --- |
-| Admin site dashboard (`ComplianceDashboard`) | live compute from fetched rows |
+| Admin site dashboard (`ComplianceDashboard`) | live compute from fetched rows — plus the "Operational health breakdown" card: `HealthFactorRows` + outstanding-by-subsection drill-down (`subsectionReadiness`) |
 | Site summary report (preview + PDF) | live compute, passed into `calculateMetrics` |
 | Nightly trend snapshots | `/api/snapshots/capture` cron (2AM UTC) → `site_health_snapshots` |
-| Client portal (sites list, dashboard cards, site detail header) | `useSiteScores` hook |
+| Client portal (sites list, dashboard cards) | `useSiteScores` hook |
+| Client portal site detail header | `useSiteScores` badge + read-only `HealthFactorRows` (live `healthBreakdown` from the view's own scoped rows; no per-shop outstanding list — that stays admin-only) |
 | Admin sites grid (`Sites.tsx`) and client detail site cards (`ClientDetail.tsx`) | `useSiteScores` hook |
 
 `useSiteScores` ([`src/hooks/useSiteScores.ts`](../src/hooks/useSiteScores.ts)) is
@@ -82,7 +100,11 @@ client-scoped RLS policies from migration `20251017054255`. Public share-link su
 
 ## Guardrails
 
-- `src/lib/siteHealth.test.ts` — factor/weight/band semantics.
+- `src/lib/siteHealth.test.ts` — factor/weight/band semantics, `healthBreakdown` /
+  `subsectionReadiness` reconciliation with the headline score.
+- `src/components/HealthFactorRows.test.tsx` — shared factor-row rendering + gap text.
+- `src/components/ComplianceDashboard.breakdown.test.tsx` — breakdown card + outstanding
+  list against a realistic site shape.
 - `src/lib/siteScores.test.ts` — snapshot-vs-live equivalence, grouping, pending states.
 - `src/lib/siteSummaryRenderSpec.test.ts` — cross-library COC consistency (report and
   dashboard literally share `cocComplianceRate`, and the tests fail if they ever drift).
