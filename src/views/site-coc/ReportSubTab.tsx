@@ -3,17 +3,11 @@ import { FileText, Loader2, Eye, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { generatePdfBlob } from "@/lib/pdfMakeConfig";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { storagePathFromUrl } from "@/lib/documents/paths";
-import { generateDocumentFilename } from "@/lib/documentDesignStandards";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
-import { buildCocReportModel } from "@/lib/siteCoc/cocReportModel";
 import type { SiteKpiBlock } from "@/lib/siteCoc/reportKpis";
-import { buildSiteCocReportDocDef } from "@/lib/siteCoc/siteCocReport";
-import { imageUrlToBase64 } from "@/lib/pdfBranding";
-import QRCode from "qrcode";
-import { qrSiteRedirectUrl } from "@/lib/qrBaseUrl";
+import { generateSiteCocReportPdf } from "@/lib/siteCoc/siteCocReportPdf";
 import type { CocScheduleRow, CocCertRow, CocBatch, SubsectionOption } from "./useSiteCoc";
 
 interface SavedReport { id: string; file_name: string; file_url: string; created_at: string; }
@@ -36,33 +30,14 @@ export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, 
   }, [siteId]);
   useEffect(() => { fetchSaved(); }, [fetchSaved]);
 
-  const buildModel = () => buildCocReportModel({
-    siteName, generatedAt: new Date().toLocaleDateString(), lastImport: batch ? new Date(batch.created_at).toLocaleDateString() : null,
-    clientName: clientName ?? null, address: siteAddress ?? null,
-    subsections: subsections.map(s => ({ id: s.id, name: s.name, tenant_name: s.tenant_name, is_coc_required: s.is_coc_required })),
-    certificates: certificates.map(c => ({ subsection_id: c.subsection_id, cert_no: c.cert_no, cert_type: c.cert_type, verdict: c.verdict, rules: c.rules, issued_date: c.issued_date, coc_document_id: c.coc_document_id, eval_document_id: c.eval_document_id, shop_no_raw: c.shop_no_raw, doc_type: c.doc_type, clause_9_2: c.clause_9_2, confidence: c.confidence, source_file: c.source_file, notes: c.notes })),
-    schedule: schedule.map(r => ({ subsection_id: r.subsection_id, shop_no_raw: r.shop_no_raw, initial_cert_nos: r.initial_cert_nos, supplementary_cert_nos: r.supplementary_cert_nos, trading_name: r.trading_name, coc_required: r.coc_required, files_count: r.files_count, status: r.status, notes: r.notes })),
-    siteKpis,
-  });
-
   const generate = async () => {
     setGenerating(true);
     try {
-      const logoDataUrl = companyLogo ? await imageUrlToBase64(companyLogo).catch(() => null) : null;
-      // Site-level verification QR for the report header — same stable qr-redirect
-      // indirection as the Site Summary Report cover. See src/lib/qrBaseUrl.ts.
-      const qrCodeDataUrl = siteId
-        ? await QRCode.toDataURL(qrSiteRedirectUrl(siteId), {
-            width: 500,
-            margin: 1,
-            color: { dark: '#000000', light: '#FFFFFF' },
-            errorCorrectionLevel: 'H',
-          }).catch(() => null)
-        : null;
-      const blob = await generatePdfBlob(buildSiteCocReportDocDef(buildModel(), logoDataUrl, qrCodeDataUrl));
+      const { blob, filename } = await generateSiteCocReportPdf({
+        siteId, siteName, clientName, siteAddress, siteKpis, companyLogo, schedule, certificates, batch, subsections,
+      });
       const url = URL.createObjectURL(blob);
-      // Unified naming (F3): sanitised, LOCAL date stamp via the shared helper.
-      setPreview({ url, name: generateDocumentFilename('Site_COC_Report', siteName), blob, isObjectUrl: true });
+      setPreview({ url, name: filename, blob, isObjectUrl: true });
     } catch (e: any) {
       if (process.env.NODE_ENV === "development") console.error("Site COC report failed:", e);
       toast.error("Could not generate the report");

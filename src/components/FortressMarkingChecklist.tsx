@@ -6,21 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { CheckCircle2, Eye, Save } from "lucide-react";
-import { generateFortressTemplate } from "@/lib/fortressTemplate";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
-import { generateFortressChecklistPdf, type FortressChecklistData } from "@/lib/fortressChecklistReportGenerator";
+import { generateFortressChecklistPdf } from "@/lib/fortressChecklistReportGenerator";
 import { savePDFToDocuments } from "@/lib/pdfDocumentSaver";
-
-interface ChecklistItem {
-  id: string;
-  item_id: string;
-  item_name: string;
-  section_name: string;
-  is_checked: boolean;
-  checked_at: string | null;
-  notes: string | null;
-  status: 'pending' | 'completed' | 'not_applicable';
-}
+import {
+  mergeFortressChecklist,
+  buildFortressChecklistData,
+  type FortressChecklistItem as ChecklistItem,
+} from "@/lib/report/fortressChecklistData";
 
 interface FortressMarkingChecklistProps {
   siteId: string;
@@ -53,29 +46,7 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
 
       if (fetchError) throw fetchError;
 
-      const template = generateFortressTemplate();
-      const allItems: ChecklistItem[] = [];
-
-      template.sections.forEach((section) => {
-        section.items.forEach((item) => {
-          if (item.type === 'checkbox') {
-            const existingItem = existingItems?.find(i => i.item_id === item.id);
-            
-            allItems.push({
-              id: existingItem?.id || '',
-              item_id: item.id,
-              item_name: item.name,
-              section_name: section.name,
-              is_checked: existingItem?.is_checked || false,
-              checked_at: existingItem?.checked_at || null,
-              notes: existingItem?.notes || null,
-              status: (existingItem?.status as 'pending' | 'completed' | 'not_applicable') || 'pending',
-            });
-          }
-        });
-      });
-
-      setChecklistItems(allItems);
+      setChecklistItems(mergeFortressChecklist(existingItems ?? []));
     } catch (error) {
       console.error('Error initializing checklist:', error);
       toast.error('Failed to load checklist');
@@ -218,40 +189,7 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
   }, {} as Record<string, ChecklistItem[]>);
 
   const handlePreviewReport = async () => {
-    // Build sections data for the report
-    const sectionsData = Object.entries(sections).map(([sectionName, items]) => {
-      const sectionApplicable = items.filter(i => i.status !== 'not_applicable');
-      const sectionChecked = sectionApplicable.filter(i => i.is_checked).length;
-      const sectionTotal = sectionApplicable.length;
-      const sectionProgress = sectionTotal > 0 ? Math.round((sectionChecked / sectionTotal) * 100) : 0;
-
-      return {
-        name: sectionName,
-        progress: sectionProgress,
-        items: items.map(item => ({
-          id: item.item_id,
-          label: item.item_name,
-          isChecked: item.is_checked,
-          isNotApplicable: item.status === 'not_applicable',
-          checkedAt: item.checked_at || undefined,
-        })),
-      };
-    });
-
-    const reportData: FortressChecklistData = {
-      title: 'Fortress Site Close-Out Checklist',
-      siteName: siteName || 'Site',
-      siteId,
-      overallProgress: completionPercentage,
-      sections: sectionsData,
-      stats: {
-        completed: checkedItems,
-        pending: totalItems - checkedItems,
-        notApplicable: notApplicableCount,
-        total: totalItems,
-      },
-      generatedAt: new Date().toISOString(),
-    };
+    const reportData = buildFortressChecklistData({ siteId, siteName, items: checklistItems });
 
     setIsGenerating(true);
     try {

@@ -2504,6 +2504,7 @@ export type Database = {
           file_url: string
           id: string
           parent_document_id: string | null
+          source_inspection_id: string | null
           subsection_id: string
           uploaded_at: string
           uploaded_by: string | null
@@ -2520,6 +2521,7 @@ export type Database = {
           file_url: string
           id?: string
           parent_document_id?: string | null
+          source_inspection_id?: string | null
           subsection_id: string
           uploaded_at?: string
           uploaded_by?: string | null
@@ -2536,6 +2538,7 @@ export type Database = {
           file_url?: string
           id?: string
           parent_document_id?: string | null
+          source_inspection_id?: string | null
           subsection_id?: string
           uploaded_at?: string
           uploaded_by?: string | null
@@ -2553,6 +2556,13 @@ export type Database = {
             columns: ["parent_document_id"]
             isOneToOne: false
             referencedRelation: "subsection_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subsection_documents_source_inspection_id_fkey"
+            columns: ["source_inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections"
             referencedColumns: ["id"]
           },
           {

@@ -34,7 +34,7 @@ type SiteRunState = "pending" | "generating" | "done" | "failed";
  * (src/lib/report/siteSummaryPdf.ts) sequentially over the selected sites and
  * saves each PDF straight into that site's documents. Generation is
  * client-side pdfmake by design, so the loop is sequential with a cooperative
- * Stop — same contract as BulkInspectionReportGenerator.
+ * Stop — same contract as AllReportsGenerator.
  */
 export const BulkSiteReportGenerator = ({ sites, onComplete }: BulkSiteReportGeneratorProps) => {
   const [open, setOpen] = useState(false);

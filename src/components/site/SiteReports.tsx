@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SiteSummaryReport } from "@/components/SiteSummaryReport";
-import { BulkInspectionReportGenerator } from "@/components/site/BulkInspectionReportGenerator";
+import { AllReportsGenerator } from "@/components/site/AllReportsGenerator";
+import type { SiteKpiBlock } from "@/lib/siteCoc/reportKpis";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { Site } from "@/types/site";
 import { downloadFile } from "@/lib/fileDownload";
@@ -35,13 +36,16 @@ interface SiteReportsProps {
     site: Site;
     readOnly?: boolean;
     autoOpenGenerate?: boolean;
+    /** Site KPIs + company logo for the Site COC report, computed by SiteDetail. */
+    siteKpis?: SiteKpiBlock;
+    companyLogo?: string | null;
 }
 
 // A report can come from site_documents OR subsection_documents; ids alone can
 // collide across tables, so selection and busy-state key on source + id.
 const reportKey = (r: SiteReportRow) => `${r.source}:${r.id}`;
 
-export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false }) => {
+export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false, siteKpis, companyLogo }) => {
     const [reports, setReports] = useState<SiteReportRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -147,17 +151,32 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
         <div className="space-y-6">
             {/* Generate Report Section - Only show in edit mode */}
             {!readOnly && (
-              <Tabs defaultValue="site-summary" className="w-full">
+              <Tabs defaultValue="all-reports" className="w-full">
                   <TabsList className="grid w-full grid-cols-2 mb-4">
+                      <TabsTrigger value="all-reports" className="gap-2">
+                          <ClipboardList className="h-4 w-4" />
+                          All Reports
+                      </TabsTrigger>
                       <TabsTrigger value="site-summary" className="gap-2">
                           <FileBarChart className="h-4 w-4" />
                           Site Summary Report
                       </TabsTrigger>
-                      <TabsTrigger value="bulk-inspections" className="gap-2">
-                          <ClipboardList className="h-4 w-4" />
-                          Bulk Inspection Reports
-                      </TabsTrigger>
                   </TabsList>
+
+                  <TabsContent value="all-reports">
+                      <AllReportsGenerator
+                          context={{
+                              siteId: site.id,
+                              siteName: site.name,
+                              clientName: site.clients?.name ?? null,
+                              siteAddress: site.address ?? null,
+                              siteLogoUrl: site.client_logo_url ?? null,
+                              companyLogoUrl: companyLogo || null,
+                              siteKpis,
+                          }}
+                          onComplete={fetchReports}
+                      />
+                  </TabsContent>
                   
                   <TabsContent value="site-summary">
                       <Card>
@@ -181,15 +200,6 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
                       </Card>
                   </TabsContent>
                   
-                  <TabsContent value="bulk-inspections">
-                      <BulkInspectionReportGenerator
-                          siteId={site.id}
-                          siteName={site.name}
-                          clientName={site.clients?.name}
-                          siteLogoUrl={site.client_logo_url}
-                          onComplete={fetchReports}
-                      />
-                  </TabsContent>
               </Tabs>
             )}
 

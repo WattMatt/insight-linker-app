@@ -167,3 +167,46 @@ describe("savePDFToDocuments — replace on save (subsection reports)", () => {
     expect(removed).toEqual(["subsections/sub-1/Inspection_Reports/1-a.pdf"]);
   });
 });
+
+describe("savePDFToDocuments — replace on save per inspection", () => {
+  const save = () =>
+    savePDFToDocuments({ blob, fileName: "insp-a.pdf", subsectionId: "sub-1", categoryName: "Inspection Reports", sourceInspectionId: "insp-a" });
+
+  it("records the source inspection on the new row", async () => {
+    await save();
+    const row = db.subsection_documents.find((r) => r.file_name === "insp-a.pdf");
+    expect(row?.source_inspection_id).toBe("insp-a");
+  });
+
+  it("replaces the same inspection's report and legacy unlinked ones, keeps sibling inspections", async () => {
+    db.subsection_documents = [
+      { id: "a-old", subsection_id: "sub-1", category_id: "dc-1", source_inspection_id: "insp-a", file_url: "p/a-old.pdf" },
+      { id: "b-cur", subsection_id: "sub-1", category_id: "dc-1", source_inspection_id: "insp-b", file_url: "p/b-cur.pdf" },
+      { id: "legacy", subsection_id: "sub-1", category_id: "dc-1", source_inspection_id: null, file_url: "p/legacy.pdf" },
+    ];
+
+    const res = await save();
+    expect(res.success).toBe(true);
+    expect(res.superseded).toBe(2);
+    expect(res.supersedeBlocked).toBe(0);
+
+    const ids = db.subsection_documents.map((r) => r.id);
+    expect(ids).toContain("b-cur");
+    expect(ids).not.toContain("a-old");
+    expect(ids).not.toContain("legacy");
+    expect(removed.sort()).toEqual(["p/a-old.pdf", "p/legacy.pdf"]);
+  });
+
+  it("reports rows that RLS kept as blocked, not superseded", async () => {
+    db.subsection_documents = [
+      { id: "a-old", subsection_id: "sub-1", category_id: "dc-1", source_inspection_id: "insp-a", file_url: "p/a-old.pdf" },
+    ];
+    db.deletableIds = new Set();
+
+    const res = await save();
+    expect(res.success).toBe(true);
+    expect(res.superseded).toBe(0);
+    expect(res.supersedeBlocked).toBe(1);
+    expect(removed).toEqual([]);
+  });
+});

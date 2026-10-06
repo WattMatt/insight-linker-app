@@ -213,6 +213,8 @@ export const ComprehensiveInspectionReport = ({
         fileName: previewData.filename,
         subsectionId,
         categoryName: 'Inspection Reports',
+        // One current report per inspection: never replace a sibling inspection's report.
+        sourceInspectionId: inspectionId || inspectionData?.id || undefined,
       });
       if (res.success) {
         toast.success("Report saved to documents!");

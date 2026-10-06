@@ -860,11 +860,11 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="fortress-checklist">
-          <FortressMarkingChecklist siteId={siteId!} />
+          <FortressMarkingChecklist siteId={siteId!} siteName={site.name} />
         </TabsContent>
 
         <TabsContent value="reports">
-          <SiteReports site={site} autoOpenGenerate={searchParams.get('generate') === '1'} />
+          <SiteReports site={site} autoOpenGenerate={searchParams.get('generate') === '1'} siteKpis={siteKpis} companyLogo={companyLogo} />
         </TabsContent>
       </Tabs>
 

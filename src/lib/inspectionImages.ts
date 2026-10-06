@@ -2,7 +2,7 @@
  * Inspection image detection — single source of truth.
  *
  * "Has this inspection been populated?" is answered by whether its json_data carries any
- * photos. Mirrors exactly what the Reports tab (BulkInspectionReportGenerator) counts:
+ * photos. Mirrors what the inspection report loader (lib/reports/inspectionReportData.ts) counts:
  * section items' photos[] arrays plus tenant meter/breaker/ctRatio images. Pure, no I/O.
  */
 export function countInspectionPhotos(jsonData: unknown): number {

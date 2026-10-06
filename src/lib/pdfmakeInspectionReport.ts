@@ -1571,6 +1571,10 @@ export async function generateAndSaveInspectionReportPdfmake(
   fileName?: string;
   fileUrl?: string;
   error?: string;
+  /** Diagnostics surfaced by the site "All reports" runner. */
+  bytes?: number;
+  superseded?: number;
+  supersedeBlocked?: number;
 }> {
   const { subsectionId } = options;
 
@@ -1594,6 +1598,8 @@ export async function generateAndSaveInspectionReportPdfmake(
       fileName,
       subsectionId,
       categoryName: 'Inspection Reports',
+      // One current report per inspection: never replace a sibling inspection's report.
+      sourceInspectionId: options.inspection.inspectionId || undefined,
     });
 
     if (!saveResult.success) {
@@ -1604,6 +1610,9 @@ export async function generateAndSaveInspectionReportPdfmake(
       success: true,
       fileName,
       fileUrl: saveResult.documentUrl,
+      bytes: result.blob.size,
+      superseded: saveResult.superseded,
+      supersedeBlocked: saveResult.supersedeBlocked,
     };
   } catch (error) {
     console.error('Error saving inspection report:', error);

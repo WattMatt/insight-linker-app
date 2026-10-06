@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { normShop } from "@/lib/siteCoc/normalize";
 import { matchSubsection } from "@/lib/siteCoc/ingest";
 import { reassignPendingPoolFiles } from "@/lib/coc/reassignPool";
+import { loadSiteCocData } from "@/lib/siteCoc/siteCocReportPdf";
 
 export interface CocScheduleRow {
   id: string; subsection_id: string | null; shop_no_raw: string; trading_name: string;
@@ -35,16 +36,11 @@ export function useSiteCoc(siteId: string | undefined) {
   const refetch = useCallback(async () => {
     if (!siteId) return;
     setLoading(true);
-    const [s, c, b, subs] = await Promise.all([
-      supabase.from("coc_db_schedule").select("*").eq("site_id", siteId).order("shop_no_raw"),
-      supabase.from("coc_certificates").select("*").eq("site_id", siteId).order("shop_no_raw"),
-      supabase.from("coc_import_batches").select("*").eq("site_id", siteId).order("created_at", { ascending: false }).limit(1),
-      supabase.from("subsections").select("id, name, tenant_name, is_coc_required").eq("site_id", siteId).is("deleted_at", null).order("name"),
-    ]);
-    setSchedule((s.data ?? []) as unknown as CocScheduleRow[]);
-    setCertificates((c.data ?? []) as unknown as CocCertRow[]);
-    setBatch(((b.data ?? [])[0] ?? null) as unknown as CocBatch | null);
-    setSubsections((subs.data ?? []) as unknown as SubsectionOption[]);
+    const data = await loadSiteCocData(siteId);
+    setSchedule(data.schedule);
+    setCertificates(data.certificates);
+    setBatch(data.batch);
+    setSubsections(data.subsections);
     setLoading(false);
   }, [siteId]);
 

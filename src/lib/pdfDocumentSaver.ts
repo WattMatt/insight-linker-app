@@ -7,6 +7,12 @@ interface SavePDFOptions {
   siteId?: string;
   subsectionId?: string;
   categoryName: string;
+  /**
+   * Subsection reports only: the inspection this report was generated from. When
+   * set, replace-on-save keeps one current report PER INSPECTION (and removes
+   * legacy unlinked reports of the same category) instead of one per category.
+   */
+  sourceInspectionId?: string;
 }
 
 interface SaveResult {
@@ -18,7 +24,13 @@ interface SaveResult {
    * (src/lib/documents/documentUrl.ts) before displaying or downloading.
    */
   documentUrl?: string;
+  /** Older reports of the same identity removed by replace-on-save. */
+  superseded?: number;
+  /** Older reports replace-on-save tried to remove but row-level security kept. */
+  supersedeBlocked?: number;
 }
+
+interface SupersedeOutcome { superseded: number; blocked: number }
 
 /** Best-effort delete of an uploaded blob after a later step fails, so a failed save leaves no orphan. */
 async function removeUploadedBlob(path: string): Promise<void> {
@@ -42,7 +54,11 @@ async function removeUploadedBlob(path: string): Promise<void> {
  * non-staff uploader), the older report simply remains rather than failing a
  * save that already succeeded.
  *
- * @returns the number of superseded (deleted) reports.
+ * With `sourceInspectionId` (subsection reports), the identity narrows to that
+ * inspection: other inspections' reports are kept, while legacy rows with no
+ * inspection link are replaced so a full regeneration leaves no unlinked copies.
+ *
+ * @returns how many older reports were removed, and how many RLS kept.
  */
 async function supersedePreviousReports(
   table: "site_documents" | "subsection_documents",
@@ -50,13 +66,19 @@ async function supersedePreviousReports(
   /** category NAME for site_documents, category_id for subsection_documents */
   categoryValue: string,
   keepId: string,
-): Promise<number> {
+  sourceInspectionId?: string,
+): Promise<SupersedeOutcome> {
+  const none = { superseded: 0, blocked: 0 };
   try {
-    const older = table === "site_documents"
+    let older: Array<{ id: string; file_url: string; source_inspection_id?: string | null }> | null = table === "site_documents"
       ? (await supabase.from("site_documents").select("id, file_url").eq("site_id", scopeId).eq("category", categoryValue).neq("id", keepId)).data
-      : (await supabase.from("subsection_documents").select("id, file_url").eq("subsection_id", scopeId).eq("category_id", categoryValue).neq("id", keepId)).data;
+      : (await supabase.from("subsection_documents").select("id, file_url, source_inspection_id").eq("subsection_id", scopeId).eq("category_id", categoryValue).neq("id", keepId)).data;
 
-    if (!older || older.length === 0) return 0;
+    if (older && sourceInspectionId) {
+      older = older.filter((r) => r.source_inspection_id == null || r.source_inspection_id === sourceInspectionId);
+    }
+
+    if (!older || older.length === 0) return none;
 
     const ids = older.map((r) => r.id);
     // Delete the rows FIRST and confirm which actually went (RLS may filter some);
@@ -66,7 +88,9 @@ async function supersedePreviousReports(
       : (await supabase.from("subsection_documents").delete().in("id", ids).select("id")).data;
 
     const deletedIds = new Set((deleted ?? []).map((d) => d.id));
-    if (deletedIds.size === 0) return 0;
+    const blocked = ids.length - deletedIds.size;
+    if (blocked > 0) console.warn(`[reports] replace-on-save kept ${blocked} older report(s): delete not permitted`);
+    if (deletedIds.size === 0) return { superseded: 0, blocked };
 
     const paths = older
       .filter((r) => deletedIds.has(r.id) && r.file_url)
@@ -76,10 +100,10 @@ async function supersedePreviousReports(
       const { error: rmErr } = await supabase.storage.from("documents").remove(paths);
       if (rmErr) console.warn("Superseded report rows deleted but some blobs remain:", rmErr.message);
     }
-    return deletedIds.size;
+    return { superseded: deletedIds.size, blocked };
   } catch (e) {
     console.warn("Failed to supersede previous reports (older copies may remain):", e);
-    return 0;
+    return none;
   }
 }
 
@@ -87,12 +111,12 @@ async function supersedePreviousReports(
  * Save a PDF to either site_documents or subsection_documents based on context
  */
 export async function savePDFToDocuments(options: SavePDFOptions): Promise<SaveResult> {
-  const { blob, fileName, siteId, subsectionId, categoryName } = options;
+  const { blob, fileName, siteId, subsectionId, categoryName, sourceInspectionId } = options;
 
   try {
     // Determine save location
     if (subsectionId) {
-      return await saveToSubsectionDocuments(blob, fileName, subsectionId, categoryName);
+      return await saveToSubsectionDocuments(blob, fileName, subsectionId, categoryName, sourceInspectionId);
     } else if (siteId) {
       return await saveToSiteDocuments(blob, fileName, siteId, categoryName);
     } else {
@@ -178,16 +202,17 @@ async function saveToSiteDocuments(
   }
 
   // Only the latest report of this identity is kept.
-  await supersedePreviousReports("site_documents", siteId, categoryName, inserted.id);
+  const outcome = await supersedePreviousReports("site_documents", siteId, categoryName, inserted.id);
 
-  return { success: true, documentUrl: uploadData.path };
+  return { success: true, documentUrl: uploadData.path, superseded: outcome.superseded, supersedeBlocked: outcome.blocked };
 }
 
 async function saveToSubsectionDocuments(
   blob: Blob,
   fileName: string,
   subsectionId: string,
-  categoryName: string
+  categoryName: string,
+  sourceInspectionId?: string,
 ): Promise<SaveResult> {
   // Find or create category for this subsection
   const { data: existingCategories } = await supabase
@@ -243,6 +268,7 @@ async function saveToSubsectionDocuments(
       file_url: uploadData.path,
       file_size: blob.size,
       uploaded_by: user?.id ?? null,
+      source_inspection_id: sourceInspectionId ?? null,
     })
     .select("id")
     .single();
@@ -253,9 +279,9 @@ async function saveToSubsectionDocuments(
   }
 
   // Only the latest report of this identity is kept.
-  await supersedePreviousReports("subsection_documents", subsectionId, categoryId, inserted.id);
+  const outcome = await supersedePreviousReports("subsection_documents", subsectionId, categoryId, inserted.id, sourceInspectionId);
 
-  return { success: true, documentUrl: uploadData.path };
+  return { success: true, documentUrl: uploadData.path, superseded: outcome.superseded, supersedeBlocked: outcome.blocked };
 }
 
 /**
