@@ -10,7 +10,8 @@ import { AllReportsGenerator } from "@/components/site/AllReportsGenerator";
 import type { SiteKpiBlock } from "@/lib/siteCoc/reportKpis";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { Site } from "@/types/site";
-import { downloadFile } from "@/lib/fileDownload";
+import { downloadFile, downloadBlob } from "@/lib/fileDownload";
+import { buildReportsZip, safeSegment } from "@/lib/report/reportZip";
 import {
     fetchSiteReportInventory,
     deleteSiteReport,
@@ -53,6 +54,28 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
     const [deleting, setDeleting] = useState<string | null>(null);
     const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
     const [bulkDeleting, setBulkDeleting] = useState(false);
+    const [zipProgress, setZipProgress] = useState<{ done: number; total: number } | null>(null);
+
+    const handleDownloadZip = async (targets: SiteReportRow[]) => {
+        if (targets.length === 0 || zipProgress) return;
+        setZipProgress({ done: 0, total: targets.length });
+        try {
+            const { blob, added, missing } = await buildReportsZip(targets, (done, total) => setZipProgress({ done, total }));
+            const stamp = format(new Date(), "yyyy-MM-dd");
+            // downloadBlob reports the save itself (and stays quiet on a cancelled save dialog).
+            await downloadBlob(blob, `${safeSegment(site.name).replace(/\s+/g, "_")}_Reports_${stamp}.zip`);
+            if (missing.length > 0) {
+                toast.warning(`${added} report${added === 1 ? "" : "s"} zipped, ${missing.length} could not be downloaded`, {
+                    description: "They are listed in _MISSING_FILES.txt inside the zip.",
+                });
+            }
+        } catch (error) {
+            console.error("Error building reports zip:", error);
+            toast.error("Could not build the zip", { description: error instanceof Error ? error.message : undefined });
+        } finally {
+            setZipProgress(null);
+        }
+    };
 
     const fetchReports = async () => {
         try {
@@ -216,17 +239,37 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
                                 {reports.length} report{reports.length !== 1 ? 's' : ''} available for review and download
                             </CardDescription>
                         </div>
-                        {!readOnly && (
-                          <Button 
-                              variant="outline" 
-                              size="sm" 
-                              onClick={fetchReports}
-                              className="gap-2"
-                          >
-                              <RefreshCw className="h-4 w-4" />
-                              Refresh
-                          </Button>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                            {filteredReports.length > 0 && (
+                              <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-2"
+                                  disabled={!!zipProgress}
+                                  onClick={() => handleDownloadZip(filteredReports)}
+                              >
+                                  {zipProgress ? (
+                                      <RefreshCw className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                      <Download className="h-4 w-4" />
+                                  )}
+                                  {zipProgress
+                                      ? `Zipping ${zipProgress.done}/${zipProgress.total}…`
+                                      : searchQuery ? `Download ${filteredReports.length} (zip)` : "Download all (zip)"}
+                              </Button>
+                            )}
+                            {!readOnly && (
+                              <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={fetchReports}
+                                  className="gap-2"
+                              >
+                                  <RefreshCw className="h-4 w-4" />
+                                  Refresh
+                              </Button>
+                            )}
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -258,6 +301,17 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
                                 Select all
                             </label>
                             {selectedKeys.size > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="gap-2"
+                                    disabled={!!zipProgress}
+                                    onClick={() => handleDownloadZip(reports.filter(r => selectedKeys.has(reportKey(r))))}
+                                >
+                                    <Download className="h-4 w-4" />
+                                    Download selected ({selectedKeys.size})
+                                </Button>
                                 <Button
                                     size="sm"
                                     variant="destructive"
@@ -272,6 +326,7 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
                                     )}
                                     Delete selected ({selectedKeys.size})
                                 </Button>
+                              </div>
                             )}
                         </div>
                     )}
