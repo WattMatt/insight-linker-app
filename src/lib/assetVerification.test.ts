@@ -5,6 +5,8 @@ import {
   buildInspectionMeterMatches,
   buildComparisonResults,
   parseAssetRows,
+  dedupeParsedAssets,
+  registerRowKey,
   meterKey,
   siteCorrections,
   registerSpecValue,
@@ -284,6 +286,55 @@ describe("parseAssetRows (electrical-only)", () => {
 
   it("returns empty for sheets with no recognizable section/header", () => {
     expect(parseAssetRows([["random"], ["", "junk", "data"]])).toEqual([]);
+  });
+});
+
+// The Excel file is the second way a register gets a meter twice (the first was an import that
+// appended instead of replacing). The key must match the database's unique index exactly.
+describe("registerRowKey / dedupeParsedAssets", () => {
+  const row = (premises_id: string, meter_serial_number: string, extra: Partial<ReturnType<typeof parseAssetRows>[number]> = {}) => ({
+    premises_id,
+    trade_as: "",
+    meter_serial_number,
+    ...extra,
+  });
+
+  it("keys on trimmed, upper-cased premises and the meter key", () => {
+    expect(registerRowKey(" ya - shop 001 ", "35724905 METER OFF")).toBe("YA - SHOP 001|35724905");
+    expect(registerRowKey("YA - SHOP 001", "35724905")).toBe("YA - SHOP 001|35724905");
+  });
+
+  it("gives no key to notes and sentinels, so they are never treated as the same meter", () => {
+    expect(registerRowKey("SHOP 1", "TBC")).toBe("");
+    expect(registerRowKey("SHOP 1", "COMMON AREA")).toBe("");
+    expect(registerRowKey("SHOP 1", "")).toBe("");
+  });
+
+  it("keeps the first copy of a repeated premises + serial and reports the rest", () => {
+    const { assets, duplicates } = dedupeParsedAssets([
+      row("YA - ABSA ATM", "35781501", { breaker_size: "63A SP" }),
+      row("YA - BULK METER", "35778057"),
+      row("ya - absa atm ", "35781501", { breaker_size: "60A" }),
+    ]);
+    expect(assets.map((a) => a.premises_id)).toEqual(["YA - ABSA ATM", "YA - BULK METER"]);
+    expect(assets[0].breaker_size).toBe("63A SP");
+    expect(duplicates).toHaveLength(1);
+    expect(duplicates[0].premises_id).toBe("ya - absa atm ");
+  });
+
+  it("keeps two meters on one premises, and one serial on two premises", () => {
+    const { assets, duplicates } = dedupeParsedAssets([
+      row("SHOP 1", "11111111"),
+      row("SHOP 1", "22222222"),
+      row("SHOP 2", "11111111"),
+    ]);
+    expect(assets).toHaveLength(3);
+    expect(duplicates).toEqual([]);
+  });
+
+  it("never drops rows without a usable serial", () => {
+    const { assets } = dedupeParsedAssets([row("SHOP 1", "TBC"), row("SHOP 1", "TBC")]);
+    expect(assets).toHaveLength(2);
   });
 });
 

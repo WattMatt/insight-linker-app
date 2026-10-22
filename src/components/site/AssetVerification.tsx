@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, Zap, Trash2, RefreshCw, ShieldCheck, Gauge, AlertTriangle, CheckCircle2, Store } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { AssetTable } from "./AssetTable";
@@ -14,6 +15,7 @@ import { MeterRegister } from "./MeterRegister";
 import { SiteShopsEditor } from "./SiteShopsEditor";
 import {
   parseAssetRows,
+  dedupeParsedAssets,
   buildInspectionMeterMatches,
   buildInspectionMeterRows,
   buildComparisonResults,
@@ -168,6 +170,8 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
   const isLoading = isPublic ? reviewLoading : assetsLoading;
   const isError = isPublic ? reviewError : assetsError;
   const retry = () => (isPublic ? refetchReview() : refetch());
+  // No import until the existing register is known — see handleFileUpload.
+  const importBlocked = uploading || isLoading || isError;
 
   // Electrical-only: water meters are out of scope for this feature.
   const electricalAssets = useMemo(() => assets.filter((a) => a.asset_category === "electrical_meter"), [assets]);
@@ -206,48 +210,20 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
     return parseAssetRows(rows);
   };
 
-  const insertAssets = async (parsedAssets: ParsedAsset[], replaceExisting: boolean) => {
+  // A register import is always the full electrical asset list for the site, so it always
+  // replaces — there is no append. Delete and insert run in one database transaction
+  // (replace_site_register): either the new register is in place or the old one is untouched.
+  // The old browser-side insert-then-delete left the whole register twice whenever the delete
+  // was skipped or failed.
+  const importRegister = async (parsedAssets: ParsedAsset[]) => {
+    const hadRegister = electricalAssets.length > 0;
     setUploading(true);
     try {
-      const { data: user } = await supabase.auth.getUser();
-      const importBatchId = crypto.randomUUID();
-
-      const assetsToInsert = parsedAssets.map((asset) => ({
-        site_id: siteId,
-        premises_id: asset.premises_id,
-        trade_as: asset.trade_as || null,
-        asset_category: "electrical_meter" as const,
-        meter_serial_number: asset.meter_serial_number || null,
-        meter_type: asset.meter_type || null,
-        ct_ratio: asset.ct_ratio || null,
-        breaker_size: asset.breaker_size || null,
-        reading_at_commissioning: asset.reading_at_commissioning || null,
-        old_meter_serial_number: asset.old_meter_serial_number || null,
-        last_meter_read_old: asset.last_meter_read_old || null,
-        comments: asset.comments || null,
-        created_by: user?.user?.id || null,
-        import_batch_id: importBatchId,
-      }));
-
-      // Insert the new batch first so a failure here never destroys the existing register.
-      const { error: insertError } = await supabase.from("site_assets").insert(assetsToInsert);
-      if (insertError) throw insertError;
-
-      // Replace semantics: a register import represents the full electrical asset list for the
-      // site. With the new rows safely in, drop the previous electrical rows (anything not in
-      // this batch). If cleanup fails the user only sees duplicates, not data loss.
-      if (replaceExisting) {
-        const { error: cleanupError } = await supabase
-          .from("site_assets")
-          .delete()
-          .eq("site_id", siteId)
-          .eq("asset_category", "electrical_meter")
-          .or(`import_batch_id.is.null,import_batch_id.neq.${importBatchId}`);
-        if (cleanupError) {
-          console.error("Failed to clear previous register:", cleanupError);
-          toast.warning("Imported new meters, but couldn't remove the old ones — you may see duplicates.");
-        }
-      }
+      const { error: replaceError } = await supabase.rpc("replace_site_register", {
+        p_site_id: siteId,
+        p_rows: parsedAssets as unknown as Json,
+      });
+      if (replaceError) throw replaceError;
 
       // Root cause of "linked but no photos" and understated metering: subsections.meter_serial_number
       // was never populated from the register. Write it through now — blank-only, never overwriting —
@@ -261,7 +237,7 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
       }
 
       toast.success(
-        `${replaceExisting ? "Replaced register with" : "Imported"} ${parsedAssets.length} electrical meter${parsedAssets.length === 1 ? "" : "s"}`,
+        `${hadRegister ? "Replaced register with" : "Imported"} ${parsedAssets.length} electrical meter${parsedAssets.length === 1 ? "" : "s"}`,
       );
       if (sync) {
         const summary = describeSync(sync);
@@ -272,8 +248,8 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
       refetch();
     } catch (error) {
       console.error("Error importing assets:", error);
-      toast.error("Failed to import assets");
-      if (replaceExisting) setPendingImport(parsedAssets); // preserve parsed rows for one-click retry
+      toast.error("Failed to import assets — the existing register was not changed");
+      if (hadRegister) setPendingImport(parsedAssets); // preserve parsed rows for one-click retry
     } finally {
       setUploading(false);
     }
@@ -283,6 +259,17 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-selecting the same file later
     if (!file) return;
+
+    // Until the current register has loaded we cannot tell whether this import replaces one,
+    // so the replace confirmation would be skipped. Refuse rather than guess.
+    if (isLoading || isError) {
+      toast.error(
+        isError
+          ? "Couldn't load this site's existing register. Refresh before importing."
+          : "Still loading this site's existing register — try again in a moment.",
+      );
+      return;
+    }
 
     if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
       toast.error("Please upload an Excel file (.xlsx or .xls)");
@@ -297,7 +284,15 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
     let parsedAssets: ParsedAsset[];
     try {
       toast.info("Parsing Excel file...");
-      parsedAssets = await parseExcelFile(file);
+      const { assets, duplicates } = dedupeParsedAssets(await parseExcelFile(file));
+      parsedAssets = assets;
+      if (duplicates.length > 0) {
+        const names = [...new Set(duplicates.map((d) => d.premises_id))];
+        toast.warning(
+          `The file lists ${duplicates.length} meter${duplicates.length === 1 ? "" : "s"} more than once (same premises and serial) — imported once: ${names.slice(0, 5).join(", ")}${names.length > 5 ? ", …" : ""}`,
+          { duration: 10000 },
+        );
+      }
     } catch (error) {
       console.error("Excel parsing error:", error);
       toast.error("Could not read that Excel file");
@@ -316,7 +311,7 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
       setPendingImport(parsedAssets);
       return;
     }
-    await insertAssets(parsedAssets, false);
+    await importRegister(parsedAssets);
   };
 
   const handleDeleteAllAssets = async () => {
@@ -365,7 +360,7 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
               </Button>
             )}
             <label htmlFor="excel-upload">
-              <Button asChild disabled={uploading}>
+              <Button asChild disabled={importBlocked}>
                 <span>
                   <Upload className="h-4 w-4 mr-2" />
                   {uploading ? "Importing..." : "Import Excel"}
@@ -378,7 +373,7 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
               accept=".xlsx,.xls"
               onChange={handleFileUpload}
               className="hidden"
-              disabled={uploading}
+              disabled={importBlocked}
             />
           </div>
         )}
@@ -451,7 +446,7 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
                   accept=".xlsx,.xls"
                   onChange={handleFileUpload}
                   className="hidden"
-                  disabled={uploading}
+                  disabled={importBlocked}
                 />
               </>
             )}
@@ -558,7 +553,7 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
               onClick={async () => {
                 const toImport = pendingImport;
                 setPendingImport(null);
-                if (toImport) await insertAssets(toImport, true);
+                if (toImport) await importRegister(toImport);
               }}
               disabled={uploading}
             >

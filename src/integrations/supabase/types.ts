@@ -3218,6 +3218,10 @@ export type Database = {
           total_answered: number
         }[]
       }
+      replace_site_register: {
+        Args: { p_site_id: string; p_rows: Json }
+        Returns: number
+      }
       resolve_inspection_subsection: {
         Args: { _json: Json; _site_id: string }
         Returns: {

@@ -435,10 +435,7 @@ export function buildComparisonResults(
   // Duplicate register rows (same premises, same serial — a re-import whose cleanup failed) are
   // one meter: every copy shares the first copy's link, so none is reported as "wrong meter"
   // against itself and a correction reaches all of them.
-  const twinKey = (a: AssetForComparison) => {
-    const key = meterKey(a.meter_serial_number);
-    return key ? `${(a.premises_id || "").trim().toUpperCase()}|${key}` : "";
-  };
+  const twinKey = (a: AssetForComparison) => registerRowKey(a.premises_id, a.meter_serial_number);
   const firstOfTwin = new Map<string, AssetForComparison>();
   const duplicates = new Set<string>();
   for (const a of assets) {
@@ -631,6 +628,36 @@ export function findUnregisteredMeters(
     seen.add(key);
     return true;
   });
+}
+
+/**
+ * The identity of a register row: one meter at one premises. "" when the serial is a note or
+ * sentinel — such rows are never the same meter as anything. The database enforces the same key
+ * (unique index site_assets_one_row_per_meter), so keep the two definitions in step.
+ */
+export function registerRowKey(premisesId: string | null | undefined, serial: string | null | undefined): string {
+  const key = meterKey(serial);
+  return key ? `${(premisesId || "").trim().toUpperCase()}|${key}` : "";
+}
+
+/**
+ * Drop repeated premises + serial rows from a parsed register, keeping the first copy. The
+ * repeats are returned so the importer can say what it dropped instead of saving a meter twice.
+ */
+export function dedupeParsedAssets(parsed: ParsedAsset[]): { assets: ParsedAsset[]; duplicates: ParsedAsset[] } {
+  const seen = new Set<string>();
+  const assets: ParsedAsset[] = [];
+  const duplicates: ParsedAsset[] = [];
+  for (const asset of parsed) {
+    const key = registerRowKey(asset.premises_id, asset.meter_serial_number);
+    if (key && seen.has(key)) {
+      duplicates.push(asset);
+      continue;
+    }
+    if (key) seen.add(key);
+    assets.push(asset);
+  }
+  return { assets, duplicates };
 }
 
 /**
