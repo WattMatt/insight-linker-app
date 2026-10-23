@@ -21,6 +21,7 @@ import { generatePdfBlob } from "@/lib/pdfMakeConfig";
 import { downloadBlob } from "@/lib/fileDownload";
 import QRCode from "qrcode";
 import { qrSiteRedirectUrl } from "@/lib/qrBaseUrl";
+import { LIVE_REVIEW_STATUSES } from "@/lib/siteCoc/liveRows";
 
 interface ClientCocViewProps {
   siteId: string;
@@ -42,7 +43,9 @@ export function ClientCocView({ siteId, siteName, onPreview }: ClientCocViewProp
           .select("id, name, tenant_name, is_coc_required, coc_status, coc_expiry_date")
           .eq("site_id", siteId).is("deleted_at", null).order("name"),
         supabase.from("coc_db_schedule").select("*").eq("site_id", siteId).order("shop_no_raw"),
-        supabase.from("coc_certificates").select("*").eq("site_id", siteId).order("shop_no_raw"),
+        // RLS already hides these from Client users; the filter also covers admin preview mode.
+        supabase.from("coc_certificates").select("*").eq("site_id", siteId)
+          .in("review_status", LIVE_REVIEW_STATUSES).is("superseded_at", null).order("shop_no_raw"),
       ]);
       if (subsRes.error) throw subsRes.error;
       const subsections = (subsRes.data ?? []) as ClientCocSubsection[];

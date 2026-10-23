@@ -84,7 +84,9 @@ export function useSiteCocImport(siteId: string | undefined, onDone: () => void)
       // Now remove the previous set. `.or` covers legacy NULL-batch rows that `.neq` alone would skip.
       const notThisBatch = `import_batch_id.is.null,import_batch_id.neq.${batch.id}`;
       await supabase.from("coc_db_schedule").delete().eq("site_id", siteId).or(notThisBatch);
-      await supabase.from("coc_certificates").delete().eq("site_id", siteId).or(notThisBatch);
+      // Re-verification rows (record_key set) are never deleted here — they are superseded, not
+      // removed. Requires 20261023120000_coc_reverification_proposed to be applied first.
+      await supabase.from("coc_certificates").delete().eq("site_id", siteId).or(notThisBatch).is("record_key", null);
 
       // Re-link surviving uploaded documents to the new cert rows (re-import would otherwise drop the
       // coc_document_id / eval_document_id attachments). Match by subsection + normalised cert number.

@@ -9,6 +9,7 @@ import { qrSiteRedirectUrl } from "@/lib/qrBaseUrl";
 import { buildCocReportModel } from "./cocReportModel";
 import { buildSiteCocReportDocDef } from "./siteCocReport";
 import type { SiteKpiBlock } from "./reportKpis";
+import { LIVE_REVIEW_STATUSES } from "./liveRows";
 import type { CocScheduleRow, CocCertRow, CocBatch, SubsectionOption } from "@/views/site-coc/useSiteCoc";
 
 export interface SiteCocData {
@@ -21,7 +22,8 @@ export interface SiteCocData {
 export async function loadSiteCocData(siteId: string): Promise<SiteCocData> {
   const [s, c, b, subs] = await Promise.all([
     supabase.from("coc_db_schedule").select("*").eq("site_id", siteId).order("shop_no_raw"),
-    supabase.from("coc_certificates").select("*").eq("site_id", siteId).order("shop_no_raw"),
+    supabase.from("coc_certificates").select("*").eq("site_id", siteId)
+      .in("review_status", LIVE_REVIEW_STATUSES).is("superseded_at", null).order("shop_no_raw"),
     supabase.from("coc_import_batches").select("*").eq("site_id", siteId).order("created_at", { ascending: false }).limit(1),
     supabase.from("subsections").select("id, name, tenant_name, is_coc_required").eq("site_id", siteId).is("deleted_at", null).order("name"),
   ]);

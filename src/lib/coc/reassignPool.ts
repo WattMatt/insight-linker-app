@@ -10,7 +10,7 @@ export interface ReassignResult { assigned: number; pending: number }
 export async function reassignPendingPoolFiles(siteId: string): Promise<ReassignResult> {
   const [{ data: poolRows }, { data: certs }] = await Promise.all([
     supabase.from("coc_file_pool").select("*").eq("site_id", siteId).eq("status", "pending"),
-    supabase.from("coc_certificates").select("id, cert_no_norm, subsection_id").eq("site_id", siteId),
+    supabase.from("coc_certificates").select("id, cert_no_norm, subsection_id").eq("site_id", siteId).is("superseded_at", null),
   ]);
   const files = (poolRows ?? []) as unknown as PoolRow[];
   const classifications = planPoolAssignment(files, (certs ?? []) as CertRowLite[]);

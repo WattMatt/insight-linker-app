@@ -226,6 +226,10 @@ export type Database = {
           eval_document_id: string | null
           notes: string | null
           match_status: string
+          record_key: string | null
+          review_status: string
+          superseded_at: string | null
+          signed_off_at: string | null
           created_at: string
           updated_at: string
         }
@@ -252,6 +256,10 @@ export type Database = {
           eval_document_id?: string | null
           notes?: string | null
           match_status?: string
+          record_key?: string | null
+          review_status?: string
+          superseded_at?: string | null
+          signed_off_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -278,6 +286,10 @@ export type Database = {
           eval_document_id?: string | null
           notes?: string | null
           match_status?: string
+          record_key?: string | null
+          review_status?: string
+          superseded_at?: string | null
+          signed_off_at?: string | null
           created_at?: string
           updated_at?: string
         }

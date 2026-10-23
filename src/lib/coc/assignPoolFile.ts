@@ -3,6 +3,7 @@ import { normCert } from "@/lib/siteCoc/normalize";
 import { extractEvalVerdict } from "@/lib/cocFilename";
 import { docStatusFromVerdict } from "@/lib/siteCoc/verdictMap";
 import { findOrCreateCategory, insertCocCertificateDoc, insertEvaluationReportDoc } from "@/lib/coc/uploadCocFiles";
+import { LIVE_REVIEW_STATUSES } from "@/lib/siteCoc/liveRows";
 
 export interface AssignablePoolFile {
   id: string;
@@ -12,14 +13,16 @@ export interface AssignablePoolFile {
   detected_cert_no: string | null;
 }
 
+// Linking a file is not a verdict, so proposed rows may receive the link (sign-off then stamps
+// the document); superseded rows may not.
 async function stampCert(siteId: string, subsectionId: string, certKey: string, col: "coc_document_id" | "eval_document_id", docId: string) {
   if (!certKey) return;
   const { data: empty } = await supabase.from("coc_certificates").select("id")
-    .eq("site_id", siteId).eq("subsection_id", subsectionId).eq("cert_no_norm", certKey).is(col, null).limit(1);
+    .eq("site_id", siteId).eq("subsection_id", subsectionId).eq("cert_no_norm", certKey).is("superseded_at", null).is(col, null).limit(1);
   let targetId = empty?.[0]?.id as string | undefined;
   if (!targetId) {
     const { data: any1 } = await supabase.from("coc_certificates").select("id")
-      .eq("site_id", siteId).eq("subsection_id", subsectionId).eq("cert_no_norm", certKey).limit(1);
+      .eq("site_id", siteId).eq("subsection_id", subsectionId).eq("cert_no_norm", certKey).is("superseded_at", null).limit(1);
     targetId = any1?.[0]?.id;
   }
   if (targetId) await supabase.from("coc_certificates").update({ [col]: docId }).eq("id", targetId);
@@ -30,7 +33,8 @@ async function stampCert(siteId: string, subsectionId: string, certKey: string, 
 async function lookupRegisterVerdict(siteId: string, subsectionId: string, certKey: string): Promise<string | null> {
   if (!certKey) return null;
   const { data } = await supabase.from("coc_certificates").select("verdict")
-    .eq("site_id", siteId).eq("subsection_id", subsectionId).eq("cert_no_norm", certKey).limit(1);
+    .eq("site_id", siteId).eq("subsection_id", subsectionId).eq("cert_no_norm", certKey)
+    .in("review_status", LIVE_REVIEW_STATUSES).is("superseded_at", null).limit(1);
   return (data?.[0]?.verdict as string | undefined) ?? null;
 }
 
