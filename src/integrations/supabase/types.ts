@@ -120,6 +120,75 @@ export type Database = {
           },
         ]
       }
+      coc_certificate_source_files: {
+        Row: {
+          certificate_id: string
+          source_file_id: string
+          role: string
+          page_no: number | null
+        }
+        Insert: {
+          certificate_id: string
+          source_file_id: string
+          role?: string
+          page_no?: number | null
+        }
+        Update: {
+          certificate_id?: string
+          source_file_id?: string
+          role?: string
+          page_no?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coc_certificate_source_files_certificate_id_fkey"
+            columns: ["certificate_id"]
+            isOneToOne: false
+            referencedRelation: "coc_certificates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coc_certificate_source_files_source_file_id_fkey"
+            columns: ["source_file_id"]
+            isOneToOne: false
+            referencedRelation: "coc_source_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coc_source_files: {
+        Row: {
+          id: string
+          sha256: string
+          storage_path: string
+          file_name: string | null
+          mime_type: string | null
+          size_bytes: number | null
+          first_batch_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          sha256: string
+          storage_path: string
+          file_name?: string | null
+          mime_type?: string | null
+          size_bytes?: number | null
+          first_batch_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          sha256?: string
+          storage_path?: string
+          file_name?: string | null
+          mime_type?: string | null
+          size_bytes?: number | null
+          first_batch_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       coc_db_schedule: {
         Row: {
           id: string
@@ -230,6 +299,22 @@ export type Database = {
           review_status: string
           superseded_at: string | null
           signed_off_at: string | null
+          proposed_verdict: string | null
+          proposed_verdict_alt: string | null
+          rule_results: Json
+          flags: Json
+          caveats: Json
+          copies: Json
+          db_name: string | null
+          building: string | null
+          reg_person: string | null
+          reg_no: string | null
+          form_type: string | null
+          source_content_hash: string | null
+          supersedes_ids: string[]
+          superseded_by_batch_id: string | null
+          signed_off_by: string | null
+          sign_off_note: string | null
           created_at: string
           updated_at: string
         }
@@ -3095,6 +3180,14 @@ export type Database = {
       }
     }
     Functions: {
+      sign_off_coc_certificate: {
+        Args: { p_id: string; p_decision: string; p_note?: string }
+        Returns: undefined
+      }
+      supersede_coc_certificate: {
+        Args: { p_id: string; p_note: string }
+        Returns: undefined
+      }
       _share_link: {
         Args: { p_token: string }
         Returns: {

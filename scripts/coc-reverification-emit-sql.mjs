@@ -3,18 +3,24 @@
 // This script only writes a .sql file; it does not connect to any database.
 //
 //   node scripts/coc-reverification-emit-sql.mjs --plan <plan.json> --out <file.sql> --label "<source label>"
+//   node scripts/coc-reverification-emit-sql.mjs --plan <plan.json> --split-dir <dir> --label "<source label>"
+//
+// --split-dir writes one transaction per site (NN-<site>.sql) for targets that cap request size
+// (the Supabase Management API returned 413 for the 5.6 MB single file). Each site file verifies its
+// own counts; a site already imported plans as "unchanged" on the next dry run, so a re-run is safe.
 //
 // The SQL: one coc_import_batches row per site (kind 'reverification', shared source hash + run id),
 // inserts the planned proposed rows, applies planned updates, supersedes planned earlier
 // re-verification rows, then checks every count and RAISEs (rolling everything back) on any mismatch.
 // Requires 20261023120000_coc_reverification_proposed to be applied on the target first.
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
 
-const { values: args } = parseArgs({ options: { plan: { type: "string" }, out: { type: "string" }, label: { type: "string" } } });
-if (!args.plan || !args.out || !args.label) {
-  console.error('usage: --plan <plan.json> --out <file.sql> --label "<source label>"');
+const { values: args } = parseArgs({ options: { plan: { type: "string" }, out: { type: "string" }, "split-dir": { type: "string" }, label: { type: "string" } } });
+if (!args.plan || !args.label || !(args.out || args["split-dir"])) {
+  console.error('usage: --plan <plan.json> (--out <file.sql> | --split-dir <dir>) --label "<source label>"');
   process.exit(2);
 }
 
@@ -35,6 +41,7 @@ const lit = v => {
 };
 const q = s => `'${String(s).replace(/'/g, "''")}'`;
 
+function buildSql(sites) {
 const batches = sites.map(p => ({
   site_id: p.siteId,
   counts: {
@@ -122,6 +129,21 @@ end $verify$;
 
 commit;
 `;
+return { sql, batches: batches.length, adds: adds.length, updates: updates.length, superseded: superseded.length };
+}
 
-writeFileSync(args.out, sql);
-console.log(`wrote ${args.out} (${(sql.length / 1024 / 1024).toFixed(2)} MB): run ${runId}, ${batches.length} batches, ${adds.length} inserts, ${updates.length} updates, ${superseded.length} supersedes`);
+const mb = s => (s.length / 1024 / 1024).toFixed(2);
+if (args["split-dir"]) {
+  mkdirSync(args["split-dir"], { recursive: true });
+  sites.forEach((p, i) => {
+    const r = buildSql([p]);
+    const file = join(args["split-dir"], `${String(i + 1).padStart(2, "0")}-${p.site.replace(/[^A-Za-z0-9]+/g, "_")}.sql`);
+    writeFileSync(file, r.sql);
+    console.log(`wrote ${file} (${mb(r.sql)} MB): ${r.adds} inserts, ${r.updates} updates, ${r.superseded} supersedes`);
+  });
+  console.log(`run ${runId}: ${sites.length} site files`);
+} else {
+  const r = buildSql(sites);
+  writeFileSync(args.out, r.sql);
+  console.log(`wrote ${args.out} (${mb(r.sql)} MB): run ${runId}, ${r.batches} batches, ${r.adds} inserts, ${r.updates} updates, ${r.superseded} supersedes`);
+}
