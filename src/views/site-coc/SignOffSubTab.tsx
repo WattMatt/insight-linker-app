@@ -10,6 +10,7 @@ import {
   VERDICT_WORDS, RESULT_WORDS, issues, progress, filterRecords, indexAfterDecision,
   type ProposedVerdict, type ReviewStatus, type SignOffRecord,
 } from "@/lib/siteCoc/signOff";
+import { RESULT_KEY, RULE_SET_VERSION, ruleInfo } from "@/lib/siteCoc/ruleSetV042";
 import { useSignOff, usePageUrls } from "./useSignOff";
 import type { SubsectionOption } from "./useSiteCoc";
 
@@ -163,14 +164,32 @@ export function SignOffSubTab({ siteId, subsections, canSign }: { siteId: string
             {issueList.length > 0 && (
               <div>
                 <p className="text-sm font-medium mb-1">What did not pass</p>
-                <ul className="space-y-1 text-sm">
-                  {issueList.map((r) => (
-                    <li key={r.rule} className="flex gap-2">
-                      <span className="font-mono text-xs w-9 shrink-0 pt-0.5">{r.rule}</span>
-                      <span><span className="font-medium">{RESULT_WORDS[r.res] ?? r.res}</span>{r.note ? ` — ${r.note}` : ""}</span>
-                    </li>
-                  ))}
+                <ul className="space-y-2 text-sm">
+                  {issueList.map((r) => {
+                    const info = ruleInfo(r.rule);
+                    return (
+                      <li key={r.rule} className="flex gap-2">
+                        <span className="font-mono text-xs w-9 shrink-0 pt-0.5">{r.rule}</span>
+                        <div className="space-y-0.5">
+                          <p><span className="font-medium">{info?.name ?? r.rule}</span>: <span className="font-medium">{RESULT_WORDS[r.res] ?? r.res}</span></p>
+                          {r.note && <p className="text-muted-foreground">Read on the scan: {r.note}</p>}
+                          {info && (
+                            <p className="text-xs text-muted-foreground">
+                              Check: {info.where}. Pass: {info.pass}{info.clause ? ` (SANS 10142-1 ${info.clause})` : ""}
+                            </p>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
+                <details className="mt-2 text-xs text-muted-foreground">
+                  <summary className="cursor-pointer">What the results mean</summary>
+                  <ul className="mt-1 space-y-0.5">
+                    {RESULT_KEY.map((k) => <li key={k.word}><span className="font-medium text-foreground">{k.word}</span>: {k.meaning}</li>)}
+                  </ul>
+                  <p className="mt-1">Scored strictly against rule set {RULE_SET_VERSION}.</p>
+                </details>
               </div>
             )}
 

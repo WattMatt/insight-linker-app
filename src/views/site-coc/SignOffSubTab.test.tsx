@@ -43,6 +43,17 @@ describe("SignOffSubTab", () => {
     expect(screen.getByText(/to review/).textContent).toMatch(/0 signed off · 0 rejected · 2 to review of 2/);
   });
 
+  it("explains each failed rule: full name, what was read, where to check and the pass condition", () => {
+    records = [rec("1", { rules: [{ rule: "B2", res: "FAIL", note: "not declared (blank)", val: null }, { rule: "C1", res: "ASSERTED", note: "no Ω value", val: null }] })];
+    render(<SignOffSubTab siteId="s" subsections={[]} canSign />);
+    expect(screen.getByText("Components correctly selected and installed, accessible where necessary")).toBeTruthy();
+    expect(screen.getByText(/Read on the scan: not declared \(blank\)/)).toBeTruthy();
+    expect(screen.getAllByText(/Check: Test report Section 4, inspection table/).length).toBe(1);
+    expect(screen.getByText(/SANS 10142-1 8\.5\.2 b\)/)).toBeTruthy();
+    expect(screen.getByText(/≤ 0,2 Ω/)).toBeTruthy();
+    expect(screen.getByText("What the results mean")).toBeTruthy();
+  });
+
   it("accepting calls the sign-off function for that record", async () => {
     render(<SignOffSubTab siteId="s" subsections={[]} canSign />);
     fireEvent.click(screen.getByRole("button", { name: /Accept FAIL/ }));
