@@ -29,6 +29,7 @@ export interface SubsectionOption { id: string; name: string; tenant_name: strin
 export function useSiteCoc(siteId: string | undefined) {
   const [schedule, setSchedule] = useState<CocScheduleRow[]>([]);
   const [certificates, setCertificates] = useState<CocCertRow[]>([]);
+  const [proposedCertificates, setProposedCertificates] = useState<CocCertRow[]>([]);
   const [batch, setBatch] = useState<CocBatch | null>(null);
   const [subsections, setSubsections] = useState<SubsectionOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +40,7 @@ export function useSiteCoc(siteId: string | undefined) {
     const data = await loadSiteCocData(siteId);
     setSchedule(data.schedule);
     setCertificates(data.certificates);
+    setProposedCertificates(data.proposedCertificates ?? []);
     setBatch(data.batch);
     setSubsections(data.subsections);
     setLoading(false);
@@ -80,5 +82,5 @@ export function useSiteCoc(siteId: string | undefined) {
     return plan.length;
   }, [siteId, schedule, subsections, stampMatch, refetch]);
 
-  return { schedule, certificates, batch, subsections, loading, refetch, resolveShop, rerunAutoMatch };
+  return { schedule, certificates, proposedCertificates, batch, subsections, loading, refetch, resolveShop, rerunAutoMatch };
 }

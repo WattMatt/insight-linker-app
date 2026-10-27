@@ -13,8 +13,8 @@ import type { CocScheduleRow, CocCertRow, CocBatch, SubsectionOption } from "./u
 interface SavedReport { id: string; file_name: string; file_url: string; created_at: string; }
 const CATEGORY = getReportCategoryName("site-coc");
 
-export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, subsections, clientName, siteAddress, siteKpis, companyLogo }: {
-  siteId: string | undefined; siteName: string; schedule: CocScheduleRow[]; certificates: CocCertRow[]; batch: CocBatch | null; subsections: SubsectionOption[]; clientName?: string | null; siteAddress?: string | null; siteKpis?: SiteKpiBlock; companyLogo?: string | null;
+export function ReportSubTab({ siteId, siteName, schedule, certificates, proposedCertificates, batch, subsections, clientName, siteAddress, siteKpis, companyLogo }: {
+  siteId: string | undefined; siteName: string; schedule: CocScheduleRow[]; certificates: CocCertRow[]; proposedCertificates?: CocCertRow[]; batch: CocBatch | null; subsections: SubsectionOption[]; clientName?: string | null; siteAddress?: string | null; siteKpis?: SiteKpiBlock; companyLogo?: string | null;
 }) {
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -34,7 +34,7 @@ export function ReportSubTab({ siteId, siteName, schedule, certificates, batch, 
     setGenerating(true);
     try {
       const { blob, filename } = await generateSiteCocReportPdf({
-        siteId, siteName, clientName, siteAddress, siteKpis, companyLogo, schedule, certificates, batch, subsections,
+        siteId, siteName, clientName, siteAddress, siteKpis, companyLogo, schedule, certificates, proposedCertificates, batch, subsections,
       });
       const url = URL.createObjectURL(blob);
       setPreview({ url, name: filename, blob, isObjectUrl: true });

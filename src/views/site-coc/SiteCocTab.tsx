@@ -20,7 +20,7 @@ import { useSignOff } from "./useSignOff";
 import { useUserRole } from "@/hooks/useUserRole";
 
 export function SiteCocTab({ siteId, siteName, clientName, siteAddress, siteKpis, companyLogo }: { siteId: string | undefined; siteName: string; clientName?: string | null; siteAddress?: string | null; siteKpis?: SiteKpiBlock; companyLogo?: string | null }) {
-  const { schedule, certificates, batch, subsections, loading, refetch, resolveShop, rerunAutoMatch } = useSiteCoc(siteId);
+  const { schedule, certificates, proposedCertificates, batch, subsections, loading, refetch, resolveShop, rerunAutoMatch } = useSiteCoc(siteId);
   const { importing, runImport } = useSiteCocImport(siteId, refetch);
   const pool = useSiteCocPool(siteId, refetch);
   const signOff = useSignOff(siteId);
@@ -97,7 +97,7 @@ export function SiteCocTab({ siteId, siteName, clientName, siteAddress, siteKpis
         <TabsContent value="certificates"><Card><CardContent className="pt-4">{loading ? "Loading…" : <CertificatesSubTab rows={certificates} />}</CardContent></Card></TabsContent>
         <TabsContent value="verification"><Card><CardContent className="pt-4">{loading ? "Loading…" : <VerificationSubTab rows={certificates} />}</CardContent></Card></TabsContent>
         <TabsContent value="assign"><Card><CardContent className="pt-4"><AssignSubTab pending={pool.pending} subsections={subsections} onAssign={(f, s) => pool.assignManual(f, s, f.detected_kind === "eval" ? "eval" : "coc")} onAssignMany={pool.assignManyTo} onReassign={pool.reassign} onUpdateCertNo={pool.updateCertNo} onGoToSchedule={() => setTab("schedule")} hasImport={!!batch} busy={pool.busy} /></CardContent></Card></TabsContent>
-        <TabsContent value="report"><Card><CardContent className="pt-4"><ReportSubTab siteId={siteId} siteName={siteName} schedule={schedule} certificates={certificates} batch={batch} subsections={subsections} clientName={clientName} siteAddress={siteAddress} siteKpis={siteKpis} companyLogo={companyLogo} /></CardContent></Card></TabsContent>
+        <TabsContent value="report"><Card><CardContent className="pt-4"><ReportSubTab siteId={siteId} siteName={siteName} schedule={schedule} certificates={certificates} proposedCertificates={proposedCertificates} batch={batch} subsections={subsections} clientName={clientName} siteAddress={siteAddress} siteKpis={siteKpis} companyLogo={companyLogo} /></CardContent></Card></TabsContent>
         <TabsContent value="sign-off"><Card><CardContent className="pt-4"><SignOffSubTab siteId={siteId} subsections={subsections} canSign={userRole === "Admin"} /></CardContent></Card></TabsContent>
       </Tabs>
     </div>

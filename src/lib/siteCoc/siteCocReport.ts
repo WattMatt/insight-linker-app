@@ -8,6 +8,7 @@ import { createPageFooter } from "../pdfMakeUtils";
 
 const FILL = { pass: "#E1F5EE", fail: "#FCEBEB", review: "#FAEEDA", cv: "#FAEEDA", pending: "#F1EFE8", na: "#F1EFE8" };
 const TEXT: Record<VerdictKind, string> = { pass: "#0F6E56", fail: "#A32D2D", review: "#854F0B", cv: "#854F0B", pending: "#5F5E5A" };
+const AWAITING_LABEL: Record<VerdictKind, string> = { pass: "pass", fail: "fail", review: "under review", cv: "under review (confirm values)", pending: "verdict pending" };
 const TONE: Record<Tone, { fill: string; text: string }> = {
   green: { fill: "#E1F5EE", text: "#0F6E56" },
   red: { fill: "#FCEBEB", text: "#A32D2D" },
@@ -165,10 +166,14 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
       { text: `${s.clear} clear`, color: "#0F6E56" }, { text: "      ·      ", color: "#B4B2A9" },
       { text: `${s.noCoc} no COC`, color: "#A32D2D" }, { text: "      ·      ", color: "#B4B2A9" },
       { text: `${s.failed} failed`, color: "#A32D2D" },
+      ...(s.awaitingSignOff ? [{ text: "      ·      ", color: "#B4B2A9" }, { text: `${s.awaitingSignOff} awaiting sign-off`, color: "#854F0B" }] : []),
     ], fontSize: 11 },
   ];
 
-  const narrative = `${model.siteName} has ${s.required} COC-required shops. ${s.clear} are clear (Pass), ${s.noCoc} have no COC on file, and ${s.failed} ${s.failed === 1 ? "has a failed certificate" : "have failed certificates"}. Overall compliance is ${s.compliantPct}%, with ${k.outstanding} outstanding ${k.outstanding === 1 ? "action" : "actions"}. COC documents are on record for ${k.cocCoveragePct}% of required shops and evaluation reports for ${k.evalCoveragePct}%.`;
+  const awaitingNote = s.awaitingSignOff
+    ? ` A further ${s.awaitingSignOff} ${s.awaitingSignOff === 1 ? "shop has a COC" : "shops have COCs"} on file whose re-verification verdict is awaiting engineer sign-off; ${s.awaitingSignOff === 1 ? "it is" : "they are"} listed under that verdict, not as missing.`
+    : "";
+  const narrative = `${model.siteName} has ${s.required} COC-required shops. ${s.clear} are clear (Pass), ${s.noCoc} have no COC on file, and ${s.failed} ${s.failed === 1 ? "has a failed certificate" : "have failed certificates"}.${awaitingNote} Overall compliance is ${s.compliantPct}%, with ${k.outstanding} outstanding ${k.outstanding === 1 ? "action" : "actions"}. COC documents are on record for ${k.cocCoveragePct}% of required shops and evaluation reports for ${k.evalCoveragePct}%.`;
 
   // Tinted KPI cards. Each card is a NESTED table (accent bar + tinted content) with a fixed height
   // on the NESTED table — this is the structure pd.js renders reliably. Putting heights on the OUTER
@@ -240,8 +245,12 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
     { text: model.issues.noCoc.map(i => i.name).join(" · ") || "—", fontSize: 9, margin: [0, 0, 0, 6] },
     { text: `Failed verdict / SANS rules (${model.issues.failed.length})`, fontSize: 9, color: TEXT.fail },
     model.issues.failed.length
-      ? { ul: model.issues.failed.map(f => `${f.name} — ${f.certNo} — failed ${f.failedRules.join(", ") || "(see verdict)"}`), fontSize: 9 }
-      : { text: "—", fontSize: 9 },
+      ? { ul: model.issues.failed.map(f => `${f.name} — ${f.certNo || "(no certificate number)"} — failed ${f.failedRules.join(", ") || "(see verdict)"}${f.awaitingSignOff ? " (proposed, awaiting sign-off)" : ""}`), fontSize: 9 }
+      : { text: "—", fontSize: 9, margin: [0, 0, 0, 6] },
+    ...(model.issues.awaitingSignOff.length ? [
+      { text: `COC on file, awaiting sign-off (${model.issues.awaitingSignOff.length})`, fontSize: 9, color: TEXT.review, margin: [0, 6, 0, 0] } as Content,
+      { ul: model.issues.awaitingSignOff.map(a => `${a.name} — proposed ${AWAITING_LABEL[a.verdictKind]}`), fontSize: 9 } as Content,
+    ] : []),
   ];
 
   const tablesBlock: Content[] = [

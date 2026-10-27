@@ -121,3 +121,61 @@ describe("buildCocReportModel with missing certificate and shop numbers", () => 
     expect(ack.actions.some(a => a.startsWith("COC (no certificate number) failed SANS rule(s) C5"))).toBe(true);
   });
 });
+
+// Shops whose only certificates are proposed re-verification rows have a COC on file, awaiting sign-off.
+// Before 27 Oct 2026 the report loaded only final/signed-off rows, so these read "No COC on file".
+describe("buildCocReportModel: COC on file but awaiting sign-off", () => {
+  type In = Parameters<typeof buildCocReportModel>[0];
+  const shops: In["subsections"] = [
+    { id: "f", name: "FINAL SHOP", tenant_name: null, is_coc_required: true },
+    { id: "pf", name: "PROPOSED FAIL", tenant_name: null, is_coc_required: true },
+    { id: "pp", name: "PROPOSED PASS", tenant_name: null, is_coc_required: true },
+    { id: "pr", name: "PROPOSED REVIEW", tenant_name: null, is_coc_required: true },
+    { id: "n", name: "NOTHING", tenant_name: null, is_coc_required: true },
+  ];
+  const row = (sub: string, cert: string, verdict: string, rules: Record<string, string> = {}) =>
+    ({ subsection_id: sub, cert_no: cert, cert_type: "Initial", verdict, rules, issued_date: null, coc_document_id: null, eval_document_id: null });
+  const m = buildCocReportModel({
+    siteName: "S", generatedAt: "2026-10-27", lastImport: null, subsections: shops, schedule: [],
+    certificates: [row("f", "F1", "PASS")],
+    proposedCertificates: [
+      row("f", "F2", "FAIL", { C8: "FAIL" }),        // ignored: shop already has a final row
+      row("pf", "P1", "FAIL", { C8: "FAIL" }),
+      row("pp", "P2", "PASS", { C5: "FLAG" }),
+      row("pr", "P3", "REVIEW"),
+    ],
+  });
+  const t = (name: string) => m.tenants.find(x => x.name === name)!;
+
+  it("a shop with only proposed rows is on file, not 'no COC'", () => {
+    expect(m.issues.noCoc.map(i => i.name)).toEqual(["NOTHING"]);
+    expect(m.summary.noCoc).toBe(1);
+    expect(t("PROPOSED FAIL").noCoc).toBe(false);
+    expect(t("PROPOSED FAIL").awaitingSignOff).toBe(true);
+  });
+  it("failed and review proposals are listed under their verdict, marked awaiting sign-off", () => {
+    expect(m.issues.failed).toEqual([{ name: "PROPOSED FAIL", certNo: "P1", failedRules: ["C8"], awaitingSignOff: true }]);
+    expect(m.issues.awaitingSignOff).toEqual([
+      { name: "PROPOSED FAIL", verdictKind: "fail" },
+      { name: "PROPOSED PASS", verdictKind: "pass" },
+      { name: "PROPOSED REVIEW", verdictKind: "review" },
+    ]);
+    expect(m.summary.awaitingSignOff).toBe(3);
+    expect(t("PROPOSED FAIL").actions.some(a => a.includes("awaiting sign-off"))).toBe(true);
+  });
+  it("a shop's final/signed-off rows win over its proposals", () => {
+    expect(t("FINAL SHOP").awaitingSignOff).toBe(false);
+    expect(t("FINAL SHOP").certs.map(c => c.certNo)).toEqual(["F1"]);
+  });
+  it("only signed/final passes count as clear", () => {
+    expect(m.summary.clear).toBe(1);
+    expect(t("PROPOSED PASS").coverage.verdictKind).toBe("pass");
+    expect(m.summary.compliantPct).toBe(20);
+  });
+  it("without proposed rows nothing changes", () => {
+    const plain = buildCocReportModel({ siteName: "S", generatedAt: "x", lastImport: null, subsections: shops, schedule: [], certificates: [row("f", "F1", "PASS")] });
+    expect(plain.summary.noCoc).toBe(4);
+    expect(plain.summary.awaitingSignOff).toBe(0);
+    expect(plain.issues.awaitingSignOff).toEqual([]);
+  });
+});
