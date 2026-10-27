@@ -34,6 +34,37 @@ async function all(make: (from: number, to: number) => PromiseLike<{ data: Row[]
 
 const chunks = <T>(xs: T[], n = 200) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
+/** Rule results a reviewer may set on a signed-off row (judgement vocabulary, as stored in `rules`). */
+export const CORRECTION_RES: ReadonlySet<string> = new Set(["PASS", "FAIL", "CV", "N/A", "ASSERTED", "FLAG"]);
+
+export interface Correction { id: string; rules: Record<string, string>; verdict?: string; reasons: string; note: string }
+
+/** corrections: an array, or a JSON string of one (the claude.ai client sends every param as a string
+ *  when it works from a cached schema). Each item: {id, rules:{code:res}, verdict?, reasons, note}. */
+export function parseCorrections(input: unknown): Correction[] {
+  let v = input;
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return [];
+    try { v = JSON.parse(s); } catch { throw new Error("corrections: not valid JSON"); }
+  }
+  if (!Array.isArray(v)) throw new Error("corrections: expected an array of {id, rules, verdict, reasons, note}");
+  return v.map((c: Row, i: number) => {
+    if (!c || typeof c !== "object") throw new Error(`corrections[${i}]: not an object`);
+    const id = String(c.id ?? "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error(`corrections[${i}]: id must be a certificate row uuid`);
+    const rules: Record<string, string> = {};
+    for (const [k, val] of Object.entries((c.rules ?? {}) as Record<string, unknown>)) rules[String(k).toUpperCase().trim()] = String(val ?? "").toUpperCase().trim();
+    const reasons = String(c.reasons ?? "").trim();
+    const note = String(c.note ?? "").trim();
+    if (!note) throw new Error(`corrections[${i}] (${id}): a note saying what the scan shows is required`);
+    if (!Object.keys(rules).length && c.verdict == null && !reasons) throw new Error(`corrections[${i}] (${id}): nothing to change`);
+    const verdict = c.verdict == null ? undefined : String(c.verdict).toUpperCase().trim();
+    if (verdict !== undefined && !["PASS", "FAIL", "REVIEW"].includes(verdict)) throw new Error(`corrections[${i}] (${id}): verdict must be PASS, FAIL or REVIEW`);
+    return { id, rules, verdict, reasons, note };
+  });
+}
+
 export const REPORT_CATEGORIES: Record<string, string> = {
   "Site Summary Reports": "site-summary",
   "Asset Verification Reports": "asset-verification",
@@ -309,6 +340,80 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
         throw e;
       }
       const log = await store.logWrite({ tool: "resign_signed_verdicts", status: "ok", site_id: site.id, site: site.name, result, planned: { ids: ids.length }, snapshot: snap.path });
+      return { ...summary, written: result, snapshot: snap.path, log };
+    },
+
+    /** A reviewer's corrections to SIGNED-OFF rows after re-reading the scans: per row, the rules whose
+     *  result the scan contradicts (judgement vocabulary: PASS / FAIL / CV / N/A / ASSERTED / FLAG), the
+     *  resulting final verdict and the reasons text. The batch's proposed verdict and rule_results are
+     *  never touched (audit trail); June 2026 rows are held. */
+    async correct_signed_verdicts({ site_id, corrections, dry_run = true, confirm_token }: { site_id: string; corrections?: unknown; dry_run?: boolean; confirm_token?: string }) {
+      const site = await store.fortressSite(site_id);
+      const list = parseCorrections(corrections);
+      if (!list.length) throw new Error("corrections: give at least one {id, rules, verdict, reasons, note}");
+      const [rows, batches] = await Promise.all([
+        store.certificates(site_id, "id, subsection_id, cert_no, review_status, verdict, rules, reasons, proposed_verdict_alt, rule_results, superseded_at, signed_off_at, import_batch_id, sign_off_note, coc_document_id"),
+        store.batches(site_id),
+      ]);
+      const juneBatch = new Set(batches.filter((b: Row) => isJune2026(b.created_at)).map((b: Row) => b.id));
+      const byId = new Map<string, Row>(rows.map((r: Row) => [r.id, r]));
+      const held: { id: string; cert_no?: string; why: string }[] = [];
+      const todo: { id: string; cert_no: string | null; verdict_now: string | null; verdict_after: string; rules_after: Record<string, string>; reasons: string; note: string; coc_document_id: string | null }[] = [];
+      for (const c of list) {
+        const r = byId.get(c.id);
+        if (!r) { held.push({ id: c.id, why: "not a certificate row of this site" }); continue; }
+        if (r.review_status !== "signed_off" || !r.signed_off_at || r.superseded_at) { held.push({ id: c.id, cert_no: r.cert_no, why: `not a live signed-off row (${r.review_status}${r.superseded_at ? ", superseded" : ""})` }); continue; }
+        if (juneBatch.has(r.import_batch_id)) { held.push({ id: c.id, cert_no: r.cert_no, why: "June 2026 row (read-only)" }); continue; }
+        const rulesAfter: Record<string, string> = { ...(r.rules ?? {}) };
+        for (const [code, res] of Object.entries(c.rules)) {
+          if (!/^[ABCD]\d{1,2}$/.test(code)) throw new Error(`corrections ${c.id}: bad rule code ${code}`);
+          if (!CORRECTION_RES.has(res)) throw new Error(`corrections ${c.id}: ${code} result must be one of ${[...CORRECTION_RES].join("/")}, got ${res}`);
+          rulesAfter[code] = res;
+        }
+        const anyFail = Object.values(rulesAfter).some((v) => String(v).toUpperCase() === "FAIL");
+        const verdict = c.verdict ?? (anyFail ? "FAIL" : Object.values(rulesAfter).some((v) => ["CV", "REVIEW"].includes(String(v).toUpperCase())) ? "REVIEW" : "PASS");
+        if (anyFail && !verdict.toUpperCase().startsWith("FAIL")) throw new Error(`corrections ${c.id}: a FAIL rule remains (${Object.entries(rulesAfter).filter(([, v]) => String(v).toUpperCase() === "FAIL").map(([k]) => k).join(", ")}) but verdict is ${verdict}`);
+        if (!anyFail && verdict.toUpperCase().startsWith("FAIL")) throw new Error(`corrections ${c.id}: verdict FAIL but no rule fails after the correction`);
+        const stamp = `corrected ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC after re-reading the scan`;
+        todo.push({
+          id: c.id, cert_no: r.cert_no, verdict_now: r.verdict, verdict_after: verdict, rules_after: rulesAfter, reasons: c.reasons || String(r.reasons ?? ""),
+          note: [String(r.sign_off_note ?? "").trim(), `${stamp}: ${c.note} (was ${r.verdict ?? "blank"})`].filter(Boolean).join(" | "),
+          coc_document_id: r.coc_document_id ?? null,
+        });
+      }
+      const ids = todo.map((t) => t.id).sort();
+      const state = sha256(canonical(rows.map((r: Row) => [r.id, r.review_status, r.verdict, r.rules, r.reasons, r.superseded_at, r.signed_off_at]).sort()));
+      const dataHash = sha256(canonical({ correct: todo.map((t) => [t.id, t.verdict_after, t.rules_after, t.reasons, t.note.split(" | ").pop()]) }));
+      const coc = await loadSiteCocData(site_id, sb);
+      const before = cocCounts(buildSiteCocModel({ ...coc, siteId: site_id, siteName: site.name }));
+      const patch = new Map(todo.map((t) => [t.id, t]));
+      const after = cocCounts(buildSiteCocModel({
+        ...coc, siteId: site_id, siteName: site.name,
+        certificates: coc.certificates.map((r) => patch.has(r.id) ? { ...r, verdict: patch.get(r.id)!.verdict_after, rules: patch.get(r.id)!.rules_after } : r),
+      }));
+      const changes = todo.map((t) => ({ id: t.id, cert_no: t.cert_no, verdict_now: t.verdict_now, verdict_after: t.verdict_after, rules_changed: Object.keys(list.find((c) => c.id === t.id)!.rules), reasons_after: t.reasons }));
+      const summary = { site: { id: site.id, name: site.name.trim() }, to_correct: ids.length, verdict_changes: changes.filter((c) => c.verdict_now !== c.verdict_after).length, held, before, after };
+      if (dry_run) {
+        return {
+          ...summary, writes_nothing: true, changes,
+          confirm_token: ids.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null,
+          note: ids.length ? "Apply with dry_run=false, the same corrections and this confirm_token within 15 minutes; refused if the site's COC rows change." : "Nothing to correct.",
+          requires: "fortress.write scope and the Admin role",
+        };
+      }
+      if (!opts.isAdmin) throw new Error("correction refused: requires the Admin role");
+      const why = opts.tokens.check(confirm_token, { siteId: site.id, dataHash, planHash: state });
+      if (why) throw new Error(`correction refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("correction refused: token already used");
+      const snap = await store.exportSnapshot(site.id, "before correct_signed_verdicts");
+      let result: unknown;
+      try {
+        result = await store.correctSigned(site.id, todo.map((t) => ({ id: t.id, verdict: t.verdict_after, rules: t.rules_after, reasons: t.reasons, note: t.note, coc_document_id: t.coc_document_id })));
+      } catch (e) {
+        await store.logWrite({ tool: "correct_signed_verdicts", status: "failed", site_id: site.id, site: site.name, planned: { ids: ids.length }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) });
+        throw e;
+      }
+      const log = await store.logWrite({ tool: "correct_signed_verdicts", status: "ok", site_id: site.id, site: site.name, result, planned: { ids: ids.length, changes }, snapshot: snap.path });
       return { ...summary, written: result, snapshot: snap.path, log };
     },
 
