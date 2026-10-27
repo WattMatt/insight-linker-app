@@ -5,7 +5,7 @@
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isJune2026, slug } from "./core.mjs";
+import { canonical, isJune2026, slug } from "./core.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const LIST_COLS = "id, record_key, cert_no, cert_type, doc_type, issued_date, subsection_id, verdict, proposed_verdict, review_status, superseded_at, signed_off_at, import_batch_id, db_name, location, source_file";
@@ -155,8 +155,49 @@ export class Store {
     return must(await this.sb.rpc("fortress_replace_cocs", { p_site_id: siteId, p_plan: plan, p_label: label, p_source_hash: sourceHash }), "fortress_replace_cocs");
   }
 
-  async signOffJudgement(siteId, ids, expectSuperseded) {
-    return must(await this.sb.rpc("fortress_sign_off_judgement", { p_site_id: siteId, p_ids: ids, p_expect_superseded: expectSuperseded }), "fortress_sign_off_judgement");
+  async signOffJudgement(siteId, ids, expectSuperseded, overrideOlderFinals = false) {
+    if (!overrideOlderFinals) {
+      return must(await this.sb.rpc("fortress_sign_off_judgement", { p_site_id: siteId, p_ids: ids, p_expect_superseded: expectSuperseded }), "fortress_sign_off_judgement");
+    }
+    // "October judgement wins": fortress_sign_off_judgement() refuses a differing older final, so these
+    // rows go one by one through sign_off_coc_certificate_judgement() (Admin-checked in the database;
+    // it signs verdict_alt with judgement rules and supersedes the linked older rows). The caller has
+    // already applied the June 2026 and other-shop holds. Not one transaction: the caller snapshots first.
+    const done = [];
+    for (const id of ids) {
+      const { error } = await this.sb.rpc("sign_off_coc_certificate_judgement", { p_id: id, p_note: "mcp-fortress sign_off_verdicts (judgement; October judgement wins over older final)" });
+      if (error) throw new Error(`sign_off_coc_certificate_judgement ${id}: ${error.message} (signed before this: ${done.length})`);
+      done.push(id);
+    }
+    const rows = await this.certificates(siteId, "id, review_status, verdict, proposed_verdict_alt");
+    const ok = rows.filter(r => ids.includes(r.id) && r.review_status === "signed_off" && r.verdict === r.proposed_verdict_alt).length;
+    if (ok !== ids.length) throw new Error(`verify: ${ok} of ${ids.length} signed with verdict_alt`);
+    return { signed: ok, override_older_finals: true };
+  }
+
+  /** rows: [{ id, verdict_alt, rules, note, coc_document_id }] - verdict and rules of signed-off rows
+   *  (the guard trigger allows exactly these columns to change). Re-reads and verifies afterwards. */
+  async resignJudgement(siteId, rows) {
+    let restamped = 0;
+    for (const r of rows) {
+      const { data, error } = await this.sb.from("coc_certificates")
+        .update({ verdict: r.verdict_alt, rules: r.rules, sign_off_note: r.note, updated_at: new Date().toISOString() })
+        .eq("id", r.id).eq("site_id", siteId).eq("review_status", "signed_off").is("superseded_at", null).select("id");
+      if (error) throw new Error(`coc_certificates ${r.id}: ${error.message}`);
+      if (!data || data.length !== 1) throw new Error(`coc_certificates ${r.id}: not updated (row changed, or update not permitted for this account)`);
+      if (r.coc_document_id) {
+        const u = String(r.verdict_alt).toUpperCase();
+        const status = u.startsWith("PASS") ? "Pass" : u.startsWith("FAIL") ? "Fail" : "Pending";
+        const d = await this.sb.from("subsection_documents").update({ coc_status: status }).eq("id", r.coc_document_id).select("id");
+        if (d.error) throw new Error(`subsection_documents ${r.coc_document_id}: ${d.error.message}`);
+        restamped += d.data?.length ?? 0;
+      }
+    }
+    const after = await this.certificates(siteId, "id, verdict, rules");
+    const want = new Map(rows.map(r => [r.id, r]));
+    const bad = after.filter(a => want.has(a.id) && (a.verdict !== want.get(a.id).verdict_alt || canonical(a.rules) !== canonical(want.get(a.id).rules)));
+    if (bad.length) throw new Error(`verify: ${bad.length} of ${rows.length} rows did not take the judgement verdict`);
+    return { resigned: rows.length, documents_restamped: restamped };
   }
 
   async logWrite(entry) {
