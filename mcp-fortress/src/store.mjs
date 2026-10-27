@@ -200,6 +200,41 @@ export class Store {
     return { resigned: rows.length, documents_restamped: restamped };
   }
 
+  /** Shops of a site: id, name, tenant, shop number, COC-required flag (deleted shops excluded). */
+  async subsections(siteId) {
+    return must(await this.sb.from("subsections").select("id, name, tenant_name, shop_number, is_coc_required").eq("site_id", siteId).is("deleted_at", null).order("name"), "subsections");
+  }
+
+  /** Link certificate rows to shops: subsection_id + a note. Verifies every row took the link. */
+  async linkCertificates(siteId, links) {
+    for (const l of links) {
+      const { data, error } = await this.sb.from("coc_certificates")
+        .update({ subsection_id: l.subsection_id, notes: l.note, updated_at: new Date().toISOString() })
+        .eq("id", l.id).eq("site_id", siteId).is("subsection_id", null).is("superseded_at", null).select("id");
+      if (error) throw new Error(`coc_certificates ${l.id}: ${error.message}`);
+      if (!data || data.length !== 1) throw new Error(`coc_certificates ${l.id}: not linked (row changed, or update not permitted for this account)`);
+    }
+    const after = await this.certificates(siteId, "id, subsection_id");
+    const want = new Map(links.map(l => [l.id, l.subsection_id]));
+    const bad = after.filter(a => want.has(a.id) && a.subsection_id !== want.get(a.id));
+    if (bad.length) throw new Error(`verify: ${bad.length} of ${links.length} rows did not take the link`);
+    return { linked: links.length };
+  }
+
+  /** Flag shops as COC-required. Verifies afterwards. */
+  async setCocRequired(siteId, ids) {
+    for (const id of ids) {
+      const { data, error } = await this.sb.from("subsections").update({ is_coc_required: true, updated_at: new Date().toISOString() })
+        .eq("id", id).eq("site_id", siteId).select("id");
+      if (error) throw new Error(`subsections ${id}: ${error.message}`);
+      if (!data || data.length !== 1) throw new Error(`subsections ${id}: not updated (row changed, or update not permitted for this account)`);
+    }
+    const after = await this.subsections(siteId);
+    const bad = after.filter(s => ids.includes(s.id) && s.is_coc_required !== true);
+    if (bad.length) throw new Error(`verify: ${bad.length} of ${ids.length} shops are still not flagged COC-required`);
+    return { flagged: ids.length };
+  }
+
   async logWrite(entry) {
     return this.sinks.logWrite({ at: new Date().toISOString(), host: this.host, user: this.user.email, ...entry });
   }

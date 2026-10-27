@@ -149,13 +149,19 @@ export async function handleMcp(req: Request): Promise<Response> {
 
   tool("list_sites", "List Fortress_Fund sites, optionally filtered by name.", { filter: z.string().optional() }, base.list_sites);
   tool("get_site", "One Fortress site with its COC row counts and import batches (June 2026 batches marked read-only). Optional portal_emails (comma-separated addresses, e.g. a mail's To and CC) adds portal: which of them can open the site's client-portal page, the portal URL and share links (Admin).",
-    { site_id: siteId, portal_emails: z.string().optional() },
-    async ({ site_id, portal_emails }: { site_id: string; portal_emails?: string }) => {
+    { site_id: siteId, portal_emails: z.string().optional(),
+      coc_required: z.string().optional().describe("\"all\" or a comma-separated list of shop names: runs set_coc_required for this site instead (dry run unless coc_required_apply=true with coc_required_confirm_token)"),
+      coc_required_apply: flag, coc_required_confirm_token: z.string().optional() },
+    async ({ site_id, portal_emails, coc_required, coc_required_apply, coc_required_confirm_token }: { site_id: string; portal_emails?: string; coc_required?: string; coc_required_apply?: boolean; coc_required_confirm_token?: string }) => {
+      if (coc_required?.trim()) {
+        const shops = coc_required.trim().toLowerCase() === "all" ? undefined : coc_required.split(/\s*,\s*/).filter(Boolean);
+        return extra.set_coc_required({ site_id, shops, dry_run: coc_required_apply !== true, confirm_token: coc_required_confirm_token });
+      }
       const site = await base.get_site({ site_id });
       if (!portal_emails?.trim()) return site;
       const [access, links] = await Promise.all([extra.check_portal_access({ site_id, emails: emailList(portal_emails) }), extra.get_portal_links({ site_id })]);
       return { ...(site as Record<string, unknown>), portal: { access, links } };
-    });
+    }, { writeWhen: (a) => !!a?.coc_required && a?.coc_required_apply === true });
   tool("list_cocs", "COC certificate rows for a Fortress site (live rows unless include_superseded).", { site_id: siteId, include_superseded: z.boolean().optional() }, base.list_cocs);
   tool("get_verdicts", "Final and proposed verdicts for a Fortress site's live COC rows, with failed rules.", { site_id: siteId }, base.get_verdicts);
   tool("export_snapshot", "Save a JSON snapshot of the site's COC tables (stored server-side in mcp_fortress_snapshots). Changes no COC data.", { site_id: siteId }, base.export_snapshot);
@@ -176,7 +182,17 @@ export async function handleMcp(req: Request): Promise<Response> {
       return include?.includes("portal_users") ? { ...sites, portal_users: await extra.list_portal_users() } : sites;
     }, { writeWhen: (a) => !!a?.invite && a?.invite_dry_run === false });
   tool("get_site_kpis", "Site KPIs: subsections; asset register (total, verified, discrepancies, not found, extra); COC over COC-required shops (pass/fail/review on file, no COC); open snags by severity with shop and text; date of the data.", { site_id: siteId }, extra.get_site_kpis);
-  tool("get_site_coc_detail", "Per shop: certificates (cert no, verdict, verdict_alt, review status, failing rules) and the shop's COC status as the Site COC Report shows it.", { site_id: siteId }, extra.get_site_coc_detail);
+  tool("get_site_coc_detail", "Per shop: certificates (cert no, verdict, verdict_alt, review status, failing rules) and the shop's COC status as the Site COC Report shows it. link=true runs link_unlinked_cocs instead (dry run unless link_apply=true with link_confirm_token).",
+    { site_id: siteId, link: flag, link_apply: flag, link_confirm_token: z.string().optional() },
+    async ({ site_id, link, link_apply, link_confirm_token }: { site_id: string; link?: boolean; link_apply?: boolean; link_confirm_token?: string }) =>
+      link ? extra.link_unlinked_cocs({ site_id, dry_run: link_apply !== true, confirm_token: link_confirm_token }) : extra.get_site_coc_detail({ site_id }),
+    { writeWhen: (a) => a?.link === true && a?.link_apply === true });
+  tool("set_coc_required", "Flag a Fortress site's shops as COC-required: every shop not yet flagged, or the named shops. dry_run=true (default) lists them (with whether certificates are on file) and returns a confirm token; dry_run=false applies it (fortress.write + Admin).",
+    { site_id: siteId, shops: z.array(z.string()).optional(), dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
+    extra.set_coc_required, { writeWhen: (a) => a?.dry_run === false });
+  tool("link_unlinked_cocs", "Link a site's live certificate rows that have no shop to a shop: by the DB/COC schedule, by shop number, or by a clear name match (folder name, DB name, location). Weak or ambiguous matches are listed for review, not written; June 2026 rows are held. dry_run=true (default) returns the plan with before/after shop counts and a confirm token; dry_run=false applies it, snapshot first (fortress.write + Admin).",
+    { site_id: siteId, dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
+    extra.link_unlinked_cocs, { writeWhen: (a) => a?.dry_run === false });
   tool("list_site_reports", "Saved reports for a site (site reports and inspection reports): kind, date, file_id.", { site_id: siteId }, extra.list_site_reports);
   tool("get_report", "A saved report: 15-minute signed download URL plus the PDF's extracted text.", { file_id: z.string().describe("file_id from list_site_reports") }, extra.get_report);
   tool("sign_off_verdicts", "Sign off a site's proposed COC verdicts with the judgement policy (final verdict = verdict_alt), same rules as the 27 Oct 2026 run: differing older final verdicts, June 2026 rows and rows linked to another shop are held. dry_run=true (default) returns counts and a confirm token; dry_run=false applies it (fortress.write + Admin).",
