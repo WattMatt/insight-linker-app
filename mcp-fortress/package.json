@@ -1,0 +1,23 @@
+{
+  "name": "mcp-fortress",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local stdio MCP server: Fortress site COC records and verdicts (read; proposed-row replace with dry run + confirm token).",
+  "type": "module",
+  "engines": {
+    "node": ">=23"
+  },
+  "bin": {
+    "mcp-fortress": "src/server.mjs"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test 'test/*.test.mjs'",
+    "dev:dry-runs": "node --env-file=.env.dev test/dev-dry-runs.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@supabase/supabase-js": "^2.118.0",
+    "zod": "^3.25.76"
+  }
+}

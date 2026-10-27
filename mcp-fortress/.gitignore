@@ -1,0 +1,7 @@
+node_modules/
+data/
+data-dev/
+.env*
+!.env.example
+dev/supabase/.temp/
+dev/supabase/.branches/

@@ -1,0 +1,5 @@
+tools: list_sites, get_site, list_cocs, get_verdicts, export_snapshot, dry_run_replace_cocs, replace_cocs
+list_sites(thembi): [ { "id": "d2146674-0010-4af0-b66a-99dd69a69b55", "name": "Thembi Mall", "address": "Sheba Street, Tembisa, Gauteng" } ]
+get_site(non-Fortress): isError=true — site 00000000-0000-4000-8000-000000000000 is not a Fortress_Fund site (refused)
+PASS: no credential values in tool output or stderr
+stderr: (empty)

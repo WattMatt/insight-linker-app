@@ -1,0 +1,47 @@
+mcp-fortress dev test — 2026-10-27T07:28:27.925Z — target 127.0.0.1:57421 (local)
+
+list_sites: 33 Fortress sites
+
+== Dry runs (write nothing) ==
+
+YARONA CENTRE (ade5256f-419e-4860-bfd4-2f38dc3cb21a) ← YARONA/verdicts.json
+{"source_records":45,"scored":31,"pass":0,"fail":26,"review":5,"not_scored":14,"adds":0,"updates":0,"restores":0,"unchanged":31,"superseded_now":0,"blocked":0,"legacy_linked_for_signoff":0,"legacy_left_live":22,"june_2026_rows_linked_for_signoff":0}
+stops: none; token issued: no — Nothing to write: every record is unchanged.
+PASS  YARONA CENTRE: dry run wrote nothing (53 rows before and after)
+
+Mayville Mall (66de070d-7e3b-4790-865b-f926b8e3a294) ← MAYVILLE/verdicts.json
+{"source_records":121,"scored":75,"pass":1,"fail":72,"review":2,"not_scored":46,"adds":0,"updates":0,"restores":0,"unchanged":75,"superseded_now":0,"blocked":0,"legacy_linked_for_signoff":0,"legacy_left_live":76,"june_2026_rows_linked_for_signoff":0}
+stops: none; token issued: no — Nothing to write: every record is unchanged.
+PASS  Mayville Mall: dry run wrote nothing (151 rows before and after)
+
+Thembi Mall (d2146674-0010-4af0-b66a-99dd69a69b55) ← THEMBI MALL/verdicts.json
+{"source_records":34,"scored":31,"pass":1,"fail":29,"review":1,"not_scored":3,"adds":2,"updates":2,"restores":0,"unchanged":27,"superseded_now":0,"blocked":0,"legacy_linked_for_signoff":2,"legacy_left_live":26,"june_2026_rows_linked_for_signoff":0}
+stops: none; token issued: yes — Token is valid for 15 minutes, once, for this site and exactly this JSON, while the site's COC rows stay as they are now.
+  adds: doc017 NM 1488984 → FAIL; doc019 ECA 260388 → FAIL
+  updates: doc013 (d0829506-625f-440b-b0ce-86fdd41432a9) → FAIL; doc016 (1b420dd9-1899-4c97-a77d-0022a6db6d64) → FAIL
+PASS  Thembi Mall: dry run wrote nothing (57 rows before and after)
+
+== Read tools (Yarona) ==
+get_site: {"total":53,"live":53,"superseded":0,"live_final":22,"live_proposed":31,"signed_off":0,"rejected":0,"live_legacy":22,"june_2026_rows_read_only":0}
+PASS  list_cocs: 53 live / 53 total
+get_verdicts: {"live_rows":53,"final_verdict":{"(none)":31,"PASS":11,"REVIEW — confirm core value(s): B2, B3, B4":1,"REVIEW — confirm core value(s): C12, C13, C15":4,"PASS — minor fields unrecorded (C14)":1,"FAIL — test value out of limit":1,"":1,"REVIEW — confirm core value(s): C8":2,"REVIEW — confirm core value(s): C11":1},"proposed_verdict":{"REVIEW":5,"FAIL":26,"(none)":22},"review_status":{"proposed":31,"final":22}}
+PASS  export_snapshot: /Users/spud/Documents/DEVELOPER/APPS/insight-linker-app/mcp-fortress/data-dev/snapshots/2026-10-27/YARONA_CENTRE_072828_ade5256f.json
+
+== Refusals ==
+PASS  unknown / non-Fortress site_id: "site ef3a2372-9a3b-4953-9ad2-5c05357ce2e5 is not a Fortress_Fund site (refused)"
+Thembi with doc002 changed: {"source_records":34,"scored":31,"pass":1,"fail":29,"review":1,"not_scored":3,"adds":2,"updates":3,"restores":0,"unchanged":26,"superseded_now":0,"blocked":0,"legacy_linked_for_signoff":2,"legacy_left_live":26,"june_2026_rows_linked_for_signoff":0}
+PASS  one changed record adds exactly one update on top of the baseline (4 → 5) and issues a token
+PASS  token used for another site: "replace refused: token was issued for a different site"
+PASS  token used with different JSON: "replace refused: submitted JSON differs from the dry run"
+PASS  forged token: "replace refused: token signature invalid (or issued by an earlier server process)"
+
+== replace_cocs on the LOCAL copy ==
+{"site":{"id":"d2146674-0010-4af0-b66a-99dd69a69b55","name":"Thembi Mall"},"written":{"updated":3,"batch_id":"a528ecfe-34b0-422f-905e-e26e89165169","inserted":2,"superseded":0},"snapshot":"/Users/spud/Documents/DEVELOPER/APPS/insight-linker-app/mcp-fortress/data-dev/snapshots/2026-10-27/Thembi_Mall_072828_d2146674.json","log":"/Users/spud/Documents/DEVELOPER/APPS/insight-linker-app/mcp-fortress/data-dev/logs/writes.jsonl"}
+PASS  snapshot written before the write
+PASS  write logged with timestamp, site, row counts and snapshot path
+PASS  written row is proposed with no final verdict
+PASS  token reuse: "replace refused: the site's COC rows changed since the dry run — run it again"
+PASS  dry run after replace shows nothing left to write
+PASS  June 2026 rows untouched (76 on Mayville)
+
+ALL CHECKS PASSED
