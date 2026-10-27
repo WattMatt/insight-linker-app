@@ -13,6 +13,7 @@ function fakeSb(tables: Record<string, Row[]>) {
       in: (k: string, vs: unknown[]) => { rows = rows.filter((r) => vs.includes(r[k])); return b; },
       is: (k: string, v: unknown) => { rows = rows.filter((r) => (r[k] ?? null) === v); return b; },
       order: () => b,
+      limit: (n: number) => { rows = rows.slice(0, n); return b; },
       range: (f: number, t: number) => Promise.resolve({ data: rows.slice(f, t + 1), error: null }),
       maybeSingle: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
       then: (res: any, rej: any) => Promise.resolve({ data: rows, error: null }).then(res, rej),
@@ -124,5 +125,68 @@ describe("portal tools", () => {
     const users = [{ email: "new@broll.com", agency: "Broll" }];
     await expect(tools.invite_portal_users({ users })).rejects.toThrow(/Admin/);
     await expect(tools.check_portal_access({ site_id: SITE_B, emails: ["a@b.co"] })).rejects.toThrow(/Admin/);
+  });
+});
+
+describe("resign_signed_verdicts", () => {
+  const SITE = "53000000-0000-4000-8000-000000000000";
+  const SUB = "s1000000-0000-4000-8000-000000000000";
+  const certs = [
+    // strict-signed, fails only on C5: judgement says PASS
+    { id: "c1", site_id: SITE, subsection_id: SUB, cert_no: "NM 1", review_status: "signed_off", signed_off_at: "2026-10-27T08:47:00Z", superseded_at: null,
+      verdict: "FAIL", rules: { C5: "FAIL", C1: "PASS" }, proposed_verdict_alt: "PASS", rule_results: [{ rule: "C5", res: "FAIL" }, { rule: "C1", res: "PASS" }], import_batch_id: "b-oct", coc_document_id: "d1", shop_no_raw: "1" },
+    // already judgement-signed: untouched
+    { id: "c2", site_id: SITE, subsection_id: SUB, cert_no: "NM 2", review_status: "signed_off", signed_off_at: "2026-10-27T09:00:00Z", superseded_at: null,
+      verdict: "PASS", rules: { C1: "PASS" }, proposed_verdict_alt: "PASS", rule_results: [{ rule: "C1", res: "PASS" }], import_batch_id: "b-oct", shop_no_raw: "1" },
+    // June 2026 row that differs: held
+    { id: "c3", site_id: SITE, subsection_id: "s2000000-0000-4000-8000-000000000000", cert_no: "NM 3", review_status: "signed_off", signed_off_at: "2026-06-10T09:00:00Z", superseded_at: null,
+      verdict: "FAIL", rules: { C5: "FAIL" }, proposed_verdict_alt: "PASS", rule_results: [{ rule: "C5", res: "FAIL" }], import_batch_id: "b-jun", shop_no_raw: "1" },
+  ];
+  function mk(isAdmin = true) {
+    const tables: Record<string, Row[]> = {
+      coc_db_schedule: [], coc_import_batches: [{ id: "b-oct", site_id: SITE, created_at: "2026-10-20T00:00:00Z" }],
+      subsections: [{ id: SUB, site_id: SITE, name: "SHOP 1", tenant_name: "T", is_coc_required: true, deleted_at: null }],
+      coc_certificates: certs.map((c) => ({ ...c })),
+    };
+    const calls: any[] = [];
+    const store: any = {
+      client: { id: CLIENT, name: "Fortress_Fund" },
+      async fortressSite(id: string) { if (id !== SITE) throw new Error("x"); return { id: SITE, name: "Test Mall", client_id: CLIENT }; },
+      async certificates() { return tables.coc_certificates; },
+      async batches() { return [{ id: "b-oct", created_at: "2026-10-20T00:00:00Z" }, { id: "b-jun", created_at: "2026-06-05T00:00:00Z" }]; },
+      async exportSnapshot() { return { path: "snap:1" }; },
+      async resignJudgement(siteId: string, rows: any[]) { calls.push({ siteId, rows }); return { resigned: rows.length }; },
+      async logWrite() { return "log:1"; },
+    };
+    const used = new Set<string>();
+    const tools = createFortressTools(fakeSb(tables), store, { tokens: makeTokenKit("t"), consumeToken: async (t) => (used.has(t) ? false : (used.add(t), true)), isAdmin });
+    return { tools, calls };
+  }
+
+  it("dry run plans only the strict-signed non-June row and shows the shop moving from fail to pass", async () => {
+    const { tools } = mk();
+    const r: any = await tools.resign_signed_verdicts({ site_id: SITE });
+    expect(r.to_resign).toBe(1);
+    expect(r.changes.map((c: any) => c.id)).toEqual(["c1"]);
+    expect(r.held.map((h: any) => h.id)).toEqual(["c3"]);
+    expect(r.before.on_file.fail).toBe(1);
+    expect(r.after.on_file).toEqual({ pass: 1, fail: 0, review: 0 });
+    expect(r.writes_nothing).toBe(true);
+  });
+
+  it("applies with the token: verdict_alt plus judgement rules (C5 -> FLAG)", async () => {
+    const { tools, calls } = mk();
+    const dry: any = await tools.resign_signed_verdicts({ site_id: SITE });
+    await expect(tools.resign_signed_verdicts({ site_id: SITE, dry_run: false, confirm_token: "bad" })).rejects.toThrow(/re-sign refused/);
+    await tools.resign_signed_verdicts({ site_id: SITE, dry_run: false, confirm_token: dry.confirm_token });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].rows).toEqual([expect.objectContaining({ id: "c1", verdict_alt: "PASS", rules: { C5: "FLAG", C1: "PASS" }, coc_document_id: "d1" })]);
+    expect(calls[0].rows[0].note).toMatch(/re-signed to judgement .* \(was FAIL\)/);
+  });
+
+  it("refuses non-admins on apply", async () => {
+    const { tools } = mk(false);
+    const dry: any = await tools.resign_signed_verdicts({ site_id: SITE });
+    await expect(tools.resign_signed_verdicts({ site_id: SITE, dry_run: false, confirm_token: dry.confirm_token })).rejects.toThrow(/Admin/);
   });
 });

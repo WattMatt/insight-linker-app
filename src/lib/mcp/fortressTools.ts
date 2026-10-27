@@ -256,6 +256,61 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       return { results, sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, skipped, log };
     },
 
+    /** Re-sign strict-signed rows to the judgement verdict (ruling of 27 Oct 2026). June 2026 rows are never touched. */
+    async resign_signed_verdicts({ site_id, dry_run = true, confirm_token }: { site_id: string; dry_run?: boolean; confirm_token?: string }) {
+      const site = await store.fortressSite(site_id);
+      const [rows, batches] = await Promise.all([
+        store.certificates(site_id, "id, subsection_id, cert_no, review_status, verdict, rules, proposed_verdict_alt, rule_results, superseded_at, signed_off_at, import_batch_id, sign_off_note, coc_document_id"),
+        store.batches(site_id),
+      ]);
+      const juneBatch = new Set(batches.filter((b: Row) => isJune2026(b.created_at)).map((b: Row) => b.id));
+      const same = (a: unknown, b: unknown) => canonical(a ?? null) === canonical(b ?? null);
+      const candidates = rows.filter((r: Row) => r.review_status === "signed_off" && r.signed_off_at && !r.superseded_at
+        && String(r.proposed_verdict_alt ?? "").trim() && r.rule_results
+        && (r.verdict !== r.proposed_verdict_alt || !same(r.rules, judgementRules(r.rule_results as RuleResult[]))));
+      const held = candidates.filter((r: Row) => juneBatch.has(r.import_batch_id)).map((r: Row) => ({ id: r.id, cert_no: r.cert_no, why: "June 2026 row (read-only)" }));
+      const todo = candidates.filter((r: Row) => !juneBatch.has(r.import_batch_id));
+      const ids = todo.map((r: Row) => r.id).sort();
+      const state = sha256(canonical(rows.map((r: Row) => [r.id, r.review_status, r.verdict, r.rules, r.proposed_verdict_alt, r.superseded_at, r.signed_off_at]).sort()));
+      const dataHash = sha256(canonical({ resign: ids }));
+
+      const coc = await loadSiteCocData(site_id, sb);
+      const before = cocCounts(buildSiteCocModel({ ...coc, siteId: site_id, siteName: site.name }));
+      const idSet = new Set(ids);
+      const after = cocCounts(buildSiteCocModel({
+        ...coc, siteId: site_id, siteName: site.name,
+        certificates: coc.certificates.map((r) => idSet.has(r.id) ? { ...r, verdict: (r as Row).proposed_verdict_alt, rules: judgementRules((r as Row).rule_results as RuleResult[]) } : r),
+      }));
+      const changes = todo.map((r: Row) => ({ id: r.id, cert_no: r.cert_no, verdict_now: r.verdict, verdict_after: r.proposed_verdict_alt, rules_only: r.verdict === r.proposed_verdict_alt }));
+      const summary = { site: { id: site.id, name: site.name.trim() }, to_resign: ids.length, verdict_changes: changes.filter((c) => !c.rules_only).length, rules_only_changes: changes.filter((c) => c.rules_only).length, held, before, after };
+      if (dry_run) {
+        return {
+          ...summary, writes_nothing: true, changes: changes.slice(0, 100),
+          confirm_token: ids.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null,
+          note: ids.length ? "Apply with dry_run=false and this confirm_token within 15 minutes; refused if the site's COC rows change." : "Every signed-off row already carries its judgement verdict.",
+          requires: "fortress.write scope and the Admin role",
+        };
+      }
+      if (!opts.isAdmin) throw new Error("re-sign refused: requires the Admin role");
+      const why = opts.tokens.check(confirm_token, { siteId: site.id, dataHash, planHash: state });
+      if (why) throw new Error(`re-sign refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("re-sign refused: token already used");
+      const snap = await store.exportSnapshot(site.id, "before resign_signed_verdicts (judgement)");
+      let result: unknown;
+      try {
+        const stamp = `re-signed to judgement ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`;
+        result = await store.resignJudgement(site.id, todo.map((r: Row) => ({
+          id: r.id, verdict_alt: r.proposed_verdict_alt, rules: judgementRules(r.rule_results as RuleResult[]), coc_document_id: r.coc_document_id ?? null,
+          note: [String(r.sign_off_note ?? "").trim(), `${stamp} (was ${r.verdict ?? "blank"})`].filter(Boolean).join(" | "),
+        })));
+      } catch (e) {
+        await store.logWrite({ tool: "resign_signed_verdicts", status: "failed", site_id: site.id, site: site.name, planned: { ids: ids.length }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) });
+        throw e;
+      }
+      const log = await store.logWrite({ tool: "resign_signed_verdicts", status: "ok", site_id: site.id, site: site.name, result, planned: { ids: ids.length }, snapshot: snap.path });
+      return { ...summary, written: result, snapshot: snap.path, log };
+    },
+
     async list_fortress_sites() {
       const sites = await all((f, t) => sb.from("sites").select("id, name, address, managing_agency_id, consultant_name, consultant_contact")
         .eq("client_id", store.client.id).order("name").range(f, t), "sites");
@@ -396,7 +451,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
     },
 
     /** Same rules as the 27 Oct 2026 judgement run; conflicts, June 2026 links and other-shop links are held. */
-    async sign_off_verdicts({ site_id, policy = "judgement", dry_run = true, confirm_token }: { site_id: string; policy?: string; dry_run?: boolean; confirm_token?: string }) {
+    async sign_off_verdicts({ site_id, policy = "judgement", dry_run = true, confirm_token, override_older_finals = false }: { site_id: string; policy?: string; dry_run?: boolean; confirm_token?: string; override_older_finals?: boolean }) {
       if (policy !== "judgement") throw new Error(`policy "${policy}" is not supported; only "judgement" (final verdict = verdict_alt)`);
       const site = await store.fortressSite(site_id);
       const [rows, batches] = await Promise.all([
@@ -412,14 +467,14 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
         if (june(p)) { held.push({ id: p.id, cert_no: p.cert_no, why: "June 2026 row (read-only)" }); continue; }
         if (!String(p.proposed_verdict_alt ?? "").trim()) { held.push({ id: p.id, cert_no: p.cert_no, why: "no verdict_alt" }); continue; }
         const linked = (p.supersedes_ids ?? []).map((id: string) => byId.get(id)).filter((l: Row | undefined): l is Row => !!l && !l.superseded_at && !l.signed_off_at);
-        if (linked.some((l: Row) => cls(l.verdict) && cls(l.verdict) !== cls(p.proposed_verdict_alt))) { held.push({ id: p.id, cert_no: p.cert_no, why: "an older final verdict differs (not overwritten)" }); continue; }
+        if (!override_older_finals && linked.some((l: Row) => cls(l.verdict) && cls(l.verdict) !== cls(p.proposed_verdict_alt))) { held.push({ id: p.id, cert_no: p.cert_no, why: "an older final verdict differs (not overwritten; override_older_finals=true lets the October judgement win)" }); continue; }
         if (linked.some(june)) { held.push({ id: p.id, cert_no: p.cert_no, why: "would supersede a June 2026 row" }); continue; }
         if (linked.some((l: Row) => l.subsection_id && l.subsection_id !== p.subsection_id)) { held.push({ id: p.id, cert_no: p.cert_no, why: "would supersede an older row on a different shop" }); continue; }
         ids.push(p.id); for (const l of linked) sup.add(l.id);
       }
       ids.sort();
       const state = sha256(canonical(rows.map((r: Row) => [r.id, r.review_status, r.verdict, r.proposed_verdict_alt, r.superseded_at, r.signed_off_at, r.supersedes_ids]).sort()));
-      const dataHash = sha256(canonical({ policy, ids }));
+      const dataHash = sha256(canonical({ policy, ids, override_older_finals }));
 
       // Before/after shop counts with the Site COC Report model.
       const coc = await loadSiteCocData(site_id, sb);
@@ -432,7 +487,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
         proposedCertificates: (coc.proposedCertificates ?? []).filter((r) => !signedSet.has(r.id)),
       }));
       const heldCounts = held.reduce<Record<string, number>>((m, h) => ((m[h.why] = (m[h.why] ?? 0) + 1), m), {});
-      const summary = { site: { id: site.id, name: site.name.trim() }, policy, to_sign: ids.length, would_supersede: sup.size, held: heldCounts, before, after };
+      const summary = { site: { id: site.id, name: site.name.trim() }, policy, override_older_finals, to_sign: ids.length, would_supersede: sup.size, held: heldCounts, before, after };
 
       if (dry_run) {
         return {
@@ -449,7 +504,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const snap = await store.exportSnapshot(site.id, "before sign_off_verdicts (judgement)");
       let result: unknown;
       try {
-        result = await store.signOffJudgement(site.id, ids, sup.size);
+        result = await store.signOffJudgement(site.id, ids, sup.size, override_older_finals);
       } catch (e) {
         await store.logWrite({ tool: "sign_off_verdicts", status: "failed", site_id: site.id, site: site.name, planned: { ids: ids.length, superseded: sup.size }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) });
         throw e;

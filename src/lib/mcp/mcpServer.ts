@@ -158,8 +158,12 @@ export async function handleMcp(req: Request): Promise<Response> {
   tool("list_site_reports", "Saved reports for a site (site reports and inspection reports): kind, date, file_id.", { site_id: siteId }, extra.list_site_reports);
   tool("get_report", "A saved report: 15-minute signed download URL plus the PDF's extracted text.", { file_id: z.string().describe("file_id from list_site_reports") }, extra.get_report);
   tool("sign_off_verdicts", "Sign off a site's proposed COC verdicts with the judgement policy (final verdict = verdict_alt), same rules as the 27 Oct 2026 run: differing older final verdicts, June 2026 rows and rows linked to another shop are held. dry_run=true (default) returns counts and a confirm token; dry_run=false applies it (fortress.write + Admin).",
-    { site_id: siteId, policy: z.literal("judgement").optional(), dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
+    { site_id: siteId, policy: z.literal("judgement").optional(), dry_run: z.boolean().optional(), confirm_token: z.string().optional(),
+      override_older_finals: z.boolean().optional().describe("true = the October judgement verdict wins over a differing older final verdict (ruling 27 Oct 2026); June 2026 and other-shop holds stay") },
     extra.sign_off_verdicts, { writeWhen: (a) => a?.dry_run === false });
+  tool("resign_signed_verdicts", "Re-sign a site's SIGNED-OFF COC rows whose final verdict or rules differ from their judgement verdict (e.g. strict FAIL on C5 only): verdict := verdict_alt, rules := judgement rules. June 2026 rows are held. dry_run=true (default) lists the changes with before/after shop counts and returns a confirm token; dry_run=false applies it, snapshot first (fortress.write + Admin).",
+    { site_id: siteId, dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
+    extra.resign_signed_verdicts, { writeWhen: (a) => a?.dry_run === false });
   tool("list_portal_users", "Fortress client-portal users: email, name, role, agency scope (Broll / JHI / all), status (active = has signed in; invited_never_signed_in), last sign-in, number of visible sites; plus pending invites not yet linked.", {}, extra.list_portal_users);
   tool("check_portal_access", "For a site and a list of email addresses (e.g. a mail's To/CC): which of them can open the site's client-portal page today. Verdicts: ok, needs_resend, user_but_site_outside_scope, account_not_on_fortress_client, pending_invite_only, not_a_user, invalid_email. Returns the portal_url.",
     { site_id: siteId, emails: z.array(z.string()).min(1).max(100) }, extra.check_portal_access);
