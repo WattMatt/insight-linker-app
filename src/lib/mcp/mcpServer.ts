@@ -163,12 +163,18 @@ export async function handleMcp(req: Request): Promise<Response> {
   tool("replace_cocs", "Apply a dry-run plan: snapshot first, then insert PROPOSED rows (no final verdicts, no deletes) for that site only. Needs the confirm token from dry_run_replace_cocs for the same site and JSON. Requires fortress.write.",
     { site_id: siteId, json: verdicts, confirm_token: z.string() }, base.replace_cocs, { write: true });
 
-  tool("list_fortress_sites", "All Fortress sites: id, name, managing agent, stored contact emails, COC row count, shop count. include=\"portal_users\" adds the Fortress client-portal users (agency scope, sign-in state; Admin).",
-    { include: z.string().optional() },
-    async ({ include }: { include?: string }) => {
+  // invite="email|Full Name|agency; email|Full Name|agency" (agency Broll, JHI or all; full name optional).
+  const parseInvites = (v: string) => v.split(/\s*;\s*/).map((x) => x.trim()).filter(Boolean).map((row) => {
+    const [email = "", full_name = "", agency = ""] = row.split("|").map((x) => x.trim());
+    return { email, full_name: full_name || undefined, agency };
+  });
+  tool("list_fortress_sites", "All Fortress sites: id, name, managing agent, stored contact emails, COC row count, shop count. include=\"portal_users\" adds the Fortress client-portal users (agency scope, sign-in state; Admin). invite=\"email|Full Name|agency; ...\" (agency Broll, JHI or all) runs invite_portal_users instead: invite_dry_run=true (default) lists who would be emailed and returns a confirm token; invite_dry_run=false with invite_confirm_token sends the invite emails (fortress.write + Admin).",
+    { include: z.string().optional(), invite: z.string().optional(), invite_dry_run: flag, invite_confirm_token: z.string().optional() },
+    async ({ include, invite, invite_dry_run, invite_confirm_token }: { include?: string; invite?: string; invite_dry_run?: boolean; invite_confirm_token?: string }) => {
+      if (invite?.trim()) return extra.invite_portal_users({ users: parseInvites(invite), dry_run: invite_dry_run !== false, confirm_token: invite_confirm_token });
       const sites = await extra.list_fortress_sites();
       return include?.includes("portal_users") ? { ...sites, portal_users: await extra.list_portal_users() } : sites;
-    });
+    }, { writeWhen: (a) => !!a?.invite && a?.invite_dry_run === false });
   tool("get_site_kpis", "Site KPIs: subsections; asset register (total, verified, discrepancies, not found, extra); COC over COC-required shops (pass/fail/review on file, no COC); open snags by severity with shop and text; date of the data.", { site_id: siteId }, extra.get_site_kpis);
   tool("get_site_coc_detail", "Per shop: certificates (cert no, verdict, verdict_alt, review status, failing rules) and the shop's COC status as the Site COC Report shows it.", { site_id: siteId }, extra.get_site_coc_detail);
   tool("list_site_reports", "Saved reports for a site (site reports and inspection reports): kind, date, file_id.", { site_id: siteId }, extra.list_site_reports);
