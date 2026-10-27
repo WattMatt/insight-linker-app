@@ -62,13 +62,200 @@ function cocCounts(model: ReturnType<typeof buildCocReportModel>) {
   return c;
 }
 
-export function createFortressTools(sb: SupabaseClient, store: Store, opts: { tokens: any; consumeToken: (t: string) => Promise<boolean>; isAdmin: boolean }) {
+/** Auth facts per user id (service-role read; only for ids already found on the Fortress client). */
+export type AuthFacts = { last_sign_in_at: string | null; email_confirmed_at: string | null; invited_at: string | null; created_at: string | null };
+
+export type PortalOpts = {
+  /** Public origin of this deployment, used to build portal links. */
+  origin: string;
+  /** Auth facts for the given user ids. */
+  authFacts: (ids: string[]) => Promise<Map<string, AuthFacts>>;
+  /** Calls the app's invite-user edge function as the calling user (Admin-gated there too). */
+  inviteUser: (body: Record<string, unknown>) => Promise<{ ok: boolean; status: number; body: unknown }>;
+};
+
+const normEmail = (e: unknown) => String(e ?? "").trim().toLowerCase();
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Portal status of one user, from auth facts. */
+export function portalStatus(a: AuthFacts | undefined): "active" | "invited_never_signed_in" | "no_auth_record" {
+  if (!a) return "no_auth_record";
+  return a.last_sign_in_at ? "active" : "invited_never_signed_in";
+}
+
+export function createFortressTools(sb: SupabaseClient, store: Store, opts: { tokens: any; consumeToken: (t: string) => Promise<boolean>; isAdmin: boolean; portal?: PortalOpts }) {
   async function subsections(siteId: string) {
     return all((f, t) => sb.from("subsections").select("id, name, tenant_name, shop_number, meter_serial_number, is_coc_required, updated_at")
       .eq("site_id", siteId).is("deleted_at", null).order("id").range(f, t), "subsections");
   }
 
+  const portal = () => {
+    if (!opts.portal) throw new Error("portal tools are not configured on this server");
+    return opts.portal;
+  };
+
+  /** Every portal user on the Fortress client, with role, agency scope, sign-in state and visible sites. */
+  async function portalUsers() {
+    const p = portal();
+    // RLS shows user_clients / profiles / pending_user_invites of other people to Admins only; a
+    // non-admin would get empty lists and every recipient would read as "not_a_user".
+    if (!opts.isAdmin) throw new Error("portal user tools require the Admin role (other users' accounts are hidden from non-admins)");
+    const [maps, agencies, sites, pending] = await Promise.all([
+      all((f, t) => sb.from("user_clients").select("user_id, managing_agency_id, created_at").eq("client_id", store.client.id).order("user_id").range(f, t), "user_clients"),
+      sb.from("managing_agencies").select("id, name").eq("client_id", store.client.id),
+      all((f, t) => sb.from("sites").select("id, name, managing_agency_id").eq("client_id", store.client.id).order("name").range(f, t), "sites"),
+      all((f, t) => sb.from("pending_user_invites").select("id, email, full_name, invited_at, created_at").order("id").range(f, t), "pending_user_invites"),
+    ]);
+    const agencyName = new Map((must(agencies, "managing_agencies") ?? []).map((a: Row) => [a.id, a.name]));
+    const ids = maps.map((m) => m.user_id);
+    const [profiles, roles, facts] = await Promise.all([
+      Promise.all(chunks(ids).map((c) => all((f, t) => sb.from("profiles").select("id, email, full_name, company, job_title").in("id", c).order("id").range(f, t), "profiles"))).then((x) => x.flat()),
+      Promise.all(chunks(ids).map((c) => all((f, t) => sb.from("user_roles").select("user_id, role").in("user_id", c).order("user_id").range(f, t), "user_roles"))).then((x) => x.flat()),
+      ids.length ? p.authFacts(ids) : Promise.resolve(new Map<string, AuthFacts>()),
+    ]);
+    const prof = new Map(profiles.map((r) => [r.id, r]));
+    const roleOf = new Map<string, string[]>();
+    for (const r of roles) roleOf.set(r.user_id, [...(roleOf.get(r.user_id) ?? []), String(r.role)]);
+    const users = maps.map((m) => {
+      const pr = prof.get(m.user_id) ?? {};
+      const visible = sites.filter((s) => !m.managing_agency_id || s.managing_agency_id === m.managing_agency_id);
+      const a = facts.get(m.user_id);
+      return {
+        user_id: m.user_id, email: pr.email ?? null, full_name: pr.full_name ?? null, company: pr.company ?? null, job_title: pr.job_title ?? null,
+        roles: roleOf.get(m.user_id) ?? [], agency_scope: m.managing_agency_id ? agencyName.get(m.managing_agency_id) ?? m.managing_agency_id : "all (fund level)",
+        managing_agency_id: m.managing_agency_id, status: portalStatus(a), last_sign_in_at: a?.last_sign_in_at ?? null, invited_at: a?.invited_at ?? null,
+        visible_site_ids: visible.map((s) => s.id), visible_sites: visible.length,
+      };
+    });
+    const known = new Set(users.map((u) => normEmail(u.email)));
+    const pendingOnly = pending.filter((r) => !known.has(normEmail(r.email)));
+    return { users, pendingOnly, sites, agencyName };
+  }
+
+  const portalSiteUrl = (siteId: string) => `${portal().origin}/client-portal/sites/${siteId}`;
+
   return {
+    async list_portal_users() {
+      const { users, pendingOnly } = await portalUsers();
+      const by = users.reduce<Record<string, number>>((m, u) => ((m[u.status] = (m[u.status] ?? 0) + 1), m), {});
+      return {
+        client: store.client.name, total: users.length, by_status: by,
+        users: users.map(({ visible_site_ids, ...u }) => u),
+        pending_invites_not_sent_or_unlinked: pendingOnly.map((r) => ({ email: r.email, full_name: r.full_name, invited_at: r.invited_at, created_at: r.created_at })),
+        note: "status: active = has signed in at least once; invited_never_signed_in = account exists but has never signed in (link may have expired). pending_user_invites rows are not linked to a client, so they are listed only when no Fortress user has that email.",
+      };
+    },
+
+    async check_portal_access({ site_id, emails }: { site_id: string; emails: string[] }) {
+      const site = await store.fortressSite(site_id);
+      const { users, pendingOnly } = await portalUsers();
+      const byEmail = new Map(users.map((u) => [normEmail(u.email), u]));
+      const pendingByEmail = new Map(pendingOnly.map((r) => [normEmail(r.email), r]));
+      // Emails held by accounts outside the Fortress client (staff or another client) - read via profiles under RLS.
+      const asked = [...new Set(emails.map(normEmail).filter(Boolean))];
+      const others = asked.length
+        ? must(await sb.from("profiles").select("id, email").in("email", asked.filter((e) => !byEmail.has(e))), "profiles") ?? []
+        : [];
+      const otherEmails = new Set((others as Row[]).map((r) => normEmail(r.email)));
+      const results = asked.map((e) => {
+        if (!EMAIL.test(e)) return { email: e, verdict: "invalid_email", can_see_site: false };
+        const u = byEmail.get(e);
+        if (u) {
+          const canSee = u.visible_site_ids.includes(site.id);
+          return {
+            email: e, full_name: u.full_name, agency_scope: u.agency_scope, status: u.status, last_sign_in_at: u.last_sign_in_at, can_see_site: canSee,
+            verdict: !canSee ? "user_but_site_outside_scope" : u.status === "active" ? "ok" : "needs_resend",
+          };
+        }
+        if (otherEmails.has(e)) return { email: e, verdict: "account_not_on_fortress_client", can_see_site: false };
+        if (pendingByEmail.has(e)) return { email: e, verdict: "pending_invite_only", can_see_site: false, invited_at: pendingByEmail.get(e)!.invited_at };
+        return { email: e, verdict: "not_a_user", can_see_site: false };
+      });
+      return {
+        site: { id: site.id, name: site.name.trim() }, portal_url: portalSiteUrl(site.id),
+        ok: results.filter((r) => r.verdict === "ok").length, needs_action: results.filter((r) => r.verdict !== "ok").length, results,
+        note: "Only 'ok' recipients can open portal_url today. needs_resend / not_a_user / pending_invite_only can be fixed with invite_portal_users.",
+      };
+    },
+
+    async get_portal_links({ site_id }: { site_id: string }) {
+      const site = await store.fortressSite(site_id);
+      const { data: s } = await sb.from("sites").select("managing_agency_id").eq("id", site.id).maybeSingle();
+      const agencyId = (s as Row | null)?.managing_agency_id ?? null;
+      const links = must(await sb.from("client_access_links").select("id, label, link_type, access_token, site_id, managing_agency_id, is_active, expires_at, last_accessed_at")
+        .eq("client_id", store.client.id).eq("is_active", true), "client_access_links") as Row[] ?? [];
+      const now = Date.now();
+      const usable = links.filter((l) => (!l.expires_at || Date.parse(l.expires_at) > now)
+        && (!l.site_id || l.site_id === site.id) && (!l.managing_agency_id || l.managing_agency_id === agencyId));
+      return {
+        site: { id: site.id, name: site.name.trim() },
+        portal_url: portalSiteUrl(site.id), portal_login_required: true,
+        share_links: usable.map((l) => ({
+          label: l.label, link_type: l.link_type, scope: l.site_id ? "this site" : l.managing_agency_id ? "agency portfolio" : "whole Fortress portfolio",
+          url: `${portal().origin}/${l.link_type === "client" ? "portfolio" : "review"}/${l.access_token}`, expires_at: l.expires_at, last_accessed_at: l.last_accessed_at,
+        })),
+        note: "portal_url needs a portal account that can see this site (check_portal_access). share_links open without a login - anyone holding the link can view, so treat them as forwardable.",
+      };
+    },
+
+    /** Invite or re-invite Fortress portal users through the app's invite-user edge function. */
+    async invite_portal_users({ users: req, dry_run = true, confirm_token }: { users: { email: string; full_name?: string; agency?: string }[]; dry_run?: boolean; confirm_token?: string }) {
+      const p = portal();
+      const { users, agencyName } = await portalUsers();
+      const byEmail = new Map(users.map((u) => [normEmail(u.email), u]));
+      const agencyByName = new Map([...agencyName.entries()].map(([id, n]) => [String(n).trim().toLowerCase(), id]));
+      const asked = [...new Map(req.map((r) => [normEmail(r.email), r])).values()];
+      const staffOrOther = asked.length
+        ? new Set(((must(await sb.from("profiles").select("email").in("email", asked.map((r) => normEmail(r.email)).filter((e) => !byEmail.has(e))), "profiles") ?? []) as Row[]).map((r) => normEmail(r.email)))
+        : new Set<string>();
+      const plan: { email: string; full_name: string; action: "invite" | "resend"; managing_agency_id: string | null; agency: string }[] = [];
+      const skipped: { email: string; why: string }[] = [];
+      for (const r of asked) {
+        const e = normEmail(r.email);
+        if (!EMAIL.test(e)) { skipped.push({ email: e, why: "invalid email" }); continue; }
+        const agencyKey = String(r.agency ?? "").trim().toLowerCase();
+        if (!agencyKey) { skipped.push({ email: e, why: `agency is required (${[...agencyName.values()].join(", ")} or "all" for fund level)` }); continue; }
+        const agencyId = agencyKey === "all" || agencyKey === "fund" ? null : agencyByName.get(agencyKey);
+        if (agencyId === undefined) { skipped.push({ email: e, why: `unknown agency "${r.agency}" (use ${[...agencyName.values()].join(", ")} or "all")` }); continue; }
+        const u = byEmail.get(e);
+        if (u) {
+          if (u.status === "active") { skipped.push({ email: e, why: "already active on the portal" }); continue; }
+          if (u.roles.some((x) => x !== "Client")) { skipped.push({ email: e, why: `account has role(s) ${u.roles.join(", ")}; not touched` }); continue; }
+          if ((u.managing_agency_id ?? null) !== agencyId) { skipped.push({ email: e, why: `agency scope differs (${u.agency_scope}); change it in the app, not here` }); continue; }
+          plan.push({ email: e, full_name: r.full_name ?? u.full_name ?? "", action: "resend", managing_agency_id: agencyId, agency: u.agency_scope });
+          continue;
+        }
+        if (staffOrOther.has(e)) { skipped.push({ email: e, why: "account exists outside the Fortress client (staff or another client); not touched" }); continue; }
+        plan.push({ email: e, full_name: r.full_name ?? "", action: "invite", managing_agency_id: agencyId, agency: agencyId ? agencyName.get(agencyId)! : "all (fund level)" });
+      }
+      plan.sort((a, b) => a.email.localeCompare(b.email));
+      const dataHash = sha256(canonical(plan));
+      const state = sha256(canonical(users.map((u) => [u.user_id, u.status, u.managing_agency_id]).sort()));
+      if (dry_run) {
+        return {
+          writes_nothing: true, to_invite: plan.filter((x) => x.action === "invite"), to_resend: plan.filter((x) => x.action === "resend"), skipped,
+          confirm_token: plan.length ? opts.tokens.issue({ siteId: store.client.id, dataHash, planHash: state }) : null,
+          note: "Applying sends each person an invite email from the app (role Client on Fortress_Fund, agency scope as listed). Requires fortress.write and the Admin role.",
+        };
+      }
+      if (!opts.isAdmin) throw new Error("invite refused: requires the Admin role");
+      const why = opts.tokens.check(confirm_token, { siteId: store.client.id, dataHash, planHash: state });
+      if (why) throw new Error(`invite refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("invite refused: token already used");
+      const results: { email: string; action: string; ok: boolean; status: number; error?: string }[] = [];
+      for (const x of plan) {
+        const r = await p.inviteUser({
+          email: x.email, fullName: x.full_name, role: "Client", clientId: store.client.id,
+          ...(x.managing_agency_id ? { managingAgencyId: x.managing_agency_id } : {}), ...(x.action === "resend" ? { isResend: true } : {}),
+        });
+        const b = r.body as Row | null;
+        const ok = r.ok && b?.success !== false;
+        results.push({ email: x.email, action: x.action, ok, status: r.status, ...(ok ? {} : { error: String(b?.error ?? b?.message ?? `HTTP ${r.status}`) }) });
+      }
+      const log = await store.logWrite({ tool: "invite_portal_users", status: results.every((r) => r.ok) ? "ok" : "partial", site: store.client.name, results });
+      return { results, sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, skipped, log };
+    },
+
     async list_fortress_sites() {
       const sites = await all((f, t) => sb.from("sites").select("id, name, address, managing_agency_id, consultant_name, consultant_contact")
         .eq("client_id", store.client.id).order("name").range(f, t), "sites");
