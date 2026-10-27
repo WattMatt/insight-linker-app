@@ -141,10 +141,21 @@ export async function handleMcp(req: Request): Promise<Response> {
     });
 
   const siteId = z.string().uuid().describe("sites.id of a Fortress_Fund site (see list_fortress_sites)");
+  // Connected clients cache a tool list. A parameter added after a client connected reaches this server
+  // as a string (the client does not know its type), so the late-added flags accept "true"/"false" too.
+  const flag = z.preprocess((v) => (v === "true" ? true : v === "false" ? false : v), z.boolean()).optional();
+  const emailList = (v: string) => v.split(/[,;\s]+/).map((e) => e.trim()).filter(Boolean);
   const verdicts = z.union([z.string(), z.record(z.any())]).describe("verdicts.json content (object or text)");
 
   tool("list_sites", "List Fortress_Fund sites, optionally filtered by name.", { filter: z.string().optional() }, base.list_sites);
-  tool("get_site", "One Fortress site with its COC row counts and import batches (June 2026 batches marked read-only).", { site_id: siteId }, base.get_site);
+  tool("get_site", "One Fortress site with its COC row counts and import batches (June 2026 batches marked read-only). Optional portal_emails (comma-separated addresses, e.g. a mail's To and CC) adds portal: which of them can open the site's client-portal page, the portal URL and share links (Admin).",
+    { site_id: siteId, portal_emails: z.string().optional() },
+    async ({ site_id, portal_emails }: { site_id: string; portal_emails?: string }) => {
+      const site = await base.get_site({ site_id });
+      if (!portal_emails?.trim()) return site;
+      const [access, links] = await Promise.all([extra.check_portal_access({ site_id, emails: emailList(portal_emails) }), extra.get_portal_links({ site_id })]);
+      return { ...(site as Record<string, unknown>), portal: { access, links } };
+    });
   tool("list_cocs", "COC certificate rows for a Fortress site (live rows unless include_superseded).", { site_id: siteId, include_superseded: z.boolean().optional() }, base.list_cocs);
   tool("get_verdicts", "Final and proposed verdicts for a Fortress site's live COC rows, with failed rules.", { site_id: siteId }, base.get_verdicts);
   tool("export_snapshot", "Save a JSON snapshot of the site's COC tables (stored server-side in mcp_fortress_snapshots). Changes no COC data.", { site_id: siteId }, base.export_snapshot);
@@ -152,15 +163,21 @@ export async function handleMcp(req: Request): Promise<Response> {
   tool("replace_cocs", "Apply a dry-run plan: snapshot first, then insert PROPOSED rows (no final verdicts, no deletes) for that site only. Needs the confirm token from dry_run_replace_cocs for the same site and JSON. Requires fortress.write.",
     { site_id: siteId, json: verdicts, confirm_token: z.string() }, base.replace_cocs, { write: true });
 
-  tool("list_fortress_sites", "All Fortress sites: id, name, managing agent, stored contact emails, COC row count, shop count.", {}, extra.list_fortress_sites);
+  tool("list_fortress_sites", "All Fortress sites: id, name, managing agent, stored contact emails, COC row count, shop count. include=\"portal_users\" adds the Fortress client-portal users (agency scope, sign-in state; Admin).",
+    { include: z.string().optional() },
+    async ({ include }: { include?: string }) => {
+      const sites = await extra.list_fortress_sites();
+      return include?.includes("portal_users") ? { ...sites, portal_users: await extra.list_portal_users() } : sites;
+    });
   tool("get_site_kpis", "Site KPIs: subsections; asset register (total, verified, discrepancies, not found, extra); COC over COC-required shops (pass/fail/review on file, no COC); open snags by severity with shop and text; date of the data.", { site_id: siteId }, extra.get_site_kpis);
   tool("get_site_coc_detail", "Per shop: certificates (cert no, verdict, verdict_alt, review status, failing rules) and the shop's COC status as the Site COC Report shows it.", { site_id: siteId }, extra.get_site_coc_detail);
   tool("list_site_reports", "Saved reports for a site (site reports and inspection reports): kind, date, file_id.", { site_id: siteId }, extra.list_site_reports);
   tool("get_report", "A saved report: 15-minute signed download URL plus the PDF's extracted text.", { file_id: z.string().describe("file_id from list_site_reports") }, extra.get_report);
   tool("sign_off_verdicts", "Sign off a site's proposed COC verdicts with the judgement policy (final verdict = verdict_alt), same rules as the 27 Oct 2026 run: differing older final verdicts, June 2026 rows and rows linked to another shop are held. dry_run=true (default) returns counts and a confirm token; dry_run=false applies it (fortress.write + Admin).",
     { site_id: siteId, policy: z.literal("judgement").optional(), dry_run: z.boolean().optional(), confirm_token: z.string().optional(),
-      override_older_finals: z.boolean().optional().describe("true = the October judgement verdict wins over a differing older final verdict (ruling 27 Oct 2026); June 2026 and other-shop holds stay") },
-    extra.sign_off_verdicts, { writeWhen: (a) => a?.dry_run === false });
+      override_older_finals: flag.describe("true = the October judgement verdict wins over a differing older final verdict (ruling 27 Oct 2026); June 2026 and other-shop holds stay"),
+      mode: z.enum(["sign", "resign"]).optional().describe("sign (default): sign proposed rows. resign: same as resign_signed_verdicts (re-sign signed-off rows to their judgement verdict)") },
+    (a: any) => (a.mode === "resign" ? extra.resign_signed_verdicts(a) : extra.sign_off_verdicts(a)), { writeWhen: (a) => a?.dry_run === false });
   tool("resign_signed_verdicts", "Re-sign a site's SIGNED-OFF COC rows whose final verdict or rules differ from their judgement verdict (e.g. strict FAIL on C5 only): verdict := verdict_alt, rules := judgement rules. June 2026 rows are held. dry_run=true (default) lists the changes with before/after shop counts and returns a confirm token; dry_run=false applies it, snapshot first (fortress.write + Admin).",
     { site_id: siteId, dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
     extra.resign_signed_verdicts, { writeWhen: (a) => a?.dry_run === false });
