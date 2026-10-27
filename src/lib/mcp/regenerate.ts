@@ -23,6 +23,9 @@ export interface RegenerateInput {
   expiresAt: number;            // seconds
   user: Record<string, unknown>;
   deadlineMs: number;           // absolute epoch ms: stop the run before the function is killed
+  /** Inspection reports run in batches: at most `max` per call, only those never generated or
+   *  generated before `pendingBefore` (ISO), so repeated calls with the same value resume. */
+  inspection?: { max: number; pendingBefore: string };
 }
 
 async function launch() {
@@ -33,11 +36,7 @@ async function launch() {
     return puppeteer.launch({ executablePath: process.env.CHROME_EXECUTABLE_PATH, headless: true, args, defaultViewport: { width: 1400, height: 1000 } });
   }
   const chromium = (await import("@sparticuz/chromium")).default;
-  // --single-process puts the page and the browser in one process, which shares one network-request
-  // budget: the photo-heavy reports then fail with ERR_INSUFFICIENT_RESOURCES. Multi-process unless
-  // MCP_CHROME_SINGLE_PROCESS=1.
-  const args = process.env.MCP_CHROME_SINGLE_PROCESS === "1" ? chromium.args : chromium.args.filter((a) => a !== "--single-process");
-  return puppeteer.launch({ args, executablePath: await chromium.executablePath(), headless: true, defaultViewport: { width: 1400, height: 1000 } });
+  return puppeteer.launch({ args: chromium.args, executablePath: await chromium.executablePath(), headless: true, defaultViewport: { width: 1400, height: 1000 } });
 }
 
 export async function regenerateInBrowser(input: RegenerateInput) {
@@ -60,6 +59,9 @@ export async function regenerateInBrowser(input: RegenerateInput) {
     page.on("framenavigated", (f) => { if (f === page.mainFrame()) diag.navigations.push({ at_s: Math.round((Date.now() - t0) / 1000), url: f.url().replace(origin, "") }); });
     page.on("pageerror", (e) => note(diag.errors, `pageerror: ${e instanceof Error ? e.message : String(e)}`));
     page.on("console", (m) => { if (m.type() === "error") note(diag.errors, `console: ${m.text()}`); });
+    // Report rows show "Generated d MMM yyyy HH:mm" in the browser's time zone; pin it to UTC so the
+    // batch filter below compares like with like.
+    await page.emulateTimezone("UTC");
     await page.evaluateOnNewDocument((key: string, value: string, o: string) => {
       if (location.origin === o) localStorage.setItem(key, value);
     }, storageKey, session, origin);
@@ -68,7 +70,8 @@ export async function regenerateInBrowser(input: RegenerateInput) {
     const labels = input.kinds.map((k) => REPORT_KINDS[k]);
     const remaining = () => input.deadlineMs - Date.now();
     // Select the requested groups (group header checkbox), then Generate.
-    const picked = await page.evaluate(async (wanted: string[], waitMs: number) => {
+    const batch = input.inspection ?? { max: 0, pendingBefore: new Date().toISOString() };
+    const picked = await page.evaluate(async (wanted: string[], waitMs: number, inspLabel: string, max: number, pendingBefore: string) => {
       const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
       const t0 = Date.now();
       while (Date.now() - t0 < waitMs) {
@@ -81,6 +84,7 @@ export async function regenerateInBrowser(input: RegenerateInput) {
       [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Clear")?.click();
       await sleep(300);
       const groups: Record<string, string> = {};
+      let inspection: { total: number; pending: number; selected: number } | null = null;
       for (const label of [...document.querySelectorAll("label")]) {
         const text = (label.textContent ?? "").trim();
         const hit = wanted.find((w) => text.startsWith(w));
@@ -88,6 +92,28 @@ export async function regenerateInBrowser(input: RegenerateInput) {
         const box = label.querySelector("button[role=checkbox]") as HTMLButtonElement | null;
         if (!box) continue;
         if (box.disabled) { groups[hit] = "no reports to generate"; continue; }
+        if (hit === inspLabel) {
+          // Batch: tick individual rows, oldest-pending first in panel order, at most `max`.
+          const group = label.closest("div.rounded-lg") ?? label.parentElement?.parentElement;
+          const rows = [...(group?.querySelectorAll(".divide-y > div") ?? [])];
+          const cutoff = Math.floor(new Date(pendingBefore).getTime() / 60000) * 60000;
+          const pending = rows.filter((row) => {
+            const m = (row.textContent ?? "").match(/Generated (\d{1,2} \w{3} \d{4} \d{2}:\d{2})/);
+            if (!m) return true;                       // never generated
+            const at = Date.parse(`${m[1]} UTC`);
+            return !(at >= cutoff);
+          });
+          let selected = 0;
+          for (const row of pending.slice(0, max)) {
+            const rb = row.querySelector("button[role=checkbox]") as HTMLButtonElement | null;
+            if (!rb || rb.disabled) continue;
+            if (rb.getAttribute("aria-checked") !== "true") { rb.click(); await sleep(150); }
+            selected++;
+          }
+          inspection = { total: rows.length, pending: pending.length, selected };
+          groups[hit] = `batch of ${selected} (of ${pending.length} pending, ${rows.length} total)`;
+          continue;
+        }
         if (box.getAttribute("aria-checked") !== "true") { box.click(); await sleep(250); }
         groups[hit] = "selected";
       }
@@ -95,12 +121,12 @@ export async function regenerateInBrowser(input: RegenerateInput) {
       const g = [...document.querySelectorAll("button")].find((b) => /^Generate \d+ report/.test(b.textContent?.trim() ?? ""));
       const label = g?.textContent?.trim() ?? null;
       const n = Number(label?.match(/\d+/)?.[0] ?? 0);
-      if (!g || n === 0 || (g as HTMLButtonElement).disabled) return { groups, label, selected: 0 };
+      if (!g || n === 0 || (g as HTMLButtonElement).disabled) return { groups, label, selected: 0, inspection };
       g.click();
-      return { groups, label, selected: n };
-    }, labels, Math.min(30_000, remaining()));
+      return { groups, label, selected: n, inspection };
+    }, labels, Math.min(30_000, remaining()), REPORT_KINDS.inspection, batch.max, batch.pendingBefore);
     if ("error" in picked) throw new Error(picked.error);
-    if (!picked.selected) return { selected: 0, groups: picked.groups, summary: null, stopped: false, errors: [] as string[], diag };
+    if (!picked.selected) return { selected: 0, groups: picked.groups, inspection: picked.inspection, summary: null, stopped: false, errors: [] as string[], diag };
     const navsAtStart = diag.navigations.length;
 
     // Wait for the run summary, stopping before the function deadline.
@@ -117,19 +143,19 @@ export async function regenerateInBrowser(input: RegenerateInput) {
       } catch (e) {
         // A full navigation ends the in-browser run; report it instead of failing the whole call.
         if (diag.navigations.length > navsAtStart || /detached|context was destroyed/i.test(String(e))) {
-          return { selected: picked.selected, groups: picked.groups, summary: null, stopped: true, errors: [`the page navigated away during the run (${String(e).slice(0, 120)}); reports already saved are kept`], diag };
+          return { selected: picked.selected, groups: picked.groups, inspection: picked.inspection, summary: null, stopped: true, errors: [`the page navigated away during the run (${String(e).slice(0, 120)}); reports already saved are kept`], diag };
         }
         throw e;
       }
       if (state.done) {
         const errors = await page.evaluate(() => [...document.querySelectorAll("p.text-destructive")].map((e) => e.textContent ?? ""));
-        return { selected: picked.selected, groups: picked.groups, summary: state.done, stopped, errors, diag };
+        return { selected: picked.selected, groups: picked.groups, inspection: picked.inspection, summary: state.done, stopped, errors, diag };
       }
       if (!stopped && remaining() < 45_000) {
         await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Stop")?.click());
         stopped = true;
       }
-      if (remaining() < 5_000) return { selected: picked.selected, groups: picked.groups, summary: state.prog, stopped: true, errors: ["function time limit reached before the run finished; reports already saved are kept"], diag };
+      if (remaining() < 5_000) return { selected: picked.selected, groups: picked.groups, inspection: picked.inspection, summary: state.prog, stopped: true, errors: ["function time limit reached before the run finished; reports already saved are kept"], diag };
       await new Promise((r) => setTimeout(r, 1500));
     }
   } finally {

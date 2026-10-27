@@ -136,17 +136,27 @@ export async function handleMcp(req: Request): Promise<Response> {
   tool("sign_off_verdicts", "Sign off a site's proposed COC verdicts with the judgement policy (final verdict = verdict_alt), same rules as the 27 Oct 2026 run: differing older final verdicts, June 2026 rows and rows linked to another shop are held. dry_run=true (default) returns counts and a confirm token; dry_run=false applies it (fortress.write + Admin).",
     { site_id: siteId, policy: z.literal("judgement").optional(), dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
     extra.sign_off_verdicts, { writeWhen: (a) => a?.dry_run === false });
-  tool("regenerate_site_reports", "Regenerate and save a site's reports with the same generator as the site's 'All reports' panel (run in a headless browser as you). kinds: site-coc, fortress-checklist, site-summary, asset-verification, inspection. Returns the saved file_ids. Requires fortress.write.",
-    { site_id: siteId, kinds: z.array(z.enum(Object.keys(REPORT_KINDS) as [ReportKind, ...ReportKind[]])).min(1) },
-    async ({ site_id, kinds }: { site_id: string; kinds: ReportKind[] }) => {
+  tool("regenerate_site_reports", "Regenerate and save a site's reports with the same generator as the site's 'All reports' panel (run in a headless browser as you). kinds: site-coc, fortress-checklist, site-summary, asset-verification, inspection. Site-level kinds run in full; inspection reports run in batches of max_inspection_reports (default 5) per call: pass the returned resume.pending_before on the next call and repeat until resume.inspection_remaining is 0. Returns the saved file_ids. Requires fortress.write.",
+    {
+      site_id: siteId, kinds: z.array(z.enum(Object.keys(REPORT_KINDS) as [ReportKind, ...ReportKind[]])).min(1),
+      max_inspection_reports: z.number().int().min(1).max(10).optional().describe("inspection reports per call (default 5)"),
+      pending_before: z.string().datetime({ offset: true }).optional().describe("resume marker from the previous call: inspection reports generated at or after this time are skipped"),
+    },
+    async ({ site_id, kinds, max_inspection_reports, pending_before }: { site_id: string; kinds: ReportKind[]; max_inspection_reports?: number; pending_before?: string }) => {
       const site = await store.fortressSite(site_id);
       const since = new Date().toISOString();
+      const pendingBefore = pending_before ?? since;
       const ttl = 15 * 60;
       const run = await regenerateInBrowser({
         origin, siteId: site.id, kinds, supabaseUrl: supabaseUrl(), accessToken: mintUserJwt(user.id, user.email, ttl),
         expiresAt: Math.floor(Date.now() / 1000) + ttl, user: u.user as unknown as Record<string, unknown>, deadlineMs: t0 + 280_000,
+        inspection: kinds.includes("inspection") ? { max: max_inspection_reports ?? 5, pendingBefore } : undefined,
       });
-      return { site: { id: site.id, name: site.name.trim() }, kinds, run, saved: await savedSince(sb, site.id, since) };
+      const insp = run.inspection;
+      const resume = kinds.includes("inspection") && insp
+        ? { pending_before: pendingBefore, inspection_remaining: Math.max(0, insp.pending - insp.selected), note: insp.pending - insp.selected > 0 ? "call again with kinds [\"inspection\"] and this pending_before" : "all inspection reports done for this pass" }
+        : null;
+      return { site: { id: site.id, name: site.name.trim() }, kinds, run, resume, saved: await savedSince(sb, site.id, since) };
     }, { write: true });
 
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });

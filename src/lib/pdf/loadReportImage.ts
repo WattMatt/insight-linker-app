@@ -15,6 +15,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { DOCUMENT_DESIGN_STANDARDS } from '../documentDesignStandards';
 import { inspectPdfImage, isPdfSafeImage, sniffImageFormat } from './imageFormat';
+import { forEachLimited } from '../concurrency';
 
 const { images: IMAGE_STANDARDS } = DOCUMENT_DESIGN_STANDARDS;
 
@@ -306,8 +307,13 @@ export async function loadReportImage(
   return blobToPdfSafeDataUrl(blob, opts);
 }
 
+/** Photos loaded at once. An unbounded burst (Asset Verification on a big site is ~380 photos)
+ *  exhausts the browser's request/blob budget on small devices and in headless Chromium
+ *  (net::ERR_INSUFFICIENT_RESOURCES, then FileReader "could not be read"). */
+export const REPORT_IMAGE_CONCURRENCY = 6;
+
 /**
- * Load many images concurrently, keyed by their original URL.
+ * Load many images, at most REPORT_IMAGE_CONCURRENCY at a time, keyed by their original URL.
  *
  * URLs that fail are absent from the map — callers should skip the image (the
  * sink guard in generatePdfBlob renders a placeholder for anything that slips
@@ -321,12 +327,10 @@ export async function loadReportImages(
   const unique = [...new Set(urls.filter((u): u is string => !!u && !!u.trim()))];
   if (unique.length === 0) return result;
 
-  await Promise.all(
-    unique.map(async (url) => {
-      const dataUrl = await loadReportImage(url, opts);
-      if (dataUrl) result.set(url, dataUrl);
-    }),
-  );
+  await forEachLimited(unique, REPORT_IMAGE_CONCURRENCY, async (url) => {
+    const dataUrl = await loadReportImage(url, opts);
+    if (dataUrl) result.set(url, dataUrl);
+  });
 
   return result;
 }
