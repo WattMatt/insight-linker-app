@@ -12,7 +12,7 @@ import { verifyAccessToken } from "./oauthCore";
 import { resourceOf, wwwAuthenticate } from "./oauthHandlers";
 import { createFortressTools } from "./fortressTools";
 import { REPORT_KINDS, regenerateInBrowser, savedSince, type ReportKind } from "./regenerate";
-import { mintUserJwt, originOf, rolesAreStaff, serviceClient, supabaseUrl, userClient, userRoles } from "./serverDeps";
+import { cleanEnv, mintUserJwt, originOf, rolesAreStaff, serviceClient, supabaseUrl, userClient, userRoles } from "./serverDeps";
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });
@@ -49,7 +49,7 @@ export async function handleMcp(req: Request): Promise<Response> {
   const auth = req.headers.get("authorization") ?? "";
   const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : null;
   if (!bearer) return json(401, { error: "unauthorized", error_description: "Bearer token required" }, { "WWW-Authenticate": wwwAuthenticate(origin) });
-  const secret = process.env.MCP_OAUTH_SECRET;
+  const secret = cleanEnv(process.env.MCP_OAUTH_SECRET);
   if (!secret) return json(500, { error: "server_error", error_description: "MCP_OAUTH_SECRET is not configured" });
   const claims = verifyAccessToken(bearer, secret, { issuer: origin, resource: resourceOf(origin) });
   if (!claims) return json(401, { error: "invalid_token", error_description: "token is invalid or expired" }, { "WWW-Authenticate": wwwAuthenticate(origin, "invalid_token") });

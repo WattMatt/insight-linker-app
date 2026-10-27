@@ -5,12 +5,16 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { mintSupabaseJwt } from "./oauthCore";
 import type { ClientRec, CodeRec, OAuthDeps, OAuthStore, RefreshRec } from "./oauthHandlers";
 
+/** Env values with copy/paste artifacts removed: surrounding whitespace, quotes and a literal "\\n"
+ *  (Vercel `env pull` output pasted back into the dashboard carries one; on a URL it turns
+ *  "/rest/v1" into "/n/rest/v1" and every query 404s silently). */
+export const cleanEnv = (v: string | undefined) => v?.trim().replace(/^"|"$/g, "").replace(/(\\n)+$/, "").trim() || undefined;
 const env = (k: string) => {
-  const v = process.env[k];
+  const v = cleanEnv(process.env[k]);
   if (!v) throw new Error(`server is missing ${k}`);
   return v;
 };
-export const supabaseUrl = () => process.env.SUPABASE_URL ?? env("NEXT_PUBLIC_SUPABASE_URL");
+export const supabaseUrl = () => (cleanEnv(process.env.SUPABASE_URL) ?? env("NEXT_PUBLIC_SUPABASE_URL")).replace(/\/+$/, "");
 
 let service: SupabaseClient | null = null;
 export function serviceClient(): SupabaseClient {
@@ -31,7 +35,8 @@ export const mintUserJwt = (userId: string, email: string | null, ttlS: number) 
 
 /** Public origin of this deployment (https://watsonmattheus.com on production). */
 export function originOf(req: Request): string {
-  if (process.env.MCP_PUBLIC_ORIGIN) return process.env.MCP_PUBLIC_ORIGIN.replace(/\/$/, "");
+  const fixed = cleanEnv(process.env.MCP_PUBLIC_ORIGIN);
+  if (fixed) return fixed.replace(/\/$/, "");
   const u = new URL(req.url);
   const host = req.headers.get("x-forwarded-host") ?? u.host;
   const proto = req.headers.get("x-forwarded-proto") ?? u.protocol.replace(":", "");

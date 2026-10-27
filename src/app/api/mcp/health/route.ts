@@ -3,7 +3,7 @@
 // plus a live read of mcp_oauth_clients. Lets a deploy be checked against prod before it is trusted.
 import { createHash } from "node:crypto";
 import { jsonResponse, preflight } from "@/lib/mcp/http";
-import { serviceClient, supabaseUrl } from "@/lib/mcp/serverDeps";
+import { cleanEnv, serviceClient, supabaseUrl } from "@/lib/mcp/serverDeps";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +14,10 @@ const jwtRef = (k: string | undefined) => {
 };
 
 export async function GET() {
-  const svc = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const svc = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  // Which raw env values carry copy/paste artifacts (cleaned by cleanEnv before use).
+  const artifacts = Object.fromEntries(["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_JWT_SECRET", "MCP_OAUTH_SECRET"]
+    .map((k) => [k, process.env[k] !== undefined && process.env[k] !== cleanEnv(process.env[k])]));
   let db: Record<string, unknown>;
   try {
     const { count, error } = await serviceClient().from("mcp_oauth_clients").select("client_id", { count: "exact", head: true });
@@ -36,12 +39,13 @@ export async function GET() {
   const raw = { default_fetch: await probe({}), no_store: await probe({ cache: "no-store" }) };
   return jsonResponse(200, {
     raw,
+    env_artifacts: artifacts,
     supabase_host: new URL(supabaseUrl()).host,
     supabase_url_source: process.env.SUPABASE_URL ? "SUPABASE_URL" : "NEXT_PUBLIC_SUPABASE_URL",
     service_key: { set: !!svc, kind: svc?.startsWith("sb_") ? "secret-key" : svc ? "jwt" : null, project_ref: jwtRef(svc), fp: fp(svc) },
-    anon_key_ref: jwtRef(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-    supabase_jwt_secret: { set: !!process.env.SUPABASE_JWT_SECRET, fp: fp(process.env.SUPABASE_JWT_SECRET) },
-    mcp_oauth_secret: { set: !!process.env.MCP_OAUTH_SECRET, fp: fp(process.env.MCP_OAUTH_SECRET) },
+    anon_key_ref: jwtRef(cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)),
+    supabase_jwt_secret: { set: !!process.env.SUPABASE_JWT_SECRET, fp: fp(cleanEnv(process.env.SUPABASE_JWT_SECRET)) },
+    mcp_oauth_secret: { set: !!process.env.MCP_OAUTH_SECRET, fp: fp(cleanEnv(process.env.MCP_OAUTH_SECRET)) },
     db,
     vercel_env: process.env.VERCEL_ENV ?? null,
   }, { "Cache-Control": "no-store" });
