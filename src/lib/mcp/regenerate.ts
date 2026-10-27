@@ -44,6 +44,16 @@ export async function regenerateInBrowser(input: RegenerateInput) {
   try {
     const page = await browser.newPage();
     const origin = new URL(input.origin).origin;
+    // Diagnostics returned with every result: main-frame navigations and browser errors.
+    const t0 = Date.now();
+    const diag = { navigations: [] as { at_s: number; url: string }[], errors: [] as string[], dialogs: [] as string[] };
+    const note = (list: string[], m: string) => { if (list.length < 20) list.push(m.slice(0, 300)); };
+    // The app's PWA service worker can take over and reload the page; a headless run has no use for it.
+    await page.setBypassServiceWorker(true);
+    page.on("dialog", (d) => { note(diag.dialogs, `${d.type()}: ${d.message()}`); d.accept().catch(() => {}); });
+    page.on("framenavigated", (f) => { if (f === page.mainFrame()) diag.navigations.push({ at_s: Math.round((Date.now() - t0) / 1000), url: f.url().replace(origin, "") }); });
+    page.on("pageerror", (e) => note(diag.errors, `pageerror: ${e instanceof Error ? e.message : String(e)}`));
+    page.on("console", (m) => { if (m.type() === "error") note(diag.errors, `console: ${m.text()}`); });
     await page.evaluateOnNewDocument((key: string, value: string, o: string) => {
       if (location.origin === o) localStorage.setItem(key, value);
     }, storageKey, session, origin);
@@ -84,26 +94,36 @@ export async function regenerateInBrowser(input: RegenerateInput) {
       return { groups, label, selected: n };
     }, labels, Math.min(30_000, remaining()));
     if ("error" in picked) throw new Error(picked.error);
-    if (!picked.selected) return { selected: 0, groups: picked.groups, summary: null, stopped: false, errors: [] as string[] };
+    if (!picked.selected) return { selected: 0, groups: picked.groups, summary: null, stopped: false, errors: [] as string[], diag };
+    const navsAtStart = diag.navigations.length;
 
     // Wait for the run summary, stopping before the function deadline.
     let stopped = false;
     for (;;) {
-      const state = await page.evaluate(() => {
-        const t = document.querySelector("main")?.textContent ?? document.body.innerText;
-        const done = t.match(/\d+ saved · \d+ failed[^\n]*?\d+s/);
-        const prog = t.match(/Generating… \d+ of \d+|Stopping after the current report… \d+ of \d+/);
-        return { done: done?.[0] ?? null, prog: prog?.[0] ?? null };
-      });
+      let state: { done: string | null; prog: string | null };
+      try {
+        state = await page.evaluate(() => {
+          const t = document.querySelector("main")?.textContent ?? document.body.innerText;
+          const done = t.match(/\d+ saved · \d+ failed[^\n]*?\d+s/);
+          const prog = t.match(/Generating… \d+ of \d+|Stopping after the current report… \d+ of \d+/);
+          return { done: done?.[0] ?? null, prog: prog?.[0] ?? null };
+        });
+      } catch (e) {
+        // A full navigation ends the in-browser run; report it instead of failing the whole call.
+        if (diag.navigations.length > navsAtStart || /detached|context was destroyed/i.test(String(e))) {
+          return { selected: picked.selected, groups: picked.groups, summary: null, stopped: true, errors: [`the page navigated away during the run (${String(e).slice(0, 120)}); reports already saved are kept`], diag };
+        }
+        throw e;
+      }
       if (state.done) {
         const errors = await page.evaluate(() => [...document.querySelectorAll("p.text-destructive")].map((e) => e.textContent ?? ""));
-        return { selected: picked.selected, groups: picked.groups, summary: state.done, stopped, errors };
+        return { selected: picked.selected, groups: picked.groups, summary: state.done, stopped, errors, diag };
       }
       if (!stopped && remaining() < 45_000) {
         await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Stop")?.click());
         stopped = true;
       }
-      if (remaining() < 5_000) return { selected: picked.selected, groups: picked.groups, summary: state.prog, stopped: true, errors: ["function time limit reached before the run finished; reports already saved are kept"] };
+      if (remaining() < 5_000) return { selected: picked.selected, groups: picked.groups, summary: state.prog, stopped: true, errors: ["function time limit reached before the run finished; reports already saved are kept"], diag };
       await new Promise((r) => setTimeout(r, 1500));
     }
   } finally {
