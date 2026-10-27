@@ -36,14 +36,16 @@ export interface CocReportModel {
 }
 
 interface SubRow { id: string; name: string; tenant_name: string | null; is_coc_required: boolean | null }
+// cert_no / shop_no_raw / source_file can be NULL: signed-off re-verification rows include pages
+// whose certificate number was blank. Every sort and label below treats them as "".
 interface CertRow {
-  subsection_id: string | null; cert_no: string; cert_type: string; verdict: string;
+  subsection_id: string | null; cert_no: string | null; cert_type: string; verdict: string;
   rules: Record<string, string> | null; issued_date: string | null;
   coc_document_id: string | null; eval_document_id: string | null;
-  shop_no_raw?: string; doc_type?: string; clause_9_2?: string; confidence?: string; source_file?: string; notes?: string;
+  shop_no_raw?: string | null; doc_type?: string; clause_9_2?: string; confidence?: string; source_file?: string | null; notes?: string;
 }
 interface SchedRow {
-  subsection_id: string | null; shop_no_raw: string; initial_cert_nos: string; supplementary_cert_nos: string;
+  subsection_id: string | null; shop_no_raw: string | null; initial_cert_nos: string; supplementary_cert_nos: string;
   trading_name?: string; coc_required?: string; files_count?: number | null; status?: string; notes?: string;
 }
 export interface BuildInput { siteName: string; generatedAt: string; lastImport: string | null; clientName?: string | null; address?: string | null; subsections: SubRow[]; certificates: CertRow[]; schedule: SchedRow[]; siteKpis?: SiteKpiBlock; }
@@ -77,11 +79,11 @@ export function buildCocReportModel(input: BuildInput): CocReportModel {
 
   const tenants: ReportTenant[] = required
     .slice()
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
     .map(s => {
       const raw = certsBySub.get(s.id) ?? [];
       const certs: ReportCert[] = raw.map(c => ({
-        certNo: c.cert_no, type: c.cert_type, verdict: c.verdict,
+        certNo: c.cert_no ?? "", type: c.cert_type, verdict: c.verdict,
         verdictKind: verdictKind(c.verdict, c.rules), issuedDate: c.issued_date,
         hasCoc: !!c.coc_document_id, hasEval: !!c.eval_document_id,
         rules: c.rules ?? {}, failedRules: failedRulesOf(c.rules),
@@ -97,7 +99,7 @@ export function buildCocReportModel(input: BuildInput): CocReportModel {
       const actions: string[] = [];
       if (noCoc) actions.push("No COC on file. Obtain and upload an Initial Certificate of Compliance for this installation.");
       for (const c of certs.filter(c => c.verdictKind === "fail"))
-        actions.push(`COC ${c.certNo} failed SANS rule(s) ${c.failedRules.join(", ") || "(see verdict)"} — remediate the installation and obtain a re-issued COC.`);
+        actions.push(`COC ${c.certNo || "(no certificate number)"} failed SANS rule(s) ${c.failedRules.join(", ") || "(see verdict)"} — remediate the installation and obtain a re-issued COC.`);
       return {
         subsectionId: s.id, name: s.name, tenantName: s.tenant_name, shopNo: sched?.shop_no_raw ?? "",
         registerInitial: sched?.initial_cert_nos ?? "", registerSupp: sched?.supplementary_cert_nos ?? "",
@@ -125,20 +127,20 @@ export function buildCocReportModel(input: BuildInput): CocReportModel {
 
   const scheduleTable: ScheduleTableRow[] = input.schedule
     .map(r => ({
-      shopNo: r.shop_no_raw, trading: r.trading_name ?? "", req: r.coc_required ?? "",
+      shopNo: r.shop_no_raw ?? "", trading: r.trading_name ?? "", req: r.coc_required ?? "",
       initial: r.initial_cert_nos ?? "", supplementary: r.supplementary_cert_nos ?? "",
       files: r.files_count ?? null, status: r.status ?? "", notes: r.notes ?? "",
     }))
     .sort((a, b) => a.shopNo.localeCompare(b.shopNo));
 
   const verificationRows: VerificationRow[] = input.certificates
-    .map(c => ({ shop: c.shop_no_raw ?? "", certNo: c.cert_no, type: c.cert_type, verdict: c.verdict, rules: c.rules ?? {} }))
+    .map(c => ({ shop: c.shop_no_raw ?? "", certNo: c.cert_no ?? "", type: c.cert_type, verdict: c.verdict, rules: c.rules ?? {} }))
     .sort((a, b) => a.shop.localeCompare(b.shop) || a.certNo.localeCompare(b.certNo));
 
   const fileRegister: FileRegisterRow[] = input.certificates
     .map(c => ({
       file: c.source_file ?? "", matched: c.shop_no_raw ?? "", docType: c.doc_type ?? "",
-      certNo: c.cert_no, type: c.cert_type, clause92: c.clause_9_2 ?? "", issued: c.issued_date,
+      certNo: c.cert_no ?? "", type: c.cert_type, clause92: c.clause_9_2 ?? "", issued: c.issued_date,
       conf: c.confidence ?? "", notes: c.notes ?? "",
     }))
     .sort((a, b) => a.file.localeCompare(b.file));

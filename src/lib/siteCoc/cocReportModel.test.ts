@@ -90,3 +90,34 @@ describe("buildCocReportModel KPIs + cover", () => {
     expect(m.kpis.outstanding).toBe(2);        // TELKOM no-COC + ACK fail
   });
 });
+
+// Signed-off re-verification rows can carry no certificate number (blank on the test-report page)
+// and no shop number. Before 2026-10-27 only workbook rows reached the report; signing off put these
+// in and the Site COC Report crashed in the sorts ("Cannot read properties of null (reading 'localeCompare')").
+describe("buildCocReportModel with missing certificate and shop numbers", () => {
+  const nullCerts: Parameters<typeof buildCocReportModel>[0]["certificates"] = [
+    { subsection_id: "a", cert_no: "B9", cert_type: "Initial", verdict: "FAIL", rules: {}, issued_date: null, coc_document_id: null, eval_document_id: null, source_file: "b.pdf" },
+    { subsection_id: "a", cert_no: null, cert_type: "Unclear", verdict: "FAIL", rules: { C5: "FAIL" }, issued_date: null, coc_document_id: null, eval_document_id: null, shop_no_raw: null, source_file: null },
+    { subsection_id: null, cert_no: null, cert_type: "Unclear", verdict: "REVIEW", rules: {}, issued_date: null, coc_document_id: null, eval_document_id: null, source_file: "a.pdf" },
+  ];
+  const nullSchedule: Parameters<typeof buildCocReportModel>[0]["schedule"] = [
+    { subsection_id: "a", shop_no_raw: "SHOP 1", initial_cert_nos: "B9", supplementary_cert_nos: "" },
+    { subsection_id: "t", shop_no_raw: null, initial_cert_nos: "", supplementary_cert_nos: "" },
+  ];
+  const build = () => buildCocReportModel({ siteName: "S", generatedAt: "2026-10-27", lastImport: null, subsections: subs, certificates: nullCerts, schedule: nullSchedule });
+
+  it("builds without throwing", () => {
+    expect(build).not.toThrow();
+  });
+  it("sorts rows with no number first, as empty strings", () => {
+    const m = build();
+    expect(m.verificationRows.map(r => r.certNo)).toEqual(["", "", "B9"]);
+    expect(m.scheduleTable.map(r => r.shopNo)).toEqual(["", "SHOP 1"]);
+    expect(m.fileRegister.map(r => r.file)).toEqual(["", "a.pdf", "b.pdf"]);
+  });
+  it("names a numberless failed COC in the action instead of leaving a blank", () => {
+    const ack = build().tenants.find(t => t.name === "ACK")!;
+    expect(ack.certs.map(c => c.certNo).sort()).toEqual(["", "B9"]);
+    expect(ack.actions.some(a => a.startsWith("COC (no certificate number) failed SANS rule(s) C5"))).toBe(true);
+  });
+});
