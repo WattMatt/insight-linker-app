@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { folderQuery, planCertLinks } from "./linkCerts";
+import { cleanQuery, folderQuery, planCertLinks } from "./linkCerts";
 
 const subs = [
   { id: "s1", name: "SHOP 007", tenant_name: "STUDIO 88", shop_number: "007" },
@@ -37,16 +37,50 @@ describe("planCertLinks", () => {
       [
         { id: "c1", cert_no: "A", source_file: "COCs/Main DB/Main DB COC.pdf" },
         { id: "c2", cert_no: "B", source_file: "COCs/Vodacom/Vodacom.pdf" },
+        { id: "c3", cert_no: "C", source_file: "COCs/Pep/Pep - COC.pdf" },
+        { id: "c4", cert_no: "D", source_file: "COCs/Capitec/Capitec - COC.pdf" },
       ],
-      subs,
+      [...subs, { id: "s6", name: "SHOP 022", tenant_name: "PEP STORE", shop_number: "022" }],
     );
-    expect(out[0].outcome).toBe("review");
-    expect(out[0].candidates?.length).toBeGreaterThan(1);
+    expect(out[0].outcome).toBe("unmatched"); // "Main DB" alone is generic
     expect(out[1].outcome).toBe("unmatched");
+    expect(out[2].outcome).toBe("review"); // PEP CELL and PEP STORE
+    expect(out[2].candidates?.length).toBe(2);
+    expect(out[3]).toMatchObject({ outcome: "assign", subsection_id: "s3" }); // CAPITEC BANK
   });
   it("never links when the schedule lists the certificate on two shops", () => {
     const out = planCertLinks([{ id: "c1", cert_no: "ECA 1", source_file: null }], subs,
       [{ subsection_id: "s1", initial_cert_nos: "ECA 1" }, { subsection_id: "s2", initial_cert_nos: "ECA 1" }]);
     expect(out[0].outcome).toBe("unmatched");
+  });
+});
+
+describe("cleanQuery and generic queries", () => {
+  it("strips DB prefixes and bracketed asides", () => {
+    expect(cleanQuery("DB - TRABELLA PIZZERIA")).toBe("TRABELLA PIZZERIA");
+    expect(cleanQuery("DB-N208B")).toBe("N208B");
+    expect(cleanQuery("MAIN DB (Monument Center) - old main DB taken out")).toBe("old main DB taken out");
+    expect(cleanQuery("COC Ground floor DB V.E [last token low confidence]")).toBe("COC Ground floor DB V E");
+  });
+  it("never links on a generic DB name or the site's own address", () => {
+    const subs2 = [
+      { id: "m1", name: "Main DB F1 1st Floor North", tenant_name: "Main DB", shop_number: null },
+      { id: "m2", name: "Main DB LV", tenant_name: "Oxford", shop_number: null },
+      { id: "t1", name: "SHOP N105", tenant_name: "TRABELLA PIZZERIA", shop_number: "N105" },
+      { id: "t2", name: "N208B", tenant_name: "Centre management office", shop_number: "N208B" },
+    ];
+    const out = planCertLinks(
+      [
+        { id: "a", cert_no: "1", db_name: "Main DB", location: "204 Oxford Rd" },
+        { id: "b", cert_no: "2", location: "204 Oxford Rd, Illovo" },
+        { id: "c", cert_no: "3", db_name: "DB - TRABELLA PIZZERIA", location: "204 Oxford Rd" },
+        { id: "d", cert_no: "4", db_name: "DB - N208B" },
+      ],
+      subs2, [], { siteName: "204 Oxford", siteAddress: "204 Oxford Rd, Illovo, Sandton, Gauteng" },
+    );
+    expect(out[0].outcome).toBe("unmatched");
+    expect(out[1].outcome).toBe("unmatched");
+    expect(out[2]).toMatchObject({ outcome: "assign", subsection_id: "t1" });
+    expect(out[3]).toMatchObject({ outcome: "assign", subsection_id: "t2" });
   });
 });

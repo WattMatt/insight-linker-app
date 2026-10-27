@@ -43,7 +43,26 @@ export function folderQuery(sourceFile: string | null | undefined): string {
     .trim();
 }
 
-export function planCertLinks(certs: LinkCert[], subs: LinkSub[], schedule: LinkSchedule[] = []): LinkDecision[] {
+const STOP = new Set(["MAIN","DB","DBS","SUB","BOARD","BOARDS","DISTRIBUTION","SHOP","SHOPS","SITE","CENTRE","CENTER","MALL","PLAZA","RD","ROAD","STREET","STR","ST","CNR","CORNER","AVE","AVENUE","NO","AND","THE","OF","PTY","LTD","CC","SA","NEW","OLD","GROUND","FLOOR","LEVEL","UNIT","ERF","PDF","PAGES","PAGE","LOW","CONFIDENCE","TOKEN","LAST","HANDWRITTEN","ABOVE","ILLEGIBLE","UNCERTAIN"]);
+const tokens = (s: string) => normShop(s).split(" ").filter(Boolean);
+
+/** Strip DB prefixes ("DB - X", "SUB DB X", "MAIN DB (X)") and bracketed asides; keep what names the tenant or shop. */
+export function cleanQuery(q: string): string {
+  return (q ?? "")
+    .replace(/\[[^\]]*\]|\([^)]*\)/g, " ")
+    .replace(/^\s*(main|sub)?\s*d\.?b\.?\s*(no\.?|number)?\s*[-:–—]*\s*/i, "")
+    .replace(/\s+(main|sub)?\s*d\.?b\.?\s*$/i, "")
+    .replace(/[-_.,;:]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export interface LinkContext { siteName?: string | null; siteAddress?: string | null }
+
+export function planCertLinks(certs: LinkCert[], subs: LinkSub[], schedule: LinkSchedule[] = [], ctx: LinkContext = {}): LinkDecision[] {
+  const siteStop = new Set([...tokens(ctx.siteName ?? ""), ...tokens(ctx.siteAddress ?? "")]);
+  // A query is usable only if it keeps at least one token that is not generic and not the site's own name/address.
+  const usable = (q: string) => tokens(q).some((t) => t.length >= 2 && !STOP.has(t) && !siteStop.has(t));
   const byId = new Map(subs.map((s) => [s.id, s]));
   const label = (s: LinkSub) => (s.tenant_name && normShop(s.tenant_name) !== normShop(s.name) ? `${s.name} (${s.tenant_name})` : s.name);
   // schedule: cert_no_norm -> set of subsection ids
@@ -64,6 +83,13 @@ export function planCertLinks(certs: LinkCert[], subs: LinkSub[], schedule: Link
       byShopKey.get(k)!.add(s.id);
     }
   }
+  const byTenant = new Map<string, Set<string>>();
+  for (const s of subs) {
+    const k = normShop(s.tenant_name);
+    if (!k || tokens(k).every((t) => STOP.has(t) || siteStop.has(t))) continue;
+    if (!byTenant.has(k)) byTenant.set(k, new Set());
+    byTenant.get(k)!.add(s.id);
+  }
   const one = (set: Set<string> | undefined) => (set && set.size === 1 ? [...set][0] : undefined);
 
   return certs.map((c): LinkDecision => {
@@ -75,7 +101,29 @@ export function planCertLinks(certs: LinkCert[], subs: LinkSub[], schedule: Link
     const viaShop = shopKey ? one(byShopKey.get(shopKey)) : undefined;
     if (viaShop) return { ...base, outcome: "assign", method: "shop_no", subsection_id: viaShop, shop: label(byId.get(viaShop)!), score: 1, query: c.shop_no_raw ?? undefined };
 
-    const queries = [folderQuery(c.source_file), c.db_name ?? "", c.location ?? ""].map((q) => q.trim()).filter((q) => q.length >= 3);
+    const queries = [...new Set([folderQuery(c.source_file), c.db_name ?? "", c.location ?? ""].map((q) => cleanQuery(q)).filter((q) => q.length >= 2 && usable(q)))];
+    // exact shop number / name / tenant after cleaning (e.g. "DB - N208B" -> "N208B", "DB - SUNRAY CHEMIST" -> tenant)
+    for (const q of queries) {
+      const hit = one(byShopKey.get(normShop(q))) ?? one(byTenant.get(normShop(q)));
+      if (hit) return { ...base, outcome: "assign", method: "name", subsection_id: hit, shop: label(byId.get(hit)!), score: 1, query: q };
+    }
+    // token containment: every meaningful token of the query is in exactly one shop's tenant/name (or the reverse)
+    for (const q of queries) {
+      const qt = tokens(q).filter((t) => !STOP.has(t) && !siteStop.has(t));
+      if (!qt.length) continue;
+      const hits = subs.filter((s) => {
+        for (const k of [s.tenant_name, s.name]) {
+          const kt = tokens(k ?? "").filter((t) => !STOP.has(t) && !siteStop.has(t));
+          if (!kt.length) continue;
+          if (qt.every((t) => kt.includes(t)) || kt.every((t) => qt.includes(t))) return true;
+        }
+        return false;
+      });
+      if (hits.length === 1) return { ...base, outcome: "assign", method: "name", subsection_id: hits[0].id, shop: label(hits[0]), score: 0.95, query: q };
+      if (hits.length > 1 && hits.length <= 4) {
+        return { ...base, outcome: "review", query: q, candidates: hits.map((h) => ({ subsection_id: h.id, shop: label(h), score: 0.8 })) };
+      }
+    }
     let best: { q: string; ranked: { id: string; name: string; score: number }[] } | null = null;
     for (const q of queries) {
       const ranked = rankSubsectionCandidates(q, subs, 3);

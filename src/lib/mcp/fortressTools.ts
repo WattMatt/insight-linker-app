@@ -352,7 +352,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const live = rows.filter((r: Row) => !r.subsection_id && !r.superseded_at && r.review_status !== "rejected");
       const held = live.filter((r: Row) => juneBatch.has(r.import_batch_id)).map((r: Row) => ({ id: r.id, cert_no: r.cert_no, why: "June 2026 row (read-only)" }));
       const todo = live.filter((r: Row) => !juneBatch.has(r.import_batch_id));
-      const plan: LinkDecision[] = planCertLinks(todo as any, subs as any, coc.schedule as any);
+      const plan: LinkDecision[] = planCertLinks(todo as any, subs as any, coc.schedule as any, { siteName: site.name, siteAddress: (site as Row).address ?? null });
       const assign = plan.filter((d) => d.outcome === "assign");
       const review = plan.filter((d) => d.outcome === "review");
       const unmatched = plan.filter((d) => d.outcome === "unmatched");
