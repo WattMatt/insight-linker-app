@@ -170,14 +170,14 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const shopName = new Map(subs.map((s) => [s.id, s.name]));
       const [siteDocs, subDocs] = await Promise.all([
         all((f, t) => sb.from("site_documents").select("id, category, file_name, file_size, created_at").eq("site_id", site_id).in("category", Object.keys(REPORT_CATEGORIES)).order("created_at", { ascending: false }).range(f, t), "site_documents"),
-        Promise.all(chunks(subs.map((s) => s.id)).map((c) => all((f, t) => sb.from("subsection_documents").select("id, subsection_id, file_name, file_size, created_at, source_inspection_id, document_categories(name)")
+        Promise.all(chunks(subs.map((s) => s.id)).map((c) => all((f, t) => sb.from("subsection_documents").select("id, subsection_id, file_name, file_size, uploaded_at, source_inspection_id, document_categories(name)")
           .in("subsection_id", c).order("id").range(f, t), "subsection_documents"))).then((x) => x.flat()),
       ]);
       const inspectionReports = subDocs.filter((d) => d.source_inspection_id || (d.document_categories as Row | null)?.name === "Inspection Reports");
       return {
         reports: [
           ...siteDocs.map((d) => ({ file_id: `site_documents:${d.id}`, kind: REPORT_CATEGORIES[d.category] ?? "other", category: d.category, file_name: d.file_name, bytes: d.file_size, created_at: d.created_at })),
-          ...inspectionReports.map((d) => ({ file_id: `subsection_documents:${d.id}`, kind: "inspection", category: "Inspection Reports", shop: shopName.get(d.subsection_id) ?? null, file_name: d.file_name, bytes: d.file_size, created_at: d.created_at })),
+          ...inspectionReports.map((d) => ({ file_id: `subsection_documents:${d.id}`, kind: "inspection", category: "Inspection Reports", shop: shopName.get(d.subsection_id) ?? null, file_name: d.file_name, bytes: d.file_size, created_at: d.uploaded_at })),
         ].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
       };
     },

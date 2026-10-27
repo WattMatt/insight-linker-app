@@ -119,10 +119,10 @@ export async function savedSince(sb: SupabaseClient, siteId: string, sinceIso: s
   ]);
   const subIds = (subs.data ?? []).map((s) => s.id);
   const sub = subIds.length
-    ? await sb.from("subsection_documents").select("id, subsection_id, file_name, created_at").in("subsection_id", subIds).gte("created_at", sinceIso)
-    : { data: [] as { id: string; subsection_id: string; file_name: string; created_at: string }[] };
+    ? await sb.from("subsection_documents").select("id, subsection_id, file_name, uploaded_at").in("subsection_id", subIds).gte("uploaded_at", sinceIso)
+    : { data: [] as { id: string; subsection_id: string; file_name: string; uploaded_at: string }[] };
   return [
     ...(site.data ?? []).map((d) => ({ file_id: `site_documents:${d.id}`, category: d.category, file_name: d.file_name, created_at: d.created_at })),
-    ...(sub.data ?? []).map((d) => ({ file_id: `subsection_documents:${d.id}`, category: "Inspection Reports", file_name: d.file_name, created_at: d.created_at })),
+    ...(sub.data ?? []).map((d) => ({ file_id: `subsection_documents:${d.id}`, category: "Inspection Reports", file_name: d.file_name, created_at: d.uploaded_at })),
   ];
 }
