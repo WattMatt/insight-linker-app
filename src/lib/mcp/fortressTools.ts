@@ -342,7 +342,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
     },
 
     /** Link live certificate rows that have no shop to a shop (schedule, shop number, or a clear name match). June 2026 rows are held. */
-    async link_unlinked_cocs({ site_id, dry_run = true, confirm_token }: { site_id: string; dry_run?: boolean; confirm_token?: string }) {
+    async link_unlinked_cocs({ site_id, dry_run = true, confirm_token, exclude = [] }: { site_id: string; dry_run?: boolean; confirm_token?: string; exclude?: string[] }) {
       const site = await store.fortressSite(site_id);
       const [rows, subs, batches, coc] = await Promise.all([
         store.certificates(site_id, "id, subsection_id, cert_no, cert_no_norm, shop_no_raw, source_file, db_name, location, review_status, superseded_at, import_batch_id, notes"),
@@ -353,7 +353,9 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const held = live.filter((r: Row) => juneBatch.has(r.import_batch_id)).map((r: Row) => ({ id: r.id, cert_no: r.cert_no, why: "June 2026 row (read-only)" }));
       const todo = live.filter((r: Row) => !juneBatch.has(r.import_batch_id));
       const plan: LinkDecision[] = planCertLinks(todo as any, subs as any, coc.schedule as any, { siteName: site.name, siteAddress: (site as Row).address ?? null });
-      const assign = plan.filter((d) => d.outcome === "assign");
+      const skip = new Set((exclude ?? []).map((x) => String(x).trim()).filter(Boolean));
+      const excluded = plan.filter((d) => d.outcome === "assign" && skip.has(d.id));
+      const assign = plan.filter((d) => d.outcome === "assign" && !skip.has(d.id));
       const review = plan.filter((d) => d.outcome === "review");
       const unmatched = plan.filter((d) => d.outcome === "unmatched");
       const linkMap = new Map(assign.map((d) => [d.id, d.subsection_id!]));
@@ -363,7 +365,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const after = cocCounts(buildSiteCocModel({ ...coc, siteId: site_id, siteName: site.name,
         certificates: coc.certificates.map((r) => linkMap.has(r.id) ? { ...r, subsection_id: linkMap.get(r.id)! } : r) }));
       const byMethod = { schedule: assign.filter((d) => d.method === "schedule").length, shop_no: assign.filter((d) => d.method === "shop_no").length, name: assign.filter((d) => d.method === "name").length };
-      const summary = { site: { id: site.id, name: site.name.trim() }, unlinked: live.length, to_link: assign.length, by_method: byMethod, needs_review: review.length, unmatched: unmatched.length, held, before, after };
+      const summary = { site: { id: site.id, name: site.name.trim() }, unlinked: live.length, to_link: assign.length, by_method: byMethod, excluded_by_caller: excluded.length, needs_review: review.length, unmatched: unmatched.length, held, before, after };
       if (dry_run) {
         return { ...summary, writes_nothing: true, links: assign, review: review.slice(0, 150), unmatched_rows: unmatched.slice(0, 150).map((d) => ({ id: d.id, cert_no: d.cert_no, query: d.query, candidates: d.candidates })),
           confirm_token: assign.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null,

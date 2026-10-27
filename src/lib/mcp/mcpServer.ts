@@ -183,15 +183,15 @@ export async function handleMcp(req: Request): Promise<Response> {
     }, { writeWhen: (a) => !!a?.invite && a?.invite_dry_run === false });
   tool("get_site_kpis", "Site KPIs: subsections; asset register (total, verified, discrepancies, not found, extra); COC over COC-required shops (pass/fail/review on file, no COC); open snags by severity with shop and text; date of the data.", { site_id: siteId }, extra.get_site_kpis);
   tool("get_site_coc_detail", "Per shop: certificates (cert no, verdict, verdict_alt, review status, failing rules) and the shop's COC status as the Site COC Report shows it. link=true runs link_unlinked_cocs instead (dry run unless link_apply=true with link_confirm_token).",
-    { site_id: siteId, link: flag, link_apply: flag, link_confirm_token: z.string().optional() },
-    async ({ site_id, link, link_apply, link_confirm_token }: { site_id: string; link?: boolean; link_apply?: boolean; link_confirm_token?: string }) =>
-      link ? extra.link_unlinked_cocs({ site_id, dry_run: link_apply !== true, confirm_token: link_confirm_token }) : extra.get_site_coc_detail({ site_id }),
+    { site_id: siteId, link: flag, link_apply: flag, link_confirm_token: z.string().optional(), link_exclude: z.string().optional().describe("comma-separated certificate row ids to leave unlinked") },
+    async ({ site_id, link, link_apply, link_confirm_token, link_exclude }: { site_id: string; link?: boolean; link_apply?: boolean; link_confirm_token?: string; link_exclude?: string }) =>
+      link ? extra.link_unlinked_cocs({ site_id, dry_run: link_apply !== true, confirm_token: link_confirm_token, exclude: emailList(link_exclude ?? "") }) : extra.get_site_coc_detail({ site_id }),
     { writeWhen: (a) => a?.link === true && a?.link_apply === true });
   tool("set_coc_required", "Flag a Fortress site's shops as COC-required: every shop not yet flagged, or the named shops. dry_run=true (default) lists them (with whether certificates are on file) and returns a confirm token; dry_run=false applies it (fortress.write + Admin).",
     { site_id: siteId, shops: z.array(z.string()).optional(), dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
     extra.set_coc_required, { writeWhen: (a) => a?.dry_run === false });
   tool("link_unlinked_cocs", "Link a site's live certificate rows that have no shop to a shop: by the DB/COC schedule, by shop number, or by a clear name match (folder name, DB name, location). Weak or ambiguous matches are listed for review, not written; June 2026 rows are held. dry_run=true (default) returns the plan with before/after shop counts and a confirm token; dry_run=false applies it, snapshot first (fortress.write + Admin).",
-    { site_id: siteId, dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
+    { site_id: siteId, dry_run: z.boolean().optional(), confirm_token: z.string().optional(), exclude: z.array(z.string()).optional().describe("certificate row ids to leave unlinked") },
     extra.link_unlinked_cocs, { writeWhen: (a) => a?.dry_run === false });
   tool("list_site_reports", "Saved reports for a site (site reports and inspection reports): kind, date, file_id.", { site_id: siteId }, extra.list_site_reports);
   tool("get_report", "A saved report: 15-minute signed download URL plus the PDF's extracted text.", { file_id: z.string().describe("file_id from list_site_reports") }, extra.get_report);
