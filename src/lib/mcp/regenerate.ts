@@ -28,10 +28,16 @@ export interface RegenerateInput {
 async function launch() {
   const puppeteer = (await import("puppeteer-core")).default;
   if (process.env.CHROME_EXECUTABLE_PATH) {
-    return puppeteer.launch({ executablePath: process.env.CHROME_EXECUTABLE_PATH, headless: true });
+    // Local runs: optional CHROME_ARGS (JSON array) reproduces the serverless flags.
+    const args = process.env.CHROME_ARGS ? (JSON.parse(process.env.CHROME_ARGS) as string[]) : [];
+    return puppeteer.launch({ executablePath: process.env.CHROME_EXECUTABLE_PATH, headless: true, args, defaultViewport: { width: 1400, height: 1000 } });
   }
   const chromium = (await import("@sparticuz/chromium")).default;
-  return puppeteer.launch({ args: chromium.args, executablePath: await chromium.executablePath(), headless: true, defaultViewport: { width: 1400, height: 1000 } });
+  // --single-process puts the page and the browser in one process, which shares one network-request
+  // budget: the photo-heavy reports then fail with ERR_INSUFFICIENT_RESOURCES. Multi-process unless
+  // MCP_CHROME_SINGLE_PROCESS=1.
+  const args = process.env.MCP_CHROME_SINGLE_PROCESS === "1" ? chromium.args : chromium.args.filter((a) => a !== "--single-process");
+  return puppeteer.launch({ args, executablePath: await chromium.executablePath(), headless: true, defaultViewport: { width: 1400, height: 1000 } });
 }
 
 export async function regenerateInBrowser(input: RegenerateInput) {
