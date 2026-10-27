@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { makeTokenKit } from "./core.mjs";
-import { connect } from "./store.mjs";
+import { connect } from "./connect.mjs";
 import { createTools } from "./tools.mjs";
 
 const store = await connect();

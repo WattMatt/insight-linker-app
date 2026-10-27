@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs";
 import { planSite } from "../../src/lib/siteCoc/reverification.ts";
 import { canonical, planHash, planWrites, sha256, summarize } from "./core.mjs";
 
-/** `json` may be the verdicts.json object, its text, or omitted in favour of `json_path`. */
-export function readSource({ json, json_path }) {
+/** `json` may be the verdicts.json object, its text, or omitted in favour of `json_path`.
+ *  The remote server passes allowPath = false: a file path is never read on the server. */
+export function readSource({ json, json_path }, allowPath = true) {
+  if (json_path && !allowPath) throw new Error("json_path is not accepted by this server; pass the verdicts.json content as json");
   if (json == null && !json_path) throw new Error("give json (verdicts.json content) or json_path");
   const src = json_path ? JSON.parse(readFileSync(json_path, "utf8")) : typeof json === "string" ? JSON.parse(json) : json;
   if (!src || typeof src.site !== "string" || !Array.isArray(src.docs)) {
@@ -14,8 +16,18 @@ export function readSource({ json, json_path }) {
   return src;
 }
 
-export function createTools(store, tokens) {
+/**
+ * opts.allowJsonPath: read json_path from local disk (stdio server only).
+ * opts.consumeToken: async (token) => true the first time a confirm token is spent, false after; the
+ * remote server backs this with a table so it holds across serverless instances. Default: memory.
+ * @param {any} store
+ * @param {any} tokens
+ * @param {{ allowJsonPath?: boolean, consumeToken?: (token: string) => Promise<boolean> }} [opts]
+ */
+export function createTools(store, tokens, { allowJsonPath = true, consumeToken } = {}) {
   const used = new Set();
+  const consume = consumeToken ?? (async t => (used.has(t) ? false : (used.add(t), true)));
+  const source = args => readSource(args, allowJsonPath);
 
   async function plan(siteId, src) {
     const site = await store.fortressSite(siteId);
@@ -38,7 +50,7 @@ export function createTools(store, tokens) {
     export_snapshot: async ({ site_id }) => store.exportSnapshot(site_id, "export_snapshot"),
 
     async dry_run_replace_cocs(args) {
-      const src = readSource(args);
+      const src = source(args);
       const { site, p, juneIds, juneTouched, dataHash, ph } = await plan(args.site_id, src);
       const stops = [
         ...p.blocked.map(b => `blocked: ${b.id} (${b.record_key ?? "legacy"}) — ${b.why}`),
@@ -58,13 +70,12 @@ export function createTools(store, tokens) {
     },
 
     async replace_cocs(args) {
-      const src = readSource(args);
+      const src = source(args);
       const { site, p, juneIds, juneTouched, dataHash, ph } = await plan(args.site_id, src);
       const why = tokens.check(args.confirm_token, { siteId: site.id, dataHash, planHash: ph });
       if (why) throw new Error(`replace refused: ${why}`);
-      if (used.has(args.confirm_token)) throw new Error("replace refused: token already used");
       if (p.blocked.length || juneTouched.length) throw new Error("replace refused: stop conditions present (blocked or June 2026 rows)");
-      used.add(args.confirm_token);
+      if (!(await consume(args.confirm_token))) throw new Error("replace refused: token already used");
 
       const snap = await store.exportSnapshot(site.id, "before replace_cocs");
       const w = planWrites(p);
@@ -78,10 +89,10 @@ export function createTools(store, tokens) {
       try {
         result = await store.replace(site.id, { ...w, counts }, `mcp-fortress replace_cocs: ${src.site}`, dataHash);
       } catch (e) {
-        store.logWrite({ tool: "replace_cocs", status: "failed", site_id: site.id, site: site.name, planned: counts, snapshot: snap.path, error: e.message });
+        await store.logWrite({ tool: "replace_cocs", status: "failed", site_id: site.id, site: site.name, planned: counts, snapshot: snap.path, error: e.message });
         throw e;
       }
-      const log = store.logWrite({ tool: "replace_cocs", status: "ok", site_id: site.id, site: site.name, rows: result, planned: counts, snapshot: snap.path, source_hash: dataHash });
+      const log = await store.logWrite({ tool: "replace_cocs", status: "ok", site_id: site.id, site: site.name, rows: result, planned: counts, snapshot: snap.path, source_hash: dataHash });
       return { site: { id: site.id, name: site.name }, written: result, snapshot: snap.path, log };
     },
   };

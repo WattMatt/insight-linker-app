@@ -9,6 +9,16 @@ verdicts in Insight Linker (WM Compliance) without a browser.
 - **June 2026 import batches are read-only.** They show up in reads, but this server never updates
   or supersedes their rows.
 
+## Remote server (claude.ai custom connector)
+
+The same tools (plus seven more) are served over Streamable HTTP at
+`https://watsonmattheus.com/api/mcp`, with OAuth 2.1 (DCR, PKCE S256, client ID metadata documents).
+Code: `src/lib/mcp/` and the routes under `src/app/{api/mcp,oauth,.well-known}`. The remote server
+reuses `src/core.mjs`, `src/tools.mjs` and `src/store.mjs` (the store takes an injected Supabase
+client that acts as the signed-in staff user; snapshots and the write log go to the
+`mcp_fortress_snapshots` / `mcp_audit_log` tables instead of local files). `json_path` is refused
+remotely. Migration: `supabase/migrations/20261027140000_mcp_remote_oauth.sql`.
+
 ## How writes work
 
 `replace_cocs` follows the app's re-verification model (migration `20261023120000`). It reuses the

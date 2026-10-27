@@ -113,7 +113,12 @@ const nextConfig = {
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
 
-  serverExternalPackages: ['fabric', 'canvas', 'pdfmake', 'html2canvas'],
+  serverExternalPackages: ['fabric', 'canvas', 'pdfmake', 'html2canvas', '@sparticuz/chromium', 'puppeteer-core', 'unpdf'],
+  // regenerate_site_reports (src/lib/mcp/regenerate.ts) launches the packaged Chromium; its brotli
+  // archives are read at runtime, so file tracing cannot see them.
+  outputFileTracingIncludes: {
+    '/api/mcp': ['./node_modules/@sparticuz/chromium/bin/**'],
+  },
 
   images: {
     remotePatterns: [

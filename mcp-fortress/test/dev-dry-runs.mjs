@@ -10,7 +10,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { makeTokenKit } from "../src/core.mjs";
-import { connect } from "../src/store.mjs";
+import { connect } from "../src/connect.mjs";
 import { createTools } from "../src/tools.mjs";
 
 const url = new URL(process.env.SUPABASE_URL ?? "http://invalid");

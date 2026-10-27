@@ -4,5 +4,6 @@
   "buildCommand": "NODE_OPTIONS='--require ./server-polyfills.js' next build",
   "installCommand": "npm install",
   "regions": ["iad1"],
+  "functions": { "src/app/api/mcp/route.ts": { "memory": 3009, "maxDuration": 300 } },
   "crons": [{ "path": "/api/snapshots/capture", "schedule": "0 2 * * *" }]
 }

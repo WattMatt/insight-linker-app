@@ -3,7 +3,7 @@
 // back to the role redirect. Prevents open-redirect via ?next=, and resolves
 // dot-segments (e.g. /dashboard/../../settings) via URL normalization so the
 // allow-list check runs against the actual resolved path, not the raw string.
-const ALLOWED_PREFIXES = ["/contractor", "/clients", "/client-portal", "/dashboard", "/sites", "/qr-codes", "/qr-activity"];
+const ALLOWED_PREFIXES = ["/contractor", "/clients", "/client-portal", "/dashboard", "/sites", "/qr-codes", "/qr-activity", "/oauth/authorize"];
 
 export function safeNext(raw: string | null | undefined): string | null {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return null;

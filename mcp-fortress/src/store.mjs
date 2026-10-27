@@ -1,38 +1,52 @@
-// Data access for mcp-fortress. Signs in as the dedicated staff user (row-level security applies),
-// scopes every call to Fortress_Fund sites, and writes only through fortress_replace_cocs().
+// Data access for mcp-fortress. Takes a Supabase client that already acts as a staff user
+// (row-level security applies), scopes every call to Fortress_Fund sites, and writes only through
+// fortress_replace_cocs() / fortress_sign_off_judgement(). Snapshots and the write log go to
+// pluggable sinks: local files for the stdio server (fileSinks), database tables for the remote one.
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@supabase/supabase-js";
 import { isJune2026, slug } from "./core.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const LIST_COLS = "id, record_key, cert_no, cert_type, doc_type, issued_date, subsection_id, verdict, proposed_verdict, review_status, superseded_at, signed_off_at, import_batch_id, db_name, location, source_file";
-
-function required(name) {
-  const v = process.env[name];
-  if (!v) throw new Error(`missing environment variable ${name}`);
-  return v;
-}
 
 export function dataDir() {
   const d = process.env.FORTRESS_MCP_DATA_DIR || "./data";
   return isAbsolute(d) ? d : resolve(ROOT, d);
 }
 
-export async function connect() {
-  const sb = createClient(required("SUPABASE_URL"), required("SUPABASE_ANON_KEY"), {
-    auth: { persistSession: false, autoRefreshToken: true },
-  });
-  const { data, error } = await sb.auth.signInWithPassword({
-    email: required("FORTRESS_MCP_EMAIL"), password: required("FORTRESS_MCP_PASSWORD"),
-  });
-  if (error) throw new Error(`sign-in failed: ${error.message}`);
+/** Local-file sinks (stdio server): data/snapshots/<yyyy-mm-dd>/ and data/logs/writes.jsonl. */
+export function fileSinks() {
+  return {
+    async saveSnapshot(snap) {
+      const day = snap.taken_at.slice(0, 10);
+      const file = join(dataDir(), "snapshots", day, `${slug(snap.site.name)}_${snap.taken_at.slice(11, 19).replace(/:/g, "")}_${snap.site.id.slice(0, 8)}.json`);
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, JSON.stringify(snap, null, 1));
+      return file;
+    },
+    async logWrite(entry) {
+      const file = join(dataDir(), "logs", "writes.jsonl");
+      mkdirSync(dirname(file), { recursive: true });
+      appendFileSync(file, JSON.stringify(entry) + "\n");
+      return file;
+    },
+  };
+}
+
+/**
+ * Store for an already-authenticated client. Resolves the Fortress client row visible to it.
+ * @param sb      supabase-js client acting as the staff user
+ * @param user    { id, email }
+ * @param host    database host label recorded in snapshots/logs
+ * @param sinks   { saveSnapshot(snap) -> ref, logWrite(entry) -> ref }
+ */
+export async function storeFor(sb, user, host, sinks = fileSinks()) {
   const clientName = process.env.FORTRESS_CLIENT_NAME || "Fortress_Fund";
-  const { data: client, error: cErr } = await sb.from("clients").select("id, name").eq("name", clientName).maybeSingle();
-  if (cErr) throw new Error(`clients: ${cErr.message}`);
+  const { data: client, error } = await sb.from("clients").select("id, name").eq("name", clientName).maybeSingle();
+  if (error) throw new Error(`clients: ${error.message}`);
   if (!client) throw new Error(`client "${clientName}" not visible to this user`);
-  return new Store(sb, client, data.user, new URL(process.env.SUPABASE_URL).host);
+  return new Store(sb, client, user, host, sinks);
 }
 
 const must = ({ data, error }, what) => {
@@ -41,7 +55,7 @@ const must = ({ data, error }, what) => {
 };
 
 export class Store {
-  constructor(sb, client, user, host) { this.sb = sb; this.client = client; this.user = user; this.host = host; }
+  constructor(sb, client, user, host, sinks = fileSinks()) { this.sb = sb; this.client = client; this.user = user; this.host = host; this.sinks = sinks; }
 
   async listSites(filter) {
     let q = this.sb.from("sites").select("id, name, address").eq("client_id", this.client.id).order("name");
@@ -121,7 +135,7 @@ export class Store {
     };
   }
 
-  /** Full JSON copy of the site's COC tables, in data/snapshots/<yyyy-mm-dd>/. Returns the path. */
+  /** Full JSON copy of the site's COC tables, written to the snapshot sink. Returns its reference. */
   async exportSnapshot(siteId, reason = "manual") {
     const site = await this.fortressSite(siteId);
     const [certs, batches, schedule] = await Promise.all([
@@ -129,26 +143,23 @@ export class Store {
       must(await this.sb.from("coc_import_batches").select("*").eq("site_id", siteId).order("created_at"), "coc_import_batches"),
       must(await this.sb.from("coc_db_schedule").select("*").eq("site_id", siteId).order("id"), "coc_db_schedule"),
     ]);
-    const now = new Date();
-    const day = now.toISOString().slice(0, 10);
-    const file = join(dataDir(), "snapshots", day, `${slug(site.name)}_${now.toISOString().slice(11, 19).replace(/:/g, "")}_${siteId.slice(0, 8)}.json`);
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify({
-      taken_at: now.toISOString(), reason, source_host: this.host, site,
-      counts: { coc_certificates: certs.length, coc_import_batches: batches.length, coc_db_schedule: schedule.length },
+    const counts = { coc_certificates: certs.length, coc_import_batches: batches.length, coc_db_schedule: schedule.length };
+    const path = await this.sinks.saveSnapshot({
+      taken_at: new Date().toISOString(), reason, source_host: this.host, user: this.user.email, site, counts,
       coc_certificates: certs, coc_import_batches: batches, coc_db_schedule: schedule,
-    }, null, 1));
-    return { path: file, counts: { coc_certificates: certs.length, coc_import_batches: batches.length, coc_db_schedule: schedule.length } };
+    });
+    return { path, counts };
   }
 
   async replace(siteId, plan, label, sourceHash) {
     return must(await this.sb.rpc("fortress_replace_cocs", { p_site_id: siteId, p_plan: plan, p_label: label, p_source_hash: sourceHash }), "fortress_replace_cocs");
   }
 
-  logWrite(entry) {
-    const file = join(dataDir(), "logs", "writes.jsonl");
-    mkdirSync(dirname(file), { recursive: true });
-    appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), host: this.host, user: this.user.email, ...entry }) + "\n");
-    return file;
+  async signOffJudgement(siteId, ids, expectSuperseded) {
+    return must(await this.sb.rpc("fortress_sign_off_judgement", { p_site_id: siteId, p_ids: ids, p_expect_superseded: expectSuperseded }), "fortress_sign_off_judgement");
+  }
+
+  async logWrite(entry) {
+    return this.sinks.logWrite({ at: new Date().toISOString(), host: this.host, user: this.user.email, ...entry });
   }
 }
