@@ -84,3 +84,27 @@ describe("cleanQuery and generic queries", () => {
     expect(out[3]).toMatchObject({ outcome: "assign", subsection_id: "t2" });
   });
 });
+
+describe("number-only overlaps and punctuated site addresses", () => {
+  it("does not link on a bare number or on a site-address word", () => {
+    const subs3 = [
+      { id: "m1", name: "Main DB 1", tenant_name: "Main DB 1", shop_number: null },
+      { id: "u1", name: "SHOP UNIT 1", tenant_name: "Medico Pharmacy", shop_number: "UNIT 1" },
+      { id: "f1", name: "Fourways flower market", tenant_name: "Fourways flower market", shop_number: null },
+      { id: "k1", name: "SHOP 020", tenant_name: "KFC", shop_number: "020" },
+    ];
+    const out = planCertLinks(
+      [
+        { id: "a", cert_no: "1", location: "N1 Mphakane 1" },
+        { id: "b", cert_no: "2", source_file: "COCs/ECA596878 BIYELA 1.pdf" },
+        { id: "c", cert_no: "3", location: "Pineslopes Shopping Center Fourways" },
+        { id: "d", cert_no: "4", source_file: "COCs/KFC.pdf" },
+      ],
+      subs3, [], { siteName: "Biyela Centre 1", siteAddress: "Corner Witkoppen & The Straight, Fourways, Gauteng" },
+    );
+    expect(out[0].outcome).not.toBe("assign");
+    expect(out[1].outcome).not.toBe("assign");
+    expect(out[2].outcome).not.toBe("assign");
+    expect(out[3]).toMatchObject({ outcome: "assign", subsection_id: "k1" });
+  });
+});

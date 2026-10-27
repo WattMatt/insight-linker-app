@@ -43,8 +43,9 @@ export function folderQuery(sourceFile: string | null | undefined): string {
     .trim();
 }
 
-const STOP = new Set(["MAIN","DB","DBS","SUB","BOARD","BOARDS","DISTRIBUTION","SHOP","SHOPS","SITE","CENTRE","CENTER","MALL","PLAZA","RD","ROAD","STREET","STR","ST","CNR","CORNER","AVE","AVENUE","NO","AND","THE","OF","PTY","LTD","CC","SA","NEW","OLD","GROUND","FLOOR","LEVEL","UNIT","ERF","PDF","PAGES","PAGE","LOW","CONFIDENCE","TOKEN","LAST","HANDWRITTEN","ABOVE","ILLEGIBLE","UNCERTAIN"]);
-const tokens = (s: string) => normShop(s).split(" ").filter(Boolean);
+const STOP = new Set(["MAIN","DB","DBS","SUB","BOARD","BOARDS","DISTRIBUTION","SHOP","SHOPS","SITE","CENTRE","CENTER","MALL","PLAZA","RD","ROAD","STREET","STR","ST","CNR","CORNER","AVE","AVENUE","NO","AND","THE","OF","PTY","LTD","CC","SA","NEW","OLD","GROUND","FLOOR","LEVEL","UNIT","ERF","PDF","PAGES","PAGE","LOW","CONFIDENCE","TOKEN","LAST","HANDWRITTEN","ABOVE","ILLEGIBLE","UNCERTAIN","TENANT","SECTION","SECTIONS","SHOPPING","COMPLEX","GENERAL","TRADING","STORE","STORES"]);
+const tokens = (s: string) => normShop(s).replace(/[^A-Z0-9 ]+/g, " ").split(" ").filter(Boolean);
+const WORD = /^[A-Z]{3,}/; // a real word (KFC, PEP, JET...), not a bare number or board letter
 
 /** Strip DB prefixes ("DB - X", "SUB DB X", "MAIN DB (X)") and bracketed asides; keep what names the tenant or shop. */
 export function cleanQuery(q: string): string {
@@ -115,6 +116,9 @@ export function planCertLinks(certs: LinkCert[], subs: LinkSub[], schedule: Link
         for (const k of [s.tenant_name, s.name]) {
           const kt = tokens(k ?? "").filter((t) => !STOP.has(t) && !siteStop.has(t));
           if (!kt.length) continue;
+          const shared = qt.filter((t) => kt.includes(t));
+          // the overlap must carry a real word: "Main DB 1" vs "N1 Mphakane 1" share only "1"
+          if (!shared.some((t) => WORD.test(t))) continue;
           if (qt.every((t) => kt.includes(t)) || kt.every((t) => qt.includes(t))) return true;
         }
         return false;
