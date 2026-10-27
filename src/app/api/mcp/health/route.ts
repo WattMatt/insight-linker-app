@@ -22,7 +22,20 @@ export async function GET() {
   } catch (e) {
     db = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+  // Raw REST probe, default fetch vs no-store, to tell a runtime cache from the database.
+  const probe = async (init: RequestInit) => {
+    try {
+      const r = await fetch(`${supabaseUrl().replace(/\/$/, "")}/rest/v1/mcp_oauth_clients?select=client_id&limit=3`, {
+        ...init, headers: { apikey: svc ?? "", Authorization: `Bearer ${svc ?? ""}` },
+      });
+      const body = await r.text();
+      const h = (k: string) => r.headers.get(k);
+      return { status: r.status, rows: body.startsWith("[") ? JSON.parse(body).length : null, body_start: body.slice(0, 60), content_range: h("content-range"), server: h("server"), via: h("via"), x_vercel_cache: h("x-vercel-cache"), cf_ray: !!h("cf-ray") };
+    } catch (e) { return { error: e instanceof Error ? e.message : String(e) }; }
+  };
+  const raw = { default_fetch: await probe({}), no_store: await probe({ cache: "no-store" }) };
   return jsonResponse(200, {
+    raw,
     supabase_host: new URL(supabaseUrl()).host,
     supabase_url_source: process.env.SUPABASE_URL ? "SUPABASE_URL" : "NEXT_PUBLIC_SUPABASE_URL",
     service_key: { set: !!svc, kind: svc?.startsWith("sb_") ? "secret-key" : svc ? "jwt" : null, project_ref: jwtRef(svc), fp: fp(svc) },
