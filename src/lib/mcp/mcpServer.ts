@@ -194,7 +194,8 @@ export async function handleMcp(req: Request): Promise<Response> {
       delete_subsections: z.any().optional().describe("runs delete_subsections instead: array (or JSON string) of {id: subsection id, note}"),
       reject_cocs: z.any().optional().describe("runs reject_cocs instead: array (or JSON string) of {id: certificate row id, note}"),
       swap_site_names: z.string().optional().describe("runs swap_site_names instead: the other site's id"),
-      move_cocs: z.any().optional().describe("runs move_cocs instead: {to_site_id, rows: [{id, subsection_id, note}]} (object or JSON string)") },
+      move_cocs: z.any().optional().describe("runs move_cocs instead: {to_site_id, rows: [{id, subsection_id, note}]} (object or JSON string)"),
+      not_required: z.boolean().optional().describe("true: mark the named `shops` as NOT requiring a COC (e.g. minisubs, generators); shops holding live certificates are refused") },
     (a: any) => (a.create_subsections != null ? extra.create_subsections({ site_id: a.site_id, subsections: a.create_subsections, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.delete_subsections != null ? extra.delete_subsections({ site_id: a.site_id, subsections: a.delete_subsections, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.reject_cocs != null ? extra.reject_cocs({ site_id: a.site_id, rows: a.reject_cocs, dry_run: a.dry_run, confirm_token: a.confirm_token })

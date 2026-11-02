@@ -228,7 +228,38 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const pr = prof.get(m.user_id) ?? {};
       const visible = sites.filter((s) => !m.managing_agency_id || s.managing_agency_id === m.managing_agency_id);
       const a = facts.get(m.user_id);
-      return {
+      /** Mark named shops as NOT requiring a COC (e.g. minisubs, generators). Shops that still hold live certificates are refused. */
+  async function unsetCocRequired({ site_id, shops, dry_run = true, confirm_token }: { site_id: string; shops?: string[]; dry_run?: boolean; confirm_token?: string }) {
+    if (!shops?.length) throw new Error("not_required: name the shops to unflag in `shops`");
+    const site = await store.fortressSite(site_id);
+    const [subs, certs] = await Promise.all([store.subsections(site_id), store.certificates(site_id, "id, subsection_id, superseded_at, review_status")]);
+    const live = new Map<string, number>();
+    for (const c of certs as Row[]) if (c.subsection_id && !c.superseded_at && c.review_status !== "rejected") live.set(c.subsection_id, (live.get(c.subsection_id) ?? 0) + 1);
+    const want = new Set(shops.map((x) => x.trim().toUpperCase()));
+    const match = subs.filter((x: Row) => want.has(String(x.name).trim().toUpperCase()));
+    const unknown = [...want].filter((n) => !subs.some((x: Row) => String(x.name).trim().toUpperCase() === n));
+    const held = match.filter((x: Row) => live.has(x.id)).map((x: Row) => ({ id: x.id, shop: x.name, live_certificates: live.get(x.id) }));
+    const todo = match.filter((x: Row) => x.is_coc_required === true && !live.has(x.id)).map((x: Row) => ({ id: String(x.id), shop: String(x.name), tenant: x.tenant_name ?? null }));
+    const ids = todo.map((t) => t.id).sort();
+    const state = sha256(canonical(subs.map((x: Row) => [x.id, x.is_coc_required]).sort()));
+    const dataHash = sha256(canonical({ unflag: ids }));
+    const summary = { site: { id: site.id, name: site.name.trim() }, coc_required_now: subs.filter((x: Row) => x.is_coc_required === true).length, to_unflag: ids.length, shops: todo, held_with_live_certificates: held, unknown_shops: unknown };
+    if (dry_run) {
+      return { ...summary, writes_nothing: true, confirm_token: ids.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null,
+        note: ids.length ? "Apply with dry_run=false, not_required=true, the same shops and this confirm_token within 15 minutes." : "Nothing to unflag.", requires: "fortress.write scope and the Admin role" };
+    }
+    if (!opts.isAdmin) throw new Error("set_coc_required refused: requires the Admin role");
+    const why = opts.tokens.check(confirm_token, { siteId: site.id, dataHash, planHash: state });
+    if (why) throw new Error(`set_coc_required refused: ${why}`);
+    if (!(await opts.consumeToken(confirm_token!))) throw new Error("set_coc_required refused: token already used");
+    let result: unknown;
+    try { result = await store.setCocRequired(site.id, ids, false); }
+    catch (e) { await store.logWrite({ tool: "set_coc_required", status: "failed", site_id: site.id, site: site.name, planned: { unflag: ids.length }, error: e instanceof Error ? e.message : String(e) }); throw e; }
+    const log = await store.logWrite({ tool: "set_coc_required", status: "ok", site_id: site.id, site: site.name, result, planned: { unflag: ids, before_flags: subs.map((x: Row) => [x.id, x.is_coc_required]) } });
+    return { ...summary, written: result, log };
+  }
+
+  return {
         user_id: m.user_id, email: pr.email ?? null, full_name: pr.full_name ?? null, company: pr.company ?? null, job_title: pr.job_title ?? null,
         roles: roleOf.get(m.user_id) ?? [], agency_scope: m.managing_agency_id ? agencyName.get(m.managing_agency_id) ?? m.managing_agency_id : "all (fund level)",
         managing_agency_id: m.managing_agency_id, status: portalStatus(a), last_sign_in_at: a?.last_sign_in_at ?? null, invited_at: a?.invited_at ?? null,
@@ -500,7 +531,8 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
     },
 
     /** Flag a site's shops as COC-required (all shops not yet flagged, or the named ones). */
-    async set_coc_required({ site_id, shops, dry_run = true, confirm_token }: { site_id: string; shops?: string[]; dry_run?: boolean; confirm_token?: string }) {
+    async set_coc_required({ site_id, shops, not_required, dry_run = true, confirm_token }: { site_id: string; shops?: string[]; not_required?: boolean; dry_run?: boolean; confirm_token?: string }) {
+      if (not_required) return unsetCocRequired({ site_id, shops, dry_run, confirm_token });
       const site = await store.fortressSite(site_id);
       const [subs, certs] = await Promise.all([store.subsections(site_id), store.certificates(site_id, "id, subsection_id, superseded_at, review_status")]);
       const withCert = new Set(certs.filter((c: Row) => c.subsection_id && !c.superseded_at && c.review_status !== "rejected").map((c: Row) => c.subsection_id));
