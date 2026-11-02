@@ -155,6 +155,17 @@ export class Store {
     return must(await this.sb.rpc("fortress_replace_cocs", { p_site_id: siteId, p_plan: plan, p_label: label, p_source_hash: sourceHash }), "fortress_replace_cocs");
   }
 
+  /** Narrow a live proposed row's supersedes_ids to keepIds (a subset), so signing it supersedes only those.
+   *  Used when one COC covers several shops: the row supersedes its own shop's older rows only. Verifies. */
+  async narrowSupersedes(siteId, id, keepIds) {
+    const { data, error } = await this.sb.from("coc_certificates").update({ supersedes_ids: keepIds })
+      .eq("id", id).eq("site_id", siteId).eq("review_status", "proposed").is("signed_off_at", null).is("superseded_at", null)
+      .select("id, supersedes_ids");
+    if (error) throw new Error(`narrowSupersedes ${id}: ${error.message}`);
+    if (!data || data.length !== 1) throw new Error(`narrowSupersedes ${id}: row not updated (not a live proposed row of this site?)`);
+    return data[0];
+  }
+
   async signOffJudgement(siteId, ids, expectSuperseded, overrideOlderFinals = false) {
     if (!overrideOlderFinals) {
       return must(await this.sb.rpc("fortress_sign_off_judgement", { p_site_id: siteId, p_ids: ids, p_expect_superseded: expectSuperseded }), "fortress_sign_off_judgement");

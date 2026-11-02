@@ -929,7 +929,10 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
     },
 
     /** Same rules as the 27 Oct 2026 judgement run; conflicts, June 2026 links and other-shop links are held. */
-    async sign_off_verdicts({ site_id, policy = "judgement", dry_run = true, confirm_token, override_older_finals = false, supersede_june = false }: { site_id: string; policy?: string; dry_run?: boolean; confirm_token?: string; override_older_finals?: boolean; supersede_june?: boolean }) {
+    async sign_off_verdicts({ site_id, policy = "judgement", dry_run = true, confirm_token, override_older_finals = false, supersede_june = false, own_shop_only = false }: { site_id: string; policy?: string; dry_run?: boolean; confirm_token?: string; override_older_finals?: boolean; supersede_june?: boolean; own_shop_only?: boolean }) {
+      // own_shop_only (ruling 2 Nov 2026, Mayville): one COC covers several shops, so a row is signed
+      // against its own shop only — its linked older rows on OTHER shops are dropped from its
+      // supersedes_ids before signing and stay live, untouched.
       // supersede_june (site-scoped opt-in, ruling 2 Nov 2026 for Mayville): an October row may supersede a
       // linked June 2026 row. The June row's content is never changed; it only gets superseded_at. June
       // proposals themselves stay held. Only via the one-by-one path, so override_older_finals is implied.
@@ -944,11 +947,17 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const june = (r: Row) => juneBatch.has(r.import_batch_id);
       const byId = new Map(rows.map((r: Row) => [r.id, r]));
       const ids: string[] = [], sup = new Set<string>();
+      const narrow: { id: string; keep: string[] }[] = [];
       const held: { id: string; cert_no: string | null; why: string }[] = [];
       for (const p of rows.filter((r: Row) => !r.superseded_at && r.review_status === "proposed" && !r.signed_off_at)) {
         if (june(p)) { held.push({ id: p.id, cert_no: p.cert_no, why: "June 2026 row (read-only)" }); continue; }
         if (!String(p.proposed_verdict_alt ?? "").trim()) { held.push({ id: p.id, cert_no: p.cert_no, why: "no verdict_alt" }); continue; }
-        const linked = (p.supersedes_ids ?? []).map((id: string) => byId.get(id)).filter((l: Row | undefined): l is Row => !!l && !l.superseded_at && !l.signed_off_at);
+        let linked = (p.supersedes_ids ?? []).map((id: string) => byId.get(id)).filter((l: Row | undefined): l is Row => !!l && !l.superseded_at && !l.signed_off_at);
+        if (own_shop_only && linked.some((l: Row) => l.subsection_id && l.subsection_id !== p.subsection_id)) {
+          linked = linked.filter((l: Row) => !l.subsection_id || l.subsection_id === p.subsection_id);
+          const keepSet = new Set(linked.map((l: Row) => l.id));
+          narrow.push({ id: p.id, keep: (p.supersedes_ids ?? []).filter((x: string) => keepSet.has(x) || !byId.get(x) || byId.get(x)!.superseded_at || byId.get(x)!.signed_off_at) });
+        }
         if (!override_older_finals && linked.some((l: Row) => cls(l.verdict) && cls(l.verdict) !== cls(p.proposed_verdict_alt))) { held.push({ id: p.id, cert_no: p.cert_no, why: "an older final verdict differs (not overwritten; override_older_finals=true lets the October judgement win)" }); continue; }
         if (!supersede_june && linked.some(june)) { held.push({ id: p.id, cert_no: p.cert_no, why: "would supersede a June 2026 row" }); continue; }
         if (linked.some((l: Row) => l.subsection_id && l.subsection_id !== p.subsection_id)) { held.push({ id: p.id, cert_no: p.cert_no, why: "would supersede an older row on a different shop" }); continue; }
@@ -956,7 +965,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       }
       ids.sort();
       const state = sha256(canonical(rows.map((r: Row) => [r.id, r.review_status, r.verdict, r.proposed_verdict_alt, r.superseded_at, r.signed_off_at, r.supersedes_ids]).sort()));
-      const dataHash = sha256(canonical({ policy, ids, override_older_finals, supersede_june }));
+      const dataHash = sha256(canonical({ policy, ids, override_older_finals, supersede_june, own_shop_only, narrow }));
 
       // Before/after shop counts with the Site COC Report model.
       const coc = await loadSiteCocData(site_id, sb);
@@ -969,7 +978,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
         proposedCertificates: (coc.proposedCertificates ?? []).filter((r) => !signedSet.has(r.id)),
       }));
       const heldCounts = held.reduce<Record<string, number>>((m, h) => ((m[h.why] = (m[h.why] ?? 0) + 1), m), {});
-      const summary = { site: { id: site.id, name: site.name.trim() }, policy, override_older_finals, supersede_june, to_sign: ids.length, would_supersede: sup.size, held: heldCounts, before, after };
+      const summary = { site: { id: site.id, name: site.name.trim() }, policy, override_older_finals, supersede_june, own_shop_only, narrowed: narrow.length, to_sign: ids.length, would_supersede: sup.size, held: heldCounts, before, after };
 
       if (dry_run) {
         return {
@@ -986,7 +995,8 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const snap = await store.exportSnapshot(site.id, "before sign_off_verdicts (judgement)");
       let result: unknown;
       try {
-        result = await store.signOffJudgement(site.id, ids, sup.size, override_older_finals);
+        for (const n of narrow) await store.narrowSupersedes(site.id, n.id, n.keep);
+        result = await store.signOffJudgement(site.id, ids, sup.size, override_older_finals || narrow.length > 0);
       } catch (e) {
         await store.logWrite({ tool: "sign_off_verdicts", status: "failed", site_id: site.id, site: site.name, planned: { ids: ids.length, superseded: sup.size }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) });
         throw e;
