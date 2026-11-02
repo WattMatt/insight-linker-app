@@ -195,13 +195,13 @@ export async function handleMcp(req: Request): Promise<Response> {
       reject_cocs: z.any().optional().describe("runs reject_cocs instead: array (or JSON string) of {id: certificate row id, note}"),
       swap_site_names: z.string().optional().describe("runs swap_site_names instead: the other site's id"),
       move_cocs: z.any().optional().describe("runs move_cocs instead: {to_site_id, rows: [{id, subsection_id, note}]} (object or JSON string)"),
-      not_required: z.boolean().optional().describe("true: mark the named `shops` as NOT requiring a COC (e.g. minisubs, generators); shops holding live certificates are refused") },
+      not_required: z.union([z.boolean(), z.enum(["true", "false"])]).optional().describe("true: mark the named `shops` as NOT requiring a COC (e.g. minisubs, generators); shops holding live certificates are refused") },
     (a: any) => (a.create_subsections != null ? extra.create_subsections({ site_id: a.site_id, subsections: a.create_subsections, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.delete_subsections != null ? extra.delete_subsections({ site_id: a.site_id, subsections: a.delete_subsections, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.reject_cocs != null ? extra.reject_cocs({ site_id: a.site_id, rows: a.reject_cocs, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.swap_site_names != null ? extra.swap_site_names({ site_id: a.site_id, other_site_id: a.swap_site_names, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.move_cocs != null ? extra.move_cocs({ site_id: a.site_id, to_site_id: (typeof a.move_cocs === "string" ? JSON.parse(a.move_cocs) : a.move_cocs)?.to_site_id, rows: (typeof a.move_cocs === "string" ? JSON.parse(a.move_cocs) : a.move_cocs)?.rows, dry_run: a.dry_run, confirm_token: a.confirm_token })
-      : extra.set_coc_required(a)),
+      : extra.set_coc_required({ ...a, not_required: a.not_required === true || a.not_required === "true" })),
     { writeWhen: (a) => a?.dry_run === false });
   tool("link_unlinked_cocs", "Link a site's live certificate rows that have no shop to a shop: by the DB/COC schedule, by shop number, or by a clear name match (folder name, DB name, location). Weak or ambiguous matches are listed for review, not written; June 2026 rows are held. dry_run=true (default) returns the plan with before/after shop counts and a confirm token; dry_run=false applies it, snapshot first (fortress.write + Admin).",
     { site_id: siteId, dry_run: z.boolean().optional(), confirm_token: z.string().optional(), exclude: z.array(z.string()).optional().describe("certificate row ids to leave unlinked"),
