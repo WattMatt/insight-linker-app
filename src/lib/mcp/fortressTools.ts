@@ -572,7 +572,8 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const byMethod = { schedule: assign.filter((d) => d.method === "schedule").length, shop_no: assign.filter((d) => d.method === "shop_no").length, name: assign.filter((d) => d.method === "name").length, manual: assign.filter((d) => d.method === "manual").length };
       const summary = { site: { id: site.id, name: site.name.trim() }, unlinked: live.length, to_link: assign.length, by_method: byMethod, excluded_by_caller: excluded.length, needs_review: review.length, unmatched: unmatched.length, held, before, after };
       if (dry_run) {
-        return { ...summary, writes_nothing: true, links: assign, review: review.slice(0, 150), unmatched_rows: unmatched.slice(0, 150).map((d) => ({ id: d.id, cert_no: d.cert_no, query: d.query, candidates: d.candidates })),
+        return { ...summary, writes_nothing: true, links: assign, review: review.slice(0, 150),
+          shops: subs.map((x: Row) => ({ subsection_id: x.id, name: x.name, tenant: x.tenant_name ?? null, shop_number: x.shop_number ?? null, coc_required: x.is_coc_required === true })), unmatched_rows: unmatched.slice(0, 150).map((d) => ({ id: d.id, cert_no: d.cert_no, query: d.query, candidates: d.candidates })),
           confirm_token: assign.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null,
           note: assign.length ? "Apply with dry_run=false and this confirm_token within 15 minutes; refused if the site's COC rows change. Only the 'links' are written; 'review' and 'unmatched' are left for a person." : "Nothing can be linked with confidence.",
           requires: "fortress.write scope and the Admin role" };
