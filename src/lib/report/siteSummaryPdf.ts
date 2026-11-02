@@ -3,7 +3,7 @@ import { loadSiteCocData, buildSiteCocModel } from "@/lib/siteCoc/siteCocData";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 import QRCode from "qrcode";
 import { qrRedirectUrl, qrSiteRedirectUrl } from "@/lib/qrBaseUrl";
-import { isCocCertificateCategory, toCocDoc, buildCocCardLines } from "@/lib/cocHierarchy";
+import { isCocCertificateCategory, toCocDoc, buildCocCardLines, type CocDoc } from "@/lib/cocHierarchy";
 import { matchAssetForSubsection } from "@/lib/report/subsectionAssetMatch";
 import { computeSubsectionVerdict } from "@/lib/subsectionCompliance";
 import {
@@ -103,6 +103,7 @@ const transformToSubsectionCardData = (
   assets: any[],
   subsectionDocs: any[],
   today: string,
+  registerCocDocs?: CocDoc[],
 ): SubsectionCardData => {
   const subSnags = allSnags.filter(s =>
     s.subsection_id === sub.id &&
@@ -111,12 +112,14 @@ const transformToSubsectionCardData = (
 
   // COC-category documents for this subsection (the authoritative per-document model).
   // Drives BOTH the I/S certificate lines and the Documentation verdict, so they agree.
-  const cocDocs = (subsectionDocs || [])
+  // A COC-required subsection on the COC register takes its certificates from the register,
+  // so the card, the Documentation verdict and the COC Validation table all read one source.
+  const cocDocs = registerCocDocs ?? (subsectionDocs || [])
     .filter(d => d.subsection_id === sub.id && isCocCertificateCategory(d.document_categories?.name || ''))
     .map(d => toCocDoc(d));
   const cocCertificates = buildCocCardLines(cocDocs);
 
-  const verdict = computeSubsectionVerdict({
+  const computed = computeSubsectionVerdict({
     isCocRequired: sub.is_coc_required ?? true,
     openSnagCount: subSnags.length,
     meteringStatus: sub.metering_status,
@@ -124,6 +127,11 @@ const transformToSubsectionCardData = (
     cocDocs,
     today,
   });
+  // On the register, Documentation is the shop's register status (any failed certificate fails),
+  // the same value the COC Validation table and COC Compliant count use.
+  const verdict = registerCocDocs
+    ? { ...computed, documentation: sub.coc_status === "Pass", overall: computed.installation && sub.coc_status === "Pass" }
+    : computed;
 
   // Encode the STABLE qr-redirect endpoint (NOT the stored qr_code_url PNG, and
   // NOT a domain-pinned landing URL). The redirect resolves the live domain at
@@ -236,7 +244,13 @@ export async function generateSiteSummaryPdf(
       : "Pending";
   for (const sub of subsections) {
     const t = tenantBySub.get(sub.id);
-    if (t) sub.coc_status = registerStatus(t);
+    if (t) {
+      sub.coc_status = registerStatus(t);
+      // The validation table's COC Number: the certificate(s) that set the status, never a
+      // document-side number next to "Missing".
+      const decisive = t.certs.filter(c => (sub.coc_status === "Fail" ? c.verdictKind === "fail" : true));
+      sub.coc_number = t.noCoc ? null : decisive.map(c => c.certNo).filter(Boolean).join(", ") || null;
+    }
   }
   const certByDoc = new Map<string, string>();
   for (const t of cocModel.tenants) {
@@ -249,12 +263,29 @@ export async function generateSiteSummaryPdf(
     }
   }
 
+  // Register certificates per COC-required subsection, as card documents; each line keeps its own
+  // certificate's verdict. The card's Documentation verdict is the register shop status.
+  const registerDocsBySub = new Map<string, CocDoc[]>();
+  for (const t of cocModel.tenants) {
+    const docs: CocDoc[] = t.certs.map((c, i) => ({
+      id: c.docId ?? `${t.subsectionId}-reg-${i}`,
+      cocType: /supp/i.test(c.type || "") ? "Supplementary" : "Initial",
+      cocNumber: c.certNo || null,
+      cocIssueDate: c.issuedDate,
+      cocExpiryDate: null,
+      cocStatus: t.awaitingSignOff ? "Pending"
+        : c.verdictKind === "fail" ? "Fail" : c.verdictKind === "pass" ? "Pass" : "Pending",
+      fileName: "", fileUrl: "",
+    }));
+    registerDocsBySub.set(t.subsectionId, docs);
+  }
+
   // Transform subsections to card format with snags, asset breaker size and COC certificates
   const subsectionDocsData = (subsectionDocsRes.data || []).map(d =>
     certByDoc.has(d.id) ? { ...d, coc_status: certByDoc.get(d.id)! } : d);
   const today = new Date().toISOString().split('T')[0];
   const subsectionCardData: SubsectionCardData[] = subsections.map(sub =>
-    transformToSubsectionCardData(sub, allSnags, siteAssets, subsectionDocsData, today)
+    transformToSubsectionCardData(sub, allSnags, siteAssets, subsectionDocsData, today, registerDocsBySub.get(sub.id))
   );
 
   // Also create SubsectionData for metrics calculation
