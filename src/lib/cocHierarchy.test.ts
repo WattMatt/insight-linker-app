@@ -111,6 +111,15 @@ describe('isCocCertificateCategory', () => {
 });
 
 describe('buildCocCardLines', () => {
+  it('lists every Initial so a failing one is never hidden, and lists a repeated certificate once', () => {
+    const lines = buildCocCardLines([
+      doc({ id: 'a', cocType: 'Initial', cocNumber: 'ECA 381488', cocStatus: 'Pass', cocIssueDate: '2024-01-01' }),
+      doc({ id: 'b', cocType: 'Initial', cocNumber: 'ECA 1261094', cocStatus: 'Fail', cocIssueDate: '2025-01-01' }),
+      doc({ id: 'c', cocType: 'Initial', cocNumber: 'ECA 1261094', cocStatus: 'Fail', cocIssueDate: '2025-01-01' }),
+    ]);
+    expect(lines.map(l => `${l.label} ${l.number} ${l.status}`)).toEqual(['I ECA 381488 Pass', 'I ECA 1261094 Fail']);
+  });
+
   it('no documents => single "I — Missing" line', () => {
     const lines = buildCocCardLines([]);
     expect(lines).toEqual([{ label: 'I', number: 'Missing', status: 'Missing', missing: true }]);

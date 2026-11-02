@@ -249,7 +249,7 @@ export async function generateSiteSummaryPdf(
       // The validation table's COC Number: the certificate(s) that set the status, never a
       // document-side number next to "Missing".
       const decisive = t.certs.filter(c => (sub.coc_status === "Fail" ? c.verdictKind === "fail" : true));
-      sub.coc_number = t.noCoc ? null : decisive.map(c => c.certNo).filter(Boolean).join(", ") || null;
+      sub.coc_number = t.noCoc ? null : [...new Set(decisive.map(c => c.certNo?.trim()).filter(Boolean))].join(", ") || null;
     }
   }
   const certByDoc = new Map<string, string>();

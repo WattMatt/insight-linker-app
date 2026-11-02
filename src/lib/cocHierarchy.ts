@@ -107,15 +107,23 @@ export interface CocCardLine {
  */
 export function buildCocCardLines(docs: CocDoc[]): CocCardLine[] {
   const sorted = [...docs].sort((a, b) => (a.cocIssueDate ?? '').localeCompare(b.cocIssueDate ?? ''));
-  const initial = sorted.find(d => d.cocType === 'Initial') ?? null;
-  const supplementaries = sorted.filter(d => d.cocType !== 'Initial');
+  // Every certificate gets a line (a shop can hold more than one Initial, e.g. one per DB; hiding
+  // all but the first can hide a failing one). The same number + type + status is listed once.
+  const seen = new Set<string>();
+  const unique = sorted.filter(d => {
+    const k = `${d.cocType}|${(d.cocNumber ?? '').trim().toUpperCase()}|${d.cocStatus}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  const initials = unique.filter(d => d.cocType === 'Initial');
+  const supplementaries = unique.filter(d => d.cocType !== 'Initial');
 
   const lines: CocCardLine[] = [];
-  lines.push(
-    initial
-      ? { label: 'I', number: initial.cocNumber?.trim() || '—', status: initial.cocStatus, missing: false }
-      : { label: 'I', number: 'Missing', status: 'Missing', missing: true },
-  );
+  if (initials.length === 0) lines.push({ label: 'I', number: 'Missing', status: 'Missing', missing: true });
+  for (const i of initials) {
+    lines.push({ label: 'I', number: i.cocNumber?.trim() || '—', status: i.cocStatus, missing: false });
+  }
   for (const s of supplementaries) {
     lines.push({ label: 'S', number: s.cocNumber?.trim() || '—', status: s.cocStatus, missing: false });
   }
