@@ -320,7 +320,8 @@ export class Store {
   async moveCertificates(fromSite, toSite, rows) {
     const now = new Date().toISOString();
     // record_key is unique per site: a moved row whose key the target site already uses gets a suffix naming its old site.
-    const taken = new Set((await this.certificates(toSite, "record_key")).map(x => x.record_key).filter(Boolean));
+    // Same-site relink: the row keeps its own record_key, so nothing on the site clashes.
+    const taken = fromSite === toSite ? new Set() : new Set((await this.certificates(toSite, "record_key")).map(x => x.record_key).filter(Boolean));
     const src = new Map((await this.certificates(fromSite, "id, record_key")).map(x => [x.id, x.record_key]));
     for (const r of rows) {
       const patch = { site_id: toSite, subsection_id: r.subsection_id, notes: r.note, updated_at: now };
@@ -330,7 +331,7 @@ export class Store {
         while (taken.has(k)) k = `${key}_from_${fromSite.slice(0, 8)}_${n++}`;
         patch.record_key = k;
       }
-      if (key) taken.add(patch.record_key ?? key);
+      if (key && fromSite !== toSite) taken.add(patch.record_key ?? key);
       const { data, error } = await this.sb.from("coc_certificates")
         .update(patch)
         .eq("id", r.id).eq("site_id", fromSite).is("superseded_at", null).select("id, coc_document_id");
