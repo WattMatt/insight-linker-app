@@ -232,6 +232,21 @@ export class Store {
     return must(await this.sb.from("subsections").select("id, name, tenant_name, shop_number, is_coc_required").eq("site_id", siteId).is("deleted_at", null).order("name"), "subsections");
   }
 
+  /** Add shops to a site (COC-required). Refuses a name the site already has; verifies every shop was created. */
+  async createSubsections(siteId, rows) {
+    const now = new Date().toISOString();
+    const existing = new Set((await this.subsections(siteId)).map(s => String(s.name).trim().toUpperCase()));
+    const clash = rows.filter(r => existing.has(r.name.trim().toUpperCase()));
+    if (clash.length) throw new Error(`subsections already on the site: ${clash.map(r => r.name).join(", ")}`);
+    const { data, error } = await this.sb.from("subsections").insert(rows.map(r => ({
+      site_id: siteId, name: r.name, tenant_name: r.tenant_name, shop_number: r.shop_number, meter_serial_number: r.meter_serial_number,
+      is_coc_required: true, created_at: now, updated_at: now,
+    }))).select("id, name");
+    if (error) throw new Error(`subsections insert: ${error.message}`);
+    if (!data || data.length !== rows.length) throw new Error(`subsections insert: ${data?.length ?? 0} of ${rows.length} created (insert not permitted for this account?)`);
+    return { created: data.length, ids: data.map(d => ({ id: d.id, name: d.name })) };
+  }
+
   /** Link certificate rows to shops: subsection_id + a note. Verifies every row took the link. */
   async linkCertificates(siteId, links) {
     for (const l of links) {

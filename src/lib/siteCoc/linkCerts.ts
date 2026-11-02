@@ -11,7 +11,7 @@ export interface LinkSub { id: string; name: string; tenant_name?: string | null
 export interface LinkCert { id: string; cert_no: string | null; cert_no_norm?: string | null; shop_no_raw?: string | null; source_file?: string | null; db_name?: string | null; location?: string | null }
 export interface LinkSchedule { subsection_id: string | null; initial_cert_nos?: string | null; supplementary_cert_nos?: string | null }
 
-export type LinkMethod = "schedule" | "shop_no" | "name";
+export type LinkMethod = "schedule" | "shop_no" | "name" | "manual"; // manual: a reviewer matched it (MCP assign)
 export interface LinkDecision {
   id: string; cert_no: string | null;
   outcome: "assign" | "review" | "unmatched";

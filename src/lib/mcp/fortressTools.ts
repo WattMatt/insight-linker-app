@@ -65,6 +65,58 @@ export function parseCorrections(input: unknown): Correction[] {
   });
 }
 
+export interface Assignment { id: string; subsection_id: string; note: string }
+
+/** assign: an array, or a JSON string of one. Each item: {id (certificate row), subsection_id, note (why: e.g. the
+ *  tenant-schedule premises and tenant the certificate names)}. */
+export function parseAssignments(input: unknown): Assignment[] {
+  let v = input;
+  if (v == null) return [];
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return [];
+    try { v = JSON.parse(s); } catch { throw new Error("assign: not valid JSON"); }
+  }
+  if (!Array.isArray(v)) throw new Error("assign: expected an array of {id, subsection_id, note}");
+  const seen = new Set<string>();
+  return v.map((a: Row, i: number) => {
+    if (!a || typeof a !== "object") throw new Error(`assign[${i}]: not an object`);
+    const id = String(a.id ?? "").trim();
+    const subsection_id = String(a.subsection_id ?? "").trim();
+    const note = String(a.note ?? "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error(`assign[${i}]: id must be a certificate row uuid`);
+    if (!/^[0-9a-f-]{36}$/i.test(subsection_id)) throw new Error(`assign[${i}] (${id}): subsection_id must be a uuid`);
+    if (!note) throw new Error(`assign[${i}] (${id}): a note saying why this certificate belongs to this shop is required`);
+    if (seen.has(id)) throw new Error(`assign[${i}]: certificate row ${id} is assigned twice`);
+    seen.add(id);
+    return { id, subsection_id, note };
+  });
+}
+
+export interface NewSubsection { name: string; tenant_name: string | null; shop_number: string | null; meter_serial_number: string | null }
+
+/** subsections: an array, or a JSON string of one. Each item: {name, tenant_name?, shop_number?, meter_serial_number?}. */
+export function parseNewSubsections(input: unknown): NewSubsection[] {
+  let v = input;
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return [];
+    try { v = JSON.parse(s); } catch { throw new Error("subsections: not valid JSON"); }
+  }
+  if (!Array.isArray(v)) throw new Error("subsections: expected an array of {name, tenant_name, shop_number, meter_serial_number}");
+  const seen = new Set<string>();
+  const opt = (x: unknown) => { const t = String(x ?? "").trim(); return t ? t : null; };
+  return v.map((a: Row, i: number) => {
+    if (!a || typeof a !== "object") throw new Error(`subsections[${i}]: not an object`);
+    const name = String(a.name ?? "").trim();
+    if (!name) throw new Error(`subsections[${i}]: a name is required`);
+    const key = name.toUpperCase();
+    if (seen.has(key)) throw new Error(`subsections[${i}]: ${name} is listed twice`);
+    seen.add(key);
+    return { name, tenant_name: opt(a.tenant_name), shop_number: opt(a.shop_number), meter_serial_number: opt(a.meter_serial_number) };
+  });
+}
+
 export const REPORT_CATEGORIES: Record<string, string> = {
   "Site Summary Reports": "site-summary",
   "Asset Verification Reports": "asset-verification",
@@ -446,9 +498,39 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       return { ...summary, written: result, log };
     },
 
-    /** Link live certificate rows that have no shop to a shop (schedule, shop number, or a clear name match). June 2026 rows are held. */
-    async link_unlinked_cocs({ site_id, dry_run = true, confirm_token, exclude = [] }: { site_id: string; dry_run?: boolean; confirm_token?: string; exclude?: string[] }) {
+    /** Add shops (subsections) to a site, e.g. from the client's tenant schedule, flagged COC-required.
+     *  Names that already exist on the site (case-insensitive) are skipped, never duplicated. No deletes, no renames. */
+    async create_subsections({ site_id, subsections: input, dry_run = true, confirm_token }: { site_id: string; subsections?: unknown; dry_run?: boolean; confirm_token?: string }) {
       const site = await store.fortressSite(site_id);
+      const list = parseNewSubsections(input);
+      if (!list.length) throw new Error("subsections: give at least one {name, tenant_name, shop_number, meter_serial_number}");
+      const subs = await store.subsections(site_id);
+      const have = new Set(subs.map((x: Row) => String(x.name).trim().toUpperCase()));
+      const existing = list.filter((x) => have.has(x.name.toUpperCase())).map((x) => x.name);
+      const todo = list.filter((x) => !have.has(x.name.toUpperCase()));
+      const state = sha256(canonical(subs.map((x: Row) => [x.id, String(x.name).trim().toUpperCase()]).sort()));
+      const dataHash = sha256(canonical({ create: todo.map((x) => [x.name, x.tenant_name, x.shop_number, x.meter_serial_number]) }));
+      const summary = { site: { id: site.id, name: site.name.trim() }, shops_now: subs.length, to_create: todo.length, already_exist: existing, create: todo };
+      if (dry_run) {
+        return { ...summary, writes_nothing: true, confirm_token: todo.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null,
+          note: todo.length ? "Apply with dry_run=false, the same subsections and this confirm_token within 15 minutes; refused if the site's shops change." : "Nothing to create.", requires: "fortress.write scope and the Admin role" };
+      }
+      if (!opts.isAdmin) throw new Error("create_subsections refused: requires the Admin role");
+      const why = opts.tokens.check(confirm_token, { siteId: site.id, dataHash, planHash: state });
+      if (why) throw new Error(`create_subsections refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("create_subsections refused: token already used");
+      const snap = await store.exportSnapshot(site.id, "before create_subsections");
+      let result: unknown;
+      try { result = await store.createSubsections(site.id, todo); }
+      catch (e) { await store.logWrite({ tool: "create_subsections", status: "failed", site_id: site.id, site: site.name, planned: { create: todo.length }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) }); throw e; }
+      const log = await store.logWrite({ tool: "create_subsections", status: "ok", site_id: site.id, site: site.name, result, planned: { create: todo }, snapshot: snap.path });
+      return { ...summary, written: result, snapshot: snap.path, log };
+    },
+
+    /** Link live certificate rows that have no shop to a shop (schedule, shop number, or a clear name match). June 2026 rows are held. */
+    async link_unlinked_cocs({ site_id, dry_run = true, confirm_token, exclude = [], assign: manualInput }: { site_id: string; dry_run?: boolean; confirm_token?: string; exclude?: string[]; assign?: unknown }) {
+      const site = await store.fortressSite(site_id);
+      const manual = parseAssignments(manualInput);
       const [rows, subs, batches, coc] = await Promise.all([
         store.certificates(site_id, "id, subsection_id, cert_no, cert_no_norm, shop_no_raw, source_file, db_name, location, review_status, superseded_at, import_batch_id, notes"),
         store.subsections(site_id), store.batches(site_id), loadSiteCocData(site_id, sb),
@@ -457,7 +539,25 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const live = rows.filter((r: Row) => !r.subsection_id && !r.superseded_at && r.review_status !== "rejected");
       const held = live.filter((r: Row) => juneBatch.has(r.import_batch_id)).map((r: Row) => ({ id: r.id, cert_no: r.cert_no, why: "June 2026 row (read-only)" }));
       const todo = live.filter((r: Row) => !juneBatch.has(r.import_batch_id));
-      const plan: LinkDecision[] = planCertLinks(todo as any, subs as any, coc.schedule as any, { siteName: site.name, siteAddress: (site as Row).address ?? null });
+      const auto: LinkDecision[] = planCertLinks(todo as any, subs as any, coc.schedule as any, { siteName: site.name, siteAddress: (site as Row).address ?? null });
+      // Manual assignments (a reviewer matched the certificate to a shop, e.g. from the tenant schedule) replace the
+      // automatic decision for that row. Only live, unlinked, non-June rows of this site, and shops of this site.
+      const todoIds = new Set(todo.map((r: Row) => r.id));
+      const subName = new Map<string, string>(subs.map((x: Row) => [String(x.id), String(x.name)] as [string, string]));
+      const manualById = new Map<string, Assignment>();
+      for (const a of manual) {
+        if (!subName.has(a.subsection_id)) throw new Error(`assign ${a.id}: subsection ${a.subsection_id} is not a shop of this site`);
+        if (!todoIds.has(a.id)) {
+          const r = rows.find((x: Row) => x.id === a.id);
+          held.push({ id: a.id, cert_no: r?.cert_no ?? null, why: !r ? "not a certificate row of this site" : r.subsection_id ? "already linked to a shop" : r.superseded_at || r.review_status === "rejected" ? "not a live row" : "June 2026 row (read-only)" });
+          continue;
+        }
+        manualById.set(a.id, a);
+      }
+      const plan: LinkDecision[] = auto.map((d) => {
+        const m = manualById.get(d.id);
+        return m ? { id: d.id, cert_no: d.cert_no, outcome: "assign" as const, method: "manual" as const, subsection_id: m.subsection_id, shop: subName.get(m.subsection_id), query: m.note } : d;
+      });
       const skip = new Set((exclude ?? []).map((x) => String(x).trim()).filter(Boolean));
       const excluded = plan.filter((d) => d.outcome === "assign" && skip.has(d.id));
       const assign = plan.filter((d) => d.outcome === "assign" && !skip.has(d.id));
@@ -469,7 +569,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const before = cocCounts(buildSiteCocModel({ ...coc, siteId: site_id, siteName: site.name }));
       const after = cocCounts(buildSiteCocModel({ ...coc, siteId: site_id, siteName: site.name,
         certificates: coc.certificates.map((r) => linkMap.has(r.id) ? { ...r, subsection_id: linkMap.get(r.id)! } : r) }));
-      const byMethod = { schedule: assign.filter((d) => d.method === "schedule").length, shop_no: assign.filter((d) => d.method === "shop_no").length, name: assign.filter((d) => d.method === "name").length };
+      const byMethod = { schedule: assign.filter((d) => d.method === "schedule").length, shop_no: assign.filter((d) => d.method === "shop_no").length, name: assign.filter((d) => d.method === "name").length, manual: assign.filter((d) => d.method === "manual").length };
       const summary = { site: { id: site.id, name: site.name.trim() }, unlinked: live.length, to_link: assign.length, by_method: byMethod, excluded_by_caller: excluded.length, needs_review: review.length, unmatched: unmatched.length, held, before, after };
       if (dry_run) {
         return { ...summary, writes_nothing: true, links: assign, review: review.slice(0, 150), unmatched_rows: unmatched.slice(0, 150).map((d) => ({ id: d.id, cert_no: d.cert_no, query: d.query, candidates: d.candidates })),
