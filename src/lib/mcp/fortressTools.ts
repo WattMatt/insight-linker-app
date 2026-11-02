@@ -603,6 +603,65 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       return { ...summary, written: result, snapshot: snap.path, log };
     },
 
+    /** Swap the name and address of two Fortress sites whose records were set up the wrong way round
+     *  (each site's shops and inspections belong to the other's name). Nothing else changes. */
+    async swap_site_names({ site_id, other_site_id, dry_run = true, confirm_token }: { site_id: string; other_site_id?: string; dry_run?: boolean; confirm_token?: string }) {
+      if (!other_site_id || !/^[0-9a-f-]{36}$/i.test(String(other_site_id))) throw new Error("swap_site_names: other_site_id (uuid) is required");
+      if (other_site_id === site_id) throw new Error("swap_site_names: the two sites must differ");
+      const [a, b] = [await store.fortressSite(site_id), await store.fortressSite(other_site_id)];
+      const state = sha256(canonical([[a.id, a.name, a.address], [b.id, b.name, b.address]]));
+      const dataHash = sha256(canonical({ swap: [a.id, b.id] }));
+      const summary = { before: [{ id: a.id, name: a.name, address: a.address }, { id: b.id, name: b.name, address: b.address }],
+        after: [{ id: a.id, name: b.name, address: b.address }, { id: b.id, name: a.name, address: a.address }] };
+      if (dry_run) return { ...summary, writes_nothing: true, confirm_token: opts.tokens.issue({ siteId: a.id, dataHash, planHash: state }), requires: "fortress.write scope and the Admin role" };
+      if (!opts.isAdmin) throw new Error("swap refused: requires the Admin role");
+      const why = opts.tokens.check(confirm_token, { siteId: a.id, dataHash, planHash: state });
+      if (why) throw new Error(`swap refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("swap refused: token already used");
+      let result: unknown;
+      try { result = await store.swapSiteNames(a, b); }
+      catch (e) { await store.logWrite({ tool: "swap_site_names", status: "failed", site_id: a.id, site: a.name, planned: summary, error: e instanceof Error ? e.message : String(e) }); throw e; }
+      const log = await store.logWrite({ tool: "swap_site_names", status: "ok", site_id: a.id, site: a.name, result, planned: summary });
+      return { ...summary, written: result, log };
+    },
+
+    /** Move live certificate rows filed under the wrong site to the right site, linked to a shop there. */
+    async move_cocs({ site_id, to_site_id, rows: input, dry_run = true, confirm_token }: { site_id: string; to_site_id?: string; rows?: unknown; dry_run?: boolean; confirm_token?: string }) {
+      if (!to_site_id || to_site_id === site_id) throw new Error("move_cocs: to_site_id (another site) is required");
+      const [from, to] = [await store.fortressSite(site_id), await store.fortressSite(to_site_id)];
+      const list = parseAssignments(input);
+      if (!list.length) throw new Error("move_cocs: give at least one {id, subsection_id (shop on the target site), note}");
+      const [rows, batches, subs] = await Promise.all([store.certificates(site_id, "id, cert_no, subsection_id, superseded_at, review_status, import_batch_id"), store.batches(site_id), store.subsections(to_site_id)]);
+      const juneBatch = new Set(batches.filter((b: Row) => isJune2026(b.created_at)).map((b: Row) => b.id));
+      const byId = new Map<string, Row>(rows.map((r: Row) => [r.id, r]));
+      const subName = new Map<string, string>(subs.map((x: Row) => [String(x.id), String(x.name)] as [string, string]));
+      const held: { id: string; why: string }[] = [];
+      const todo: { id: string; cert_no: string | null; subsection_id: string; shop: string; note: string }[] = [];
+      for (const x of list) {
+        const r = byId.get(x.id);
+        if (!subName.has(x.subsection_id)) throw new Error(`move_cocs ${x.id}: ${x.subsection_id} is not a shop of the target site`);
+        if (!r || r.superseded_at || r.review_status === "rejected") { held.push({ id: x.id, why: !r ? "not a certificate row of the source site" : "not a live row" }); continue; }
+        if (juneBatch.has(r.import_batch_id)) { held.push({ id: x.id, why: "June 2026 row (read-only)" }); continue; }
+        todo.push({ id: x.id, cert_no: r.cert_no ?? null, subsection_id: x.subsection_id, shop: subName.get(x.subsection_id)!, note: x.note });
+      }
+      const state = sha256(canonical(rows.map((r: Row) => [r.id, r.subsection_id, r.superseded_at]).sort()));
+      const dataHash = sha256(canonical({ move: to.id, rows: todo.map((t) => [t.id, t.subsection_id, t.note]).sort() }));
+      const summary = { from: { id: from.id, name: from.name.trim() }, to: { id: to.id, name: to.name.trim() }, to_move: todo.length, held, rows: todo };
+      if (dry_run) return { ...summary, writes_nothing: true, confirm_token: todo.length ? opts.tokens.issue({ siteId: from.id, dataHash, planHash: state }) : null, requires: "fortress.write scope and the Admin role" };
+      if (!opts.isAdmin) throw new Error("move refused: requires the Admin role");
+      const why = opts.tokens.check(confirm_token, { siteId: from.id, dataHash, planHash: state });
+      if (why) throw new Error(`move refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("move refused: token already used");
+      const snap = await store.exportSnapshot(from.id, "before move_cocs");
+      const snapTo = await store.exportSnapshot(to.id, "before move_cocs (target)");
+      const stamp = new Date().toISOString().slice(0, 10);
+      let result: unknown;
+      try { result = await store.moveCertificates(from.id, to.id, todo.map((t) => ({ id: t.id, subsection_id: t.subsection_id, note: `moved ${stamp} from site ${from.name.trim()} by mcp move_cocs: ${t.note}` }))); }
+      catch (e) { await store.logWrite({ tool: "move_cocs", status: "failed", site_id: from.id, site: from.name, planned: { to: to.id, rows: todo.length }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) }); throw e; }
+      const log = await store.logWrite({ tool: "move_cocs", status: "ok", site_id: from.id, site: from.name, result, planned: { to: to.id, rows: todo }, snapshot: [snap.path, snapTo.path].join(" ; ") });
+      return { ...summary, written: result, snapshot: [snap.path, snapTo.path], log };
+    },
+
     /** Add shops (subsections) to a site, e.g. from the client's tenant schedule, flagged COC-required.
      *  Names that already exist on the site (case-insensitive) are skipped, never duplicated. No deletes, no renames. */
     async create_subsections({ site_id, subsections: input, dry_run = true, confirm_token }: { site_id: string; subsections?: unknown; dry_run?: boolean; confirm_token?: string }) {
