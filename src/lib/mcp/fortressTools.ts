@@ -434,7 +434,8 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const juneBatch = new Set(batches.filter((b: Row) => isJune2026(b.created_at)).map((b: Row) => b.id));
       const byId = new Map<string, Row>(rows.map((r: Row) => [r.id, r]));
       const held: { id: string; cert_no?: string; why: string }[] = [];
-      const todo: { id: string; cert_no: string | null; review_status: string; verdict_now: string | null; verdict_after: string; rules_after: Record<string, string>; reasons: string; note: string; coc_document_id: string | null }[] = [];
+      const todo: { id: string; cert_no: string | null; review_status: string; input_note: string; verdict_now: string | null; verdict_after: string; rules_after: Record<string, string>; reasons: string; note: string; coc_document_id: string | null }[] = [];
+      const rowErrors: string[] = [];
       for (const c of list) {
         const r = byId.get(c.id);
         if (!r) { held.push({ id: c.id, why: "not a certificate row of this site" }); continue; }
@@ -449,18 +450,22 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
         }
         const anyFail = Object.values(rulesAfter).some((v) => String(v).toUpperCase() === "FAIL");
         const verdict = c.verdict ?? (anyFail ? "FAIL" : Object.values(rulesAfter).some((v) => ["CV", "REVIEW"].includes(String(v).toUpperCase())) ? "REVIEW" : "PASS");
-        if (anyFail && !verdict.toUpperCase().startsWith("FAIL")) throw new Error(`corrections ${c.id}: a FAIL rule remains (${Object.entries(rulesAfter).filter(([, v]) => String(v).toUpperCase() === "FAIL").map(([k]) => k).join(", ")}) but verdict is ${verdict}`);
-        if (!anyFail && verdict.toUpperCase().startsWith("FAIL")) throw new Error(`corrections ${c.id}: verdict FAIL but no rule fails after the correction`);
+        if (anyFail && !verdict.toUpperCase().startsWith("FAIL")) { rowErrors.push(`${c.id}: a FAIL rule remains (${Object.entries(rulesAfter).filter(([, v]) => String(v).toUpperCase() === "FAIL").map(([k]) => k).join(", ")}) but verdict is ${verdict}; stored rules ${JSON.stringify(r.rules ?? {})}`); continue; }
+        if (!anyFail && verdict.toUpperCase().startsWith("FAIL")) { rowErrors.push(`${c.id}: verdict FAIL but no rule fails after the correction; stored rules ${JSON.stringify(r.rules ?? {})}`); continue; }
         const stamp = `corrected ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC after re-reading the scan`;
         todo.push({
           id: c.id, cert_no: r.cert_no, review_status: r.review_status, verdict_now: r.verdict, verdict_after: verdict, rules_after: rulesAfter, reasons: c.reasons || String(r.reasons ?? ""),
+          input_note: c.note,
           note: [String(r.sign_off_note ?? "").trim(), `${stamp}: ${c.note} (was ${r.verdict ?? "blank"})`].filter(Boolean).join(" | "),
           coc_document_id: r.coc_document_id ?? null,
         });
       }
+      if (rowErrors.length) throw new Error(`corrections refused for ${rowErrors.length} row(s):\n${rowErrors.join("\n")}`);
       const ids = todo.map((t) => t.id).sort();
       const state = sha256(canonical(rows.map((r: Row) => [r.id, r.review_status, r.verdict, r.rules, r.reasons, r.superseded_at, r.signed_off_at]).sort()));
-      const dataHash = sha256(canonical({ correct: todo.map((t) => [t.id, t.verdict_after, t.rules_after, t.reasons, t.note.split(" | ").pop()]) }));
+      // Hash the caller's input note, not the stamped note: the stamp carries the minute, so a dry run and its apply
+      // a minute apart would never match.
+      const dataHash = sha256(canonical({ correct: todo.map((t) => [t.id, t.verdict_after, t.rules_after, t.reasons, t.input_note]) }));
       const coc = await loadSiteCocData(site_id, sb);
       const before = cocCounts(buildSiteCocModel({ ...coc, siteId: site_id, siteName: site.name }));
       const patch = new Map(todo.map((t) => [t.id, t]));
