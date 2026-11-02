@@ -143,6 +143,12 @@ export async function handleMcp(req: Request): Promise<Response> {
   const siteId = z.string().uuid().describe("sites.id of a Fortress_Fund site (see list_fortress_sites)");
   // Connected clients cache a tool list. A parameter added after a client connected reaches this server
   // as a string (the client does not know its type), so the late-added flags accept "true"/"false" too.
+  const supersedeJuneOpt = (c: unknown): boolean => {
+    let v: unknown = c;
+    if (typeof v === "string") { try { v = JSON.parse(v); } catch { return false; } }
+    const x = (v as Record<string, unknown> | null)?.supersede_june;
+    return x === true || x === "true";
+  };
   const flag = z.preprocess((v) => (v === "true" ? true : v === "false" ? false : v), z.boolean()).optional();
   const emailList = (v: string) => v.split(/[,;\s]+/).map((e) => e.trim()).filter(Boolean);
   const verdicts = z.union([z.string(), z.record(z.any())]).describe("verdicts.json content (object or text)");
@@ -229,7 +235,10 @@ export async function handleMcp(req: Request): Promise<Response> {
       override_older_finals: flag.describe("true = the October judgement verdict wins over a differing older final verdict (ruling 27 Oct 2026); June 2026 and other-shop holds stay"),
       mode: z.enum(["sign", "resign", "correct"]).optional().describe("sign (default): sign proposed rows. resign: same as resign_signed_verdicts (re-sign signed-off rows to their judgement verdict). correct: same as correct_signed_verdicts (needs corrections)"),
       corrections: z.any().optional().describe("mode=correct only: array (or JSON string) of {id, rules:{code:res}, verdict?, reasons?, note}") },
-    (a: any) => (a.mode === "resign" ? extra.resign_signed_verdicts(a) : a.mode === "correct" ? extra.correct_signed_verdicts(a) : extra.sign_off_verdicts(a)), { writeWhen: (a) => a?.dry_run === false });
+    // mode=sign with corrections {supersede_june: true}: the site-scoped opt-in that lets October rows
+    // supersede linked June 2026 rows (reached through corrections because clients cache the schema).
+    (a: any) => (a.mode === "resign" ? extra.resign_signed_verdicts(a) : a.mode === "correct" ? extra.correct_signed_verdicts(a)
+      : extra.sign_off_verdicts({ ...a, supersede_june: supersedeJuneOpt(a.corrections) })), { writeWhen: (a) => a?.dry_run === false });
   tool("correct_signed_verdicts", "A reviewer's corrections to a site's SIGNED-OFF (or legacy final) COC rows after re-reading the scans: per row the rules the scan contradicts ({code: PASS|FAIL|CV|N/A|ASSERTED|FLAG}), optionally the resulting verdict (derived from the rules when omitted; a remaining FAIL rule forces FAIL), new reasons text and a note saying what the scan shows. Changes only verdict, rules, reasons and the sign-off note; the batch's proposed verdict and rule_results stay as the audit trail. June 2026 rows are held. dry_run=true (default) returns the changes with before/after shop counts and a confirm token; dry_run=false applies it, snapshot first (fortress.write + Admin).",
     { site_id: siteId, corrections: z.any().describe("array (or JSON string) of {id, rules:{code:res}, verdict?, reasons?, note}"), dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
     extra.correct_signed_verdicts, { writeWhen: (a) => a?.dry_run === false });
