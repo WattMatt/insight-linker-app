@@ -308,9 +308,20 @@ export class Store {
    *  follows its certificate to the new shop. Verifies every row. */
   async moveCertificates(fromSite, toSite, rows) {
     const now = new Date().toISOString();
+    // record_key is unique per site: a moved row whose key the target site already uses gets a suffix naming its old site.
+    const taken = new Set((await this.certificates(toSite, "record_key")).map(x => x.record_key).filter(Boolean));
+    const src = new Map((await this.certificates(fromSite, "id, record_key")).map(x => [x.id, x.record_key]));
     for (const r of rows) {
+      const patch = { site_id: toSite, subsection_id: r.subsection_id, notes: r.note, updated_at: now };
+      const key = src.get(r.id);
+      if (key && taken.has(key)) {
+        let k = `${key}_from_${fromSite.slice(0, 8)}`, n = 2;
+        while (taken.has(k)) k = `${key}_from_${fromSite.slice(0, 8)}_${n++}`;
+        patch.record_key = k;
+      }
+      if (key) taken.add(patch.record_key ?? key);
       const { data, error } = await this.sb.from("coc_certificates")
-        .update({ site_id: toSite, subsection_id: r.subsection_id, notes: r.note, updated_at: now })
+        .update(patch)
         .eq("id", r.id).eq("site_id", fromSite).is("superseded_at", null).select("id, coc_document_id");
       if (error) throw new Error(`coc_certificates ${r.id}: ${error.message}`);
       if (!data || data.length !== 1) throw new Error(`coc_certificates ${r.id}: not moved (row changed, or update not permitted)`);
