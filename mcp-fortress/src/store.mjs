@@ -290,6 +290,43 @@ export class Store {
     return { deleted: ids.length };
   }
 
+  /** Swap name and address between two sites of this client. Verifies both. */
+  async swapSiteNames(a, b) {
+    const now = new Date().toISOString();
+    for (const [x, y] of [[a, b], [b, a]]) {
+      const { data, error } = await this.sb.from("sites").update({ name: y.name, address: y.address, updated_at: now })
+        .eq("id", x.id).eq("client_id", this.client.id).select("id");
+      if (error) throw new Error(`sites ${x.id}: ${error.message}`);
+      if (!data || data.length !== 1) throw new Error(`sites ${x.id}: not renamed (update not permitted for this account?)`);
+    }
+    const [na, nb] = [await this.fortressSite(a.id), await this.fortressSite(b.id)];
+    if (na.name !== b.name || nb.name !== a.name) throw new Error("verify: site names did not swap");
+    return { swapped: [{ id: a.id, name: na.name }, { id: b.id, name: nb.name }] };
+  }
+
+  /** Move live certificate rows to another site of this client and link them to a shop there. A linked COC document
+   *  follows its certificate to the new shop. Verifies every row. */
+  async moveCertificates(fromSite, toSite, rows) {
+    const now = new Date().toISOString();
+    for (const r of rows) {
+      const { data, error } = await this.sb.from("coc_certificates")
+        .update({ site_id: toSite, subsection_id: r.subsection_id, notes: r.note, updated_at: now })
+        .eq("id", r.id).eq("site_id", fromSite).is("superseded_at", null).select("id, coc_document_id");
+      if (error) throw new Error(`coc_certificates ${r.id}: ${error.message}`);
+      if (!data || data.length !== 1) throw new Error(`coc_certificates ${r.id}: not moved (row changed, or update not permitted)`);
+      const doc = data[0].coc_document_id;
+      if (doc) {
+        const d = await this.sb.from("subsection_documents").update({ subsection_id: r.subsection_id }).eq("id", doc).select("id");
+        if (d.error) throw new Error(`subsection_documents ${doc}: ${d.error.message}`);
+      }
+    }
+    const after = await this.certificates(toSite, "id, subsection_id");
+    const want = new Map(rows.map(r => [r.id, r.subsection_id]));
+    const ok = after.filter(a => want.get(a.id) === a.subsection_id).length;
+    if (ok !== rows.length) throw new Error(`verify: ${rows.length - ok} of ${rows.length} rows are not on the target site/shop`);
+    return { moved: rows.length };
+  }
+
   /** Link certificate rows to shops: subsection_id + a note. Verifies every row took the link. */
   async linkCertificates(siteId, links) {
     for (const l of links) {

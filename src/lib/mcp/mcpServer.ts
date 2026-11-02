@@ -192,16 +192,26 @@ export async function handleMcp(req: Request): Promise<Response> {
     { site_id: siteId, shops: z.array(z.string()).optional(), dry_run: z.boolean().optional(), confirm_token: z.string().optional(),
       create_subsections: z.any().optional().describe("runs create_subsections with this list instead: array (or JSON string) of {name, tenant_name?, shop_number?, meter_serial_number?}"),
       delete_subsections: z.any().optional().describe("runs delete_subsections instead: array (or JSON string) of {id: subsection id, note}"),
-      reject_cocs: z.any().optional().describe("runs reject_cocs instead: array (or JSON string) of {id: certificate row id, note}") },
+      reject_cocs: z.any().optional().describe("runs reject_cocs instead: array (or JSON string) of {id: certificate row id, note}"),
+      swap_site_names: z.string().optional().describe("runs swap_site_names instead: the other site's id"),
+      move_cocs: z.any().optional().describe("runs move_cocs instead: {to_site_id, rows: [{id, subsection_id, note}]} (object or JSON string)") },
     (a: any) => (a.create_subsections != null ? extra.create_subsections({ site_id: a.site_id, subsections: a.create_subsections, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.delete_subsections != null ? extra.delete_subsections({ site_id: a.site_id, subsections: a.delete_subsections, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.reject_cocs != null ? extra.reject_cocs({ site_id: a.site_id, rows: a.reject_cocs, dry_run: a.dry_run, confirm_token: a.confirm_token })
+      : a.swap_site_names != null ? extra.swap_site_names({ site_id: a.site_id, other_site_id: a.swap_site_names, dry_run: a.dry_run, confirm_token: a.confirm_token })
+      : a.move_cocs != null ? extra.move_cocs({ site_id: a.site_id, to_site_id: (typeof a.move_cocs === "string" ? JSON.parse(a.move_cocs) : a.move_cocs)?.to_site_id, rows: (typeof a.move_cocs === "string" ? JSON.parse(a.move_cocs) : a.move_cocs)?.rows, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : extra.set_coc_required(a)),
     { writeWhen: (a) => a?.dry_run === false });
   tool("link_unlinked_cocs", "Link a site's live certificate rows that have no shop to a shop: by the DB/COC schedule, by shop number, or by a clear name match (folder name, DB name, location). Weak or ambiguous matches are listed for review, not written; June 2026 rows are held. dry_run=true (default) returns the plan with before/after shop counts and a confirm token; dry_run=false applies it, snapshot first (fortress.write + Admin).",
     { site_id: siteId, dry_run: z.boolean().optional(), confirm_token: z.string().optional(), exclude: z.array(z.string()).optional().describe("certificate row ids to leave unlinked"),
       assign: z.any().optional().describe("manual links a reviewer has matched (e.g. from the tenant schedule): array (or JSON string) of {id: certificate row id, subsection_id, note}. They replace the automatic decision for those rows; only live unlinked rows of this site and shops of this site") },
     extra.link_unlinked_cocs, { writeWhen: (a) => a?.dry_run === false });
+  tool("swap_site_names", "Swap the name and address of two Fortress sites whose records are the wrong way round (each holds the other's shops and inspections). dry_run=true (default) shows before/after and returns a confirm token (fortress.write + Admin).",
+    { site_id: siteId, other_site_id: z.string().uuid(), dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
+    extra.swap_site_names, { writeWhen: (a) => a?.dry_run === false });
+  tool("move_cocs", "Move live certificate rows filed under the wrong site to another Fortress site, linked to a shop there; a linked COC document follows. rows: [{id, subsection_id (target shop), note}]. dry_run=true (default) returns the plan and a confirm token; snapshot of both sites before writing (fortress.write + Admin).",
+    { site_id: siteId, to_site_id: z.string().uuid(), rows: z.any(), dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
+    extra.move_cocs, { writeWhen: (a) => a?.dry_run === false });
   tool("reject_cocs", "Park certificate rows that must not count as 'rejected' (kept for audit, out of every live count): duplicates or blank shells of a certificate already on file, certificates filed under the wrong site, tenancies that no longer exist. rows: array (or JSON string) of {id, note}. Signed-off rows go through withdraw_coc_certificate. dry_run=true (default) lists them and returns a confirm token; dry_run=false applies it, snapshot first (fortress.write + Admin).",
     { site_id: siteId, rows: z.any().describe("array (or JSON string) of {id: certificate row id, note}"), dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
     extra.reject_cocs, { writeWhen: (a) => a?.dry_run === false });
