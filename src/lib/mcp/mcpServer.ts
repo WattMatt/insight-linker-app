@@ -187,9 +187,12 @@ export async function handleMcp(req: Request): Promise<Response> {
     async ({ site_id, link, link_apply, link_confirm_token, link_exclude }: { site_id: string; link?: boolean; link_apply?: boolean; link_confirm_token?: string; link_exclude?: string }) =>
       link ? extra.link_unlinked_cocs({ site_id, dry_run: link_apply !== true, confirm_token: link_confirm_token, exclude: emailList(link_exclude ?? "") }) : extra.get_site_coc_detail({ site_id }),
     { writeWhen: (a) => a?.link === true && a?.link_apply === true });
-  tool("set_coc_required", "Flag a Fortress site's shops as COC-required: every shop not yet flagged, or the named shops. dry_run=true (default) lists them (with whether certificates are on file) and returns a confirm token; dry_run=false applies it (fortress.write + Admin).",
-    { site_id: siteId, shops: z.array(z.string()).optional(), dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
-    extra.set_coc_required, { writeWhen: (a) => a?.dry_run === false });
+  // create_subsections is also reachable through set_coc_required, for clients holding a cached tool list.
+  tool("set_coc_required", "Flag a Fortress site's shops as COC-required: every shop not yet flagged, or the named shops. dry_run=true (default) lists them (with whether certificates are on file) and returns a confirm token; dry_run=false applies it (fortress.write + Admin). With create_subsections it runs create_subsections instead.",
+    { site_id: siteId, shops: z.array(z.string()).optional(), dry_run: z.boolean().optional(), confirm_token: z.string().optional(),
+      create_subsections: z.any().optional().describe("runs create_subsections with this list instead: array (or JSON string) of {name, tenant_name?, shop_number?, meter_serial_number?}") },
+    (a: any) => (a.create_subsections != null ? extra.create_subsections({ site_id: a.site_id, subsections: a.create_subsections, dry_run: a.dry_run, confirm_token: a.confirm_token }) : extra.set_coc_required(a)),
+    { writeWhen: (a) => a?.dry_run === false });
   tool("link_unlinked_cocs", "Link a site's live certificate rows that have no shop to a shop: by the DB/COC schedule, by shop number, or by a clear name match (folder name, DB name, location). Weak or ambiguous matches are listed for review, not written; June 2026 rows are held. dry_run=true (default) returns the plan with before/after shop counts and a confirm token; dry_run=false applies it, snapshot first (fortress.write + Admin).",
     { site_id: siteId, dry_run: z.boolean().optional(), confirm_token: z.string().optional(), exclude: z.array(z.string()).optional().describe("certificate row ids to leave unlinked"),
       assign: z.any().optional().describe("manual links a reviewer has matched (e.g. from the tenant schedule): array (or JSON string) of {id: certificate row id, subsection_id, note}. They replace the automatic decision for those rows; only live unlinked rows of this site and shops of this site") },
