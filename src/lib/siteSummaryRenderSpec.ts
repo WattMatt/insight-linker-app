@@ -462,6 +462,8 @@ export function getEnabledSections(sections: ReportSection[]): ReportSection[] {
 export interface CalculateMetricsInputs {
   /** Count of is_coc_required subsections; defaults to deriving from the rows. */
   cocRequiredCount?: number;
+  /** Count of COC-required subsections that are clear on the COC register; defaults to deriving from the rows. */
+  cocCompliantCount?: number;
   /** Open snag count; defaults to summing snagCount off the rows. */
   openSnagCount?: number;
   /**
@@ -487,7 +489,7 @@ export function calculateMetrics(
   const cocRequired = inputs.cocRequiredCount ?? subsections.filter(requiresCoc).length;
   // Numerator is required-AND-approved only, so a NOT-required subsection that
   // happens to carry an approved status can never push COC compliance over 100%.
-  const cocCompliant = subsections.filter(s => requiresCoc(s) && hasValidCocStatus(s.cocStatus)).length;
+  const cocCompliant = inputs.cocCompliantCount ?? subsections.filter(s => requiresCoc(s) && hasValidCocStatus(s.cocStatus)).length;
   const meteringInstalled = subsections.filter(s =>
     s.meteringStatus === 'Installed' || !!s.meterSerialNumber
   ).length;

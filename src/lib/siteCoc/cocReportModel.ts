@@ -4,7 +4,7 @@ export type VerdictKind = "pass" | "fail" | "review" | "cv" | "pending";
 
 export interface ReportCert {
   certNo: string; type: string; verdict: string; verdictKind: VerdictKind;
-  issuedDate: string | null; hasCoc: boolean; hasEval: boolean;
+  issuedDate: string | null; docId?: string | null; hasCoc: boolean; hasEval: boolean;
   rules: Record<string, string>; failedRules: string[];
   /** A proposed re-verification row: on file, but its verdict is not signed off yet. */
   awaitingSignOff: boolean;
@@ -106,7 +106,7 @@ export function buildCocReportModel(input: BuildInput): CocReportModel {
       const certs: ReportCert[] = raw.map(c => ({
         certNo: c.cert_no ?? "", type: c.cert_type, verdict: c.verdict,
         verdictKind: verdictKind(c.verdict, c.rules), issuedDate: c.issued_date,
-        hasCoc: !!c.coc_document_id, hasEval: !!c.eval_document_id,
+        docId: c.coc_document_id ?? null, hasCoc: !!c.coc_document_id, hasEval: !!c.eval_document_id,
         rules: c.rules ?? {}, failedRules: failedRulesOf(c.rules), awaitingSignOff,
       }));
       const noCoc = certs.length === 0;
