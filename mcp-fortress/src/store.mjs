@@ -200,9 +200,51 @@ export class Store {
     return { resigned: rows.length, documents_restamped: restamped };
   }
 
+  /** rows: [{ id, verdict, rules, reasons, note, coc_document_id }] - a reviewer's correction of a
+   *  signed-off row after re-reading the scan. Only the final verdict, the rules map, the reasons text
+   *  and the sign-off note change (the guard trigger allows exactly these); the batch's proposed verdict
+   *  and rule_results stay as the audit trail. Re-reads and verifies afterwards. */
+  async correctSigned(siteId, rows) {
+    let restamped = 0;
+    for (const r of rows) {
+      const { data, error } = await this.sb.from("coc_certificates")
+        .update({ verdict: r.verdict, rules: r.rules, reasons: r.reasons, sign_off_note: r.note, updated_at: new Date().toISOString() })
+        .eq("id", r.id).eq("site_id", siteId).eq("review_status", "signed_off").is("superseded_at", null).select("id");
+      if (error) throw new Error(`coc_certificates ${r.id}: ${error.message}`);
+      if (!data || data.length !== 1) throw new Error(`coc_certificates ${r.id}: not corrected (row changed, or update not permitted for this account)`);
+      if (r.coc_document_id) {
+        const u = String(r.verdict).toUpperCase();
+        const status = u.startsWith("PASS") ? "Pass" : u.startsWith("FAIL") ? "Fail" : "Pending";
+        const d = await this.sb.from("subsection_documents").update({ coc_status: status }).eq("id", r.coc_document_id).select("id");
+        if (d.error) throw new Error(`subsection_documents ${r.coc_document_id}: ${d.error.message}`);
+        restamped += d.data?.length ?? 0;
+      }
+    }
+    const after = await this.certificates(siteId, "id, verdict, rules, reasons");
+    const want = new Map(rows.map(r => [r.id, r]));
+    const bad = after.filter(a => want.has(a.id) && (a.verdict !== want.get(a.id).verdict || canonical(a.rules) !== canonical(want.get(a.id).rules) || (a.reasons ?? "") !== (want.get(a.id).reasons ?? "")));
+    if (bad.length) throw new Error(`verify: ${bad.length} of ${rows.length} rows did not take the correction`);
+    return { corrected: rows.length, documents_restamped: restamped };
+  }
+
   /** Shops of a site: id, name, tenant, shop number, COC-required flag (deleted shops excluded). */
   async subsections(siteId) {
     return must(await this.sb.from("subsections").select("id, name, tenant_name, shop_number, is_coc_required").eq("site_id", siteId).is("deleted_at", null).order("name"), "subsections");
+  }
+
+  /** Add shops to a site (COC-required). Refuses a name the site already has; verifies every shop was created. */
+  async createSubsections(siteId, rows) {
+    const now = new Date().toISOString();
+    const existing = new Set((await this.subsections(siteId)).map(s => String(s.name).trim().toUpperCase()));
+    const clash = rows.filter(r => existing.has(r.name.trim().toUpperCase()));
+    if (clash.length) throw new Error(`subsections already on the site: ${clash.map(r => r.name).join(", ")}`);
+    const { data, error } = await this.sb.from("subsections").insert(rows.map(r => ({
+      site_id: siteId, name: r.name, tenant_name: r.tenant_name, shop_number: r.shop_number, meter_serial_number: r.meter_serial_number,
+      is_coc_required: true, created_at: now, updated_at: now,
+    }))).select("id, name");
+    if (error) throw new Error(`subsections insert: ${error.message}`);
+    if (!data || data.length !== rows.length) throw new Error(`subsections insert: ${data?.length ?? 0} of ${rows.length} created (insert not permitted for this account?)`);
+    return { created: data.length, ids: data.map(d => ({ id: d.id, name: d.name })) };
   }
 
   /** Link certificate rows to shops: subsection_id + a note. Verifies every row took the link. */

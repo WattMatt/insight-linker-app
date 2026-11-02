@@ -34,6 +34,89 @@ async function all(make: (from: number, to: number) => PromiseLike<{ data: Row[]
 
 const chunks = <T>(xs: T[], n = 200) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
+/** Rule results a reviewer may set on a signed-off row (judgement vocabulary, as stored in `rules`). */
+export const CORRECTION_RES: ReadonlySet<string> = new Set(["PASS", "FAIL", "CV", "N/A", "ASSERTED", "FLAG"]);
+
+export interface Correction { id: string; rules: Record<string, string>; verdict?: string; reasons: string; note: string }
+
+/** corrections: an array, or a JSON string of one (the claude.ai client sends every param as a string
+ *  when it works from a cached schema). Each item: {id, rules:{code:res}, verdict?, reasons, note}. */
+export function parseCorrections(input: unknown): Correction[] {
+  let v = input;
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return [];
+    try { v = JSON.parse(s); } catch { throw new Error("corrections: not valid JSON"); }
+  }
+  if (!Array.isArray(v)) throw new Error("corrections: expected an array of {id, rules, verdict, reasons, note}");
+  return v.map((c: Row, i: number) => {
+    if (!c || typeof c !== "object") throw new Error(`corrections[${i}]: not an object`);
+    const id = String(c.id ?? "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error(`corrections[${i}]: id must be a certificate row uuid`);
+    const rules: Record<string, string> = {};
+    for (const [k, val] of Object.entries((c.rules ?? {}) as Record<string, unknown>)) rules[String(k).toUpperCase().trim()] = String(val ?? "").toUpperCase().trim();
+    const reasons = String(c.reasons ?? "").trim();
+    const note = String(c.note ?? "").trim();
+    if (!note) throw new Error(`corrections[${i}] (${id}): a note saying what the scan shows is required`);
+    if (!Object.keys(rules).length && c.verdict == null && !reasons) throw new Error(`corrections[${i}] (${id}): nothing to change`);
+    const verdict = c.verdict == null ? undefined : String(c.verdict).toUpperCase().trim();
+    if (verdict !== undefined && !["PASS", "FAIL", "REVIEW"].includes(verdict)) throw new Error(`corrections[${i}] (${id}): verdict must be PASS, FAIL or REVIEW`);
+    return { id, rules, verdict, reasons, note };
+  });
+}
+
+export interface Assignment { id: string; subsection_id: string; note: string }
+
+/** assign: an array, or a JSON string of one. Each item: {id (certificate row), subsection_id, note (why: e.g. the
+ *  tenant-schedule premises and tenant the certificate names)}. */
+export function parseAssignments(input: unknown): Assignment[] {
+  let v = input;
+  if (v == null) return [];
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return [];
+    try { v = JSON.parse(s); } catch { throw new Error("assign: not valid JSON"); }
+  }
+  if (!Array.isArray(v)) throw new Error("assign: expected an array of {id, subsection_id, note}");
+  const seen = new Set<string>();
+  return v.map((a: Row, i: number) => {
+    if (!a || typeof a !== "object") throw new Error(`assign[${i}]: not an object`);
+    const id = String(a.id ?? "").trim();
+    const subsection_id = String(a.subsection_id ?? "").trim();
+    const note = String(a.note ?? "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error(`assign[${i}]: id must be a certificate row uuid`);
+    if (!/^[0-9a-f-]{36}$/i.test(subsection_id)) throw new Error(`assign[${i}] (${id}): subsection_id must be a uuid`);
+    if (!note) throw new Error(`assign[${i}] (${id}): a note saying why this certificate belongs to this shop is required`);
+    if (seen.has(id)) throw new Error(`assign[${i}]: certificate row ${id} is assigned twice`);
+    seen.add(id);
+    return { id, subsection_id, note };
+  });
+}
+
+export interface NewSubsection { name: string; tenant_name: string | null; shop_number: string | null; meter_serial_number: string | null }
+
+/** subsections: an array, or a JSON string of one. Each item: {name, tenant_name?, shop_number?, meter_serial_number?}. */
+export function parseNewSubsections(input: unknown): NewSubsection[] {
+  let v = input;
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return [];
+    try { v = JSON.parse(s); } catch { throw new Error("subsections: not valid JSON"); }
+  }
+  if (!Array.isArray(v)) throw new Error("subsections: expected an array of {name, tenant_name, shop_number, meter_serial_number}");
+  const seen = new Set<string>();
+  const opt = (x: unknown) => { const t = String(x ?? "").trim(); return t ? t : null; };
+  return v.map((a: Row, i: number) => {
+    if (!a || typeof a !== "object") throw new Error(`subsections[${i}]: not an object`);
+    const name = String(a.name ?? "").trim();
+    if (!name) throw new Error(`subsections[${i}]: a name is required`);
+    const key = name.toUpperCase();
+    if (seen.has(key)) throw new Error(`subsections[${i}]: ${name} is listed twice`);
+    seen.add(key);
+    return { name, tenant_name: opt(a.tenant_name), shop_number: opt(a.shop_number), meter_serial_number: opt(a.meter_serial_number) };
+  });
+}
+
 export const REPORT_CATEGORIES: Record<string, string> = {
   "Site Summary Reports": "site-summary",
   "Asset Verification Reports": "asset-verification",
@@ -312,6 +395,80 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       return { ...summary, written: result, snapshot: snap.path, log };
     },
 
+    /** A reviewer's corrections to SIGNED-OFF rows after re-reading the scans: per row, the rules whose
+     *  result the scan contradicts (judgement vocabulary: PASS / FAIL / CV / N/A / ASSERTED / FLAG), the
+     *  resulting final verdict and the reasons text. The batch's proposed verdict and rule_results are
+     *  never touched (audit trail); June 2026 rows are held. */
+    async correct_signed_verdicts({ site_id, corrections, dry_run = true, confirm_token }: { site_id: string; corrections?: unknown; dry_run?: boolean; confirm_token?: string }) {
+      const site = await store.fortressSite(site_id);
+      const list = parseCorrections(corrections);
+      if (!list.length) throw new Error("corrections: give at least one {id, rules, verdict, reasons, note}");
+      const [rows, batches] = await Promise.all([
+        store.certificates(site_id, "id, subsection_id, cert_no, review_status, verdict, rules, reasons, proposed_verdict_alt, rule_results, superseded_at, signed_off_at, import_batch_id, sign_off_note, coc_document_id"),
+        store.batches(site_id),
+      ]);
+      const juneBatch = new Set(batches.filter((b: Row) => isJune2026(b.created_at)).map((b: Row) => b.id));
+      const byId = new Map<string, Row>(rows.map((r: Row) => [r.id, r]));
+      const held: { id: string; cert_no?: string; why: string }[] = [];
+      const todo: { id: string; cert_no: string | null; verdict_now: string | null; verdict_after: string; rules_after: Record<string, string>; reasons: string; note: string; coc_document_id: string | null }[] = [];
+      for (const c of list) {
+        const r = byId.get(c.id);
+        if (!r) { held.push({ id: c.id, why: "not a certificate row of this site" }); continue; }
+        if (r.review_status !== "signed_off" || !r.signed_off_at || r.superseded_at) { held.push({ id: c.id, cert_no: r.cert_no, why: `not a live signed-off row (${r.review_status}${r.superseded_at ? ", superseded" : ""})` }); continue; }
+        if (juneBatch.has(r.import_batch_id)) { held.push({ id: c.id, cert_no: r.cert_no, why: "June 2026 row (read-only)" }); continue; }
+        const rulesAfter: Record<string, string> = { ...(r.rules ?? {}) };
+        for (const [code, res] of Object.entries(c.rules)) {
+          if (!/^[ABCD]\d{1,2}$/.test(code)) throw new Error(`corrections ${c.id}: bad rule code ${code}`);
+          if (!CORRECTION_RES.has(res)) throw new Error(`corrections ${c.id}: ${code} result must be one of ${[...CORRECTION_RES].join("/")}, got ${res}`);
+          rulesAfter[code] = res;
+        }
+        const anyFail = Object.values(rulesAfter).some((v) => String(v).toUpperCase() === "FAIL");
+        const verdict = c.verdict ?? (anyFail ? "FAIL" : Object.values(rulesAfter).some((v) => ["CV", "REVIEW"].includes(String(v).toUpperCase())) ? "REVIEW" : "PASS");
+        if (anyFail && !verdict.toUpperCase().startsWith("FAIL")) throw new Error(`corrections ${c.id}: a FAIL rule remains (${Object.entries(rulesAfter).filter(([, v]) => String(v).toUpperCase() === "FAIL").map(([k]) => k).join(", ")}) but verdict is ${verdict}`);
+        if (!anyFail && verdict.toUpperCase().startsWith("FAIL")) throw new Error(`corrections ${c.id}: verdict FAIL but no rule fails after the correction`);
+        const stamp = `corrected ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC after re-reading the scan`;
+        todo.push({
+          id: c.id, cert_no: r.cert_no, verdict_now: r.verdict, verdict_after: verdict, rules_after: rulesAfter, reasons: c.reasons || String(r.reasons ?? ""),
+          note: [String(r.sign_off_note ?? "").trim(), `${stamp}: ${c.note} (was ${r.verdict ?? "blank"})`].filter(Boolean).join(" | "),
+          coc_document_id: r.coc_document_id ?? null,
+        });
+      }
+      const ids = todo.map((t) => t.id).sort();
+      const state = sha256(canonical(rows.map((r: Row) => [r.id, r.review_status, r.verdict, r.rules, r.reasons, r.superseded_at, r.signed_off_at]).sort()));
+      const dataHash = sha256(canonical({ correct: todo.map((t) => [t.id, t.verdict_after, t.rules_after, t.reasons, t.note.split(" | ").pop()]) }));
+      const coc = await loadSiteCocData(site_id, sb);
+      const before = cocCounts(buildSiteCocModel({ ...coc, siteId: site_id, siteName: site.name }));
+      const patch = new Map(todo.map((t) => [t.id, t]));
+      const after = cocCounts(buildSiteCocModel({
+        ...coc, siteId: site_id, siteName: site.name,
+        certificates: coc.certificates.map((r) => patch.has(r.id) ? { ...r, verdict: patch.get(r.id)!.verdict_after, rules: patch.get(r.id)!.rules_after } : r),
+      }));
+      const changes = todo.map((t) => ({ id: t.id, cert_no: t.cert_no, verdict_now: t.verdict_now, verdict_after: t.verdict_after, rules_changed: Object.keys(list.find((c) => c.id === t.id)!.rules), reasons_after: t.reasons }));
+      const summary = { site: { id: site.id, name: site.name.trim() }, to_correct: ids.length, verdict_changes: changes.filter((c) => c.verdict_now !== c.verdict_after).length, held, before, after };
+      if (dry_run) {
+        return {
+          ...summary, writes_nothing: true, changes,
+          confirm_token: ids.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null,
+          note: ids.length ? "Apply with dry_run=false, the same corrections and this confirm_token within 15 minutes; refused if the site's COC rows change." : "Nothing to correct.",
+          requires: "fortress.write scope and the Admin role",
+        };
+      }
+      if (!opts.isAdmin) throw new Error("correction refused: requires the Admin role");
+      const why = opts.tokens.check(confirm_token, { siteId: site.id, dataHash, planHash: state });
+      if (why) throw new Error(`correction refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("correction refused: token already used");
+      const snap = await store.exportSnapshot(site.id, "before correct_signed_verdicts");
+      let result: unknown;
+      try {
+        result = await store.correctSigned(site.id, todo.map((t) => ({ id: t.id, verdict: t.verdict_after, rules: t.rules_after, reasons: t.reasons, note: t.note, coc_document_id: t.coc_document_id })));
+      } catch (e) {
+        await store.logWrite({ tool: "correct_signed_verdicts", status: "failed", site_id: site.id, site: site.name, planned: { ids: ids.length }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) });
+        throw e;
+      }
+      const log = await store.logWrite({ tool: "correct_signed_verdicts", status: "ok", site_id: site.id, site: site.name, result, planned: { ids: ids.length, changes }, snapshot: snap.path });
+      return { ...summary, written: result, snapshot: snap.path, log };
+    },
+
     /** Flag a site's shops as COC-required (all shops not yet flagged, or the named ones). */
     async set_coc_required({ site_id, shops, dry_run = true, confirm_token }: { site_id: string; shops?: string[]; dry_run?: boolean; confirm_token?: string }) {
       const site = await store.fortressSite(site_id);
@@ -341,9 +498,39 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       return { ...summary, written: result, log };
     },
 
-    /** Link live certificate rows that have no shop to a shop (schedule, shop number, or a clear name match). June 2026 rows are held. */
-    async link_unlinked_cocs({ site_id, dry_run = true, confirm_token, exclude = [] }: { site_id: string; dry_run?: boolean; confirm_token?: string; exclude?: string[] }) {
+    /** Add shops (subsections) to a site, e.g. from the client's tenant schedule, flagged COC-required.
+     *  Names that already exist on the site (case-insensitive) are skipped, never duplicated. No deletes, no renames. */
+    async create_subsections({ site_id, subsections: input, dry_run = true, confirm_token }: { site_id: string; subsections?: unknown; dry_run?: boolean; confirm_token?: string }) {
       const site = await store.fortressSite(site_id);
+      const list = parseNewSubsections(input);
+      if (!list.length) throw new Error("subsections: give at least one {name, tenant_name, shop_number, meter_serial_number}");
+      const subs = await store.subsections(site_id);
+      const have = new Set(subs.map((x: Row) => String(x.name).trim().toUpperCase()));
+      const existing = list.filter((x) => have.has(x.name.toUpperCase())).map((x) => x.name);
+      const todo = list.filter((x) => !have.has(x.name.toUpperCase()));
+      const state = sha256(canonical(subs.map((x: Row) => [x.id, String(x.name).trim().toUpperCase()]).sort()));
+      const dataHash = sha256(canonical({ create: todo.map((x) => [x.name, x.tenant_name, x.shop_number, x.meter_serial_number]) }));
+      const summary = { site: { id: site.id, name: site.name.trim() }, shops_now: subs.length, to_create: todo.length, already_exist: existing, create: todo };
+      if (dry_run) {
+        return { ...summary, writes_nothing: true, confirm_token: todo.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null,
+          note: todo.length ? "Apply with dry_run=false, the same subsections and this confirm_token within 15 minutes; refused if the site's shops change." : "Nothing to create.", requires: "fortress.write scope and the Admin role" };
+      }
+      if (!opts.isAdmin) throw new Error("create_subsections refused: requires the Admin role");
+      const why = opts.tokens.check(confirm_token, { siteId: site.id, dataHash, planHash: state });
+      if (why) throw new Error(`create_subsections refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("create_subsections refused: token already used");
+      const snap = await store.exportSnapshot(site.id, "before create_subsections");
+      let result: unknown;
+      try { result = await store.createSubsections(site.id, todo); }
+      catch (e) { await store.logWrite({ tool: "create_subsections", status: "failed", site_id: site.id, site: site.name, planned: { create: todo.length }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) }); throw e; }
+      const log = await store.logWrite({ tool: "create_subsections", status: "ok", site_id: site.id, site: site.name, result, planned: { create: todo }, snapshot: snap.path });
+      return { ...summary, written: result, snapshot: snap.path, log };
+    },
+
+    /** Link live certificate rows that have no shop to a shop (schedule, shop number, or a clear name match). June 2026 rows are held. */
+    async link_unlinked_cocs({ site_id, dry_run = true, confirm_token, exclude = [], assign: manualInput }: { site_id: string; dry_run?: boolean; confirm_token?: string; exclude?: string[]; assign?: unknown }) {
+      const site = await store.fortressSite(site_id);
+      const manual = parseAssignments(manualInput);
       const [rows, subs, batches, coc] = await Promise.all([
         store.certificates(site_id, "id, subsection_id, cert_no, cert_no_norm, shop_no_raw, source_file, db_name, location, review_status, superseded_at, import_batch_id, notes"),
         store.subsections(site_id), store.batches(site_id), loadSiteCocData(site_id, sb),
@@ -352,7 +539,25 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const live = rows.filter((r: Row) => !r.subsection_id && !r.superseded_at && r.review_status !== "rejected");
       const held = live.filter((r: Row) => juneBatch.has(r.import_batch_id)).map((r: Row) => ({ id: r.id, cert_no: r.cert_no, why: "June 2026 row (read-only)" }));
       const todo = live.filter((r: Row) => !juneBatch.has(r.import_batch_id));
-      const plan: LinkDecision[] = planCertLinks(todo as any, subs as any, coc.schedule as any, { siteName: site.name, siteAddress: (site as Row).address ?? null });
+      const auto: LinkDecision[] = planCertLinks(todo as any, subs as any, coc.schedule as any, { siteName: site.name, siteAddress: (site as Row).address ?? null });
+      // Manual assignments (a reviewer matched the certificate to a shop, e.g. from the tenant schedule) replace the
+      // automatic decision for that row. Only live, unlinked, non-June rows of this site, and shops of this site.
+      const todoIds = new Set(todo.map((r: Row) => r.id));
+      const subName = new Map<string, string>(subs.map((x: Row) => [String(x.id), String(x.name)] as [string, string]));
+      const manualById = new Map<string, Assignment>();
+      for (const a of manual) {
+        if (!subName.has(a.subsection_id)) throw new Error(`assign ${a.id}: subsection ${a.subsection_id} is not a shop of this site`);
+        if (!todoIds.has(a.id)) {
+          const r = rows.find((x: Row) => x.id === a.id);
+          held.push({ id: a.id, cert_no: r?.cert_no ?? null, why: !r ? "not a certificate row of this site" : r.subsection_id ? "already linked to a shop" : r.superseded_at || r.review_status === "rejected" ? "not a live row" : "June 2026 row (read-only)" });
+          continue;
+        }
+        manualById.set(a.id, a);
+      }
+      const plan: LinkDecision[] = auto.map((d) => {
+        const m = manualById.get(d.id);
+        return m ? { id: d.id, cert_no: d.cert_no, outcome: "assign" as const, method: "manual" as const, subsection_id: m.subsection_id, shop: subName.get(m.subsection_id), query: m.note } : d;
+      });
       const skip = new Set((exclude ?? []).map((x) => String(x).trim()).filter(Boolean));
       const excluded = plan.filter((d) => d.outcome === "assign" && skip.has(d.id));
       const assign = plan.filter((d) => d.outcome === "assign" && !skip.has(d.id));
@@ -364,10 +569,11 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const before = cocCounts(buildSiteCocModel({ ...coc, siteId: site_id, siteName: site.name }));
       const after = cocCounts(buildSiteCocModel({ ...coc, siteId: site_id, siteName: site.name,
         certificates: coc.certificates.map((r) => linkMap.has(r.id) ? { ...r, subsection_id: linkMap.get(r.id)! } : r) }));
-      const byMethod = { schedule: assign.filter((d) => d.method === "schedule").length, shop_no: assign.filter((d) => d.method === "shop_no").length, name: assign.filter((d) => d.method === "name").length };
+      const byMethod = { schedule: assign.filter((d) => d.method === "schedule").length, shop_no: assign.filter((d) => d.method === "shop_no").length, name: assign.filter((d) => d.method === "name").length, manual: assign.filter((d) => d.method === "manual").length };
       const summary = { site: { id: site.id, name: site.name.trim() }, unlinked: live.length, to_link: assign.length, by_method: byMethod, excluded_by_caller: excluded.length, needs_review: review.length, unmatched: unmatched.length, held, before, after };
       if (dry_run) {
-        return { ...summary, writes_nothing: true, links: assign, review: review.slice(0, 150), unmatched_rows: unmatched.slice(0, 150).map((d) => ({ id: d.id, cert_no: d.cert_no, query: d.query, candidates: d.candidates })),
+        return { ...summary, writes_nothing: true, links: assign, review: review.slice(0, 150),
+          shops: subs.map((x: Row) => ({ subsection_id: x.id, name: x.name, tenant: x.tenant_name ?? null, shop_number: x.shop_number ?? null, coc_required: x.is_coc_required === true })), unmatched_rows: unmatched.slice(0, 150).map((d) => ({ id: d.id, cert_no: d.cert_no, query: d.query, candidates: d.candidates })),
           confirm_token: assign.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null,
           note: assign.length ? "Apply with dry_run=false and this confirm_token within 15 minutes; refused if the site's COC rows change. Only the 'links' are written; 'review' and 'unmatched' are left for a person." : "Nothing can be linked with confidence.",
           requires: "fortress.write scope and the Admin role" };
