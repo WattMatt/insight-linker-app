@@ -228,7 +228,19 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const pr = prof.get(m.user_id) ?? {};
       const visible = sites.filter((s) => !m.managing_agency_id || s.managing_agency_id === m.managing_agency_id);
       const a = facts.get(m.user_id);
-      /** Mark named shops as NOT requiring a COC (e.g. minisubs, generators). Shops that still hold live certificates are refused. */
+      return {
+        user_id: m.user_id, email: pr.email ?? null, full_name: pr.full_name ?? null, company: pr.company ?? null, job_title: pr.job_title ?? null,
+        roles: roleOf.get(m.user_id) ?? [], agency_scope: m.managing_agency_id ? agencyName.get(m.managing_agency_id) ?? m.managing_agency_id : "all (fund level)",
+        managing_agency_id: m.managing_agency_id, status: portalStatus(a), last_sign_in_at: a?.last_sign_in_at ?? null, invited_at: a?.invited_at ?? null,
+        visible_site_ids: visible.map((s) => s.id), visible_sites: visible.length,
+      };
+    });
+    const known = new Set(users.map((u) => normEmail(u.email)));
+    const pendingOnly = pending.filter((r) => !known.has(normEmail(r.email)));
+    return { users, pendingOnly, sites, agencyName };
+  }
+
+  /** Mark named shops as NOT requiring a COC (e.g. minisubs, generators). Shops that still hold live certificates are refused. */
   async function unsetCocRequired({ site_id, shops, dry_run = true, confirm_token }: { site_id: string; shops?: string[]; dry_run?: boolean; confirm_token?: string }) {
     if (!shops?.length) throw new Error("not_required: name the shops to unflag in `shops`");
     const site = await store.fortressSite(site_id);
@@ -239,8 +251,8 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
     const match = subs.filter((x: Row) => want.has(String(x.name).trim().toUpperCase()));
     const unknown = [...want].filter((n) => !subs.some((x: Row) => String(x.name).trim().toUpperCase() === n));
     const held = match.filter((x: Row) => live.has(x.id)).map((x: Row) => ({ id: x.id, shop: x.name, live_certificates: live.get(x.id) }));
-    const todo = match.filter((x: Row) => x.is_coc_required === true && !live.has(x.id)).map((x: Row) => ({ id: String(x.id), shop: String(x.name), tenant: x.tenant_name ?? null }));
-    const ids = todo.map((t: { id: string }) => t.id).sort();
+    const todo: { id: string; shop: string; tenant: string | null }[] = match.filter((x: Row) => x.is_coc_required === true && !live.has(x.id)).map((x: Row) => ({ id: String(x.id), shop: String(x.name), tenant: x.tenant_name ?? null }));
+    const ids = todo.map((t) => t.id).sort();
     const state = sha256(canonical(subs.map((x: Row) => [x.id, x.is_coc_required]).sort()));
     const dataHash = sha256(canonical({ unflag: ids }));
     const summary = { site: { id: site.id, name: site.name.trim() }, coc_required_now: subs.filter((x: Row) => x.is_coc_required === true).length, to_unflag: ids.length, shops: todo, held_with_live_certificates: held, unknown_shops: unknown };
@@ -257,18 +269,6 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
     catch (e) { await store.logWrite({ tool: "set_coc_required", status: "failed", site_id: site.id, site: site.name, planned: { unflag: ids.length }, error: e instanceof Error ? e.message : String(e) }); throw e; }
     const log = await store.logWrite({ tool: "set_coc_required", status: "ok", site_id: site.id, site: site.name, result, planned: { unflag: ids, before_flags: subs.map((x: Row) => [x.id, x.is_coc_required]) } });
     return { ...summary, written: result, log };
-  }
-
-  return {
-        user_id: m.user_id, email: pr.email ?? null, full_name: pr.full_name ?? null, company: pr.company ?? null, job_title: pr.job_title ?? null,
-        roles: roleOf.get(m.user_id) ?? [], agency_scope: m.managing_agency_id ? agencyName.get(m.managing_agency_id) ?? m.managing_agency_id : "all (fund level)",
-        managing_agency_id: m.managing_agency_id, status: portalStatus(a), last_sign_in_at: a?.last_sign_in_at ?? null, invited_at: a?.invited_at ?? null,
-        visible_site_ids: visible.map((s) => s.id), visible_sites: visible.length,
-      };
-    });
-    const known = new Set(users.map((u) => normEmail(u.email)));
-    const pendingOnly = pending.filter((r) => !known.has(normEmail(r.email)));
-    return { users, pendingOnly, sites, agencyName };
   }
 
   const portalSiteUrl = (siteId: string) => `${portal().origin}/client-portal/sites/${siteId}`;
