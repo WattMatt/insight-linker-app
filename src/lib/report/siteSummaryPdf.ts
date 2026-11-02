@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { loadSiteCocData, buildSiteCocModel } from "@/lib/siteCoc/siteCocData";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 import QRCode from "qrcode";
 import { qrRedirectUrl, qrSiteRedirectUrl } from "@/lib/qrBaseUrl";
@@ -188,7 +189,7 @@ export async function generateSiteSummaryPdf(
   // Fetch site and subsection data first to get subsection IDs
   const [siteRes, subsectionsRes] = await Promise.all([
     supabase.from("sites").select("*, clients(name, logo_url)").eq("id", siteId).single(),
-    supabase.from("subsections").select("*").eq("site_id", siteId).order("category", { ascending: true }),
+    supabase.from("subsections").select("*").eq("site_id", siteId).is("deleted_at", null).order("category", { ascending: true }),
   ]);
 
   if (siteRes.error) throw siteRes.error;
@@ -219,8 +220,38 @@ export async function generateSiteSummaryPdf(
     : { data: [], error: null };
   const allSnags = snagsRes.data || [];
 
+  // COC figures come from the COC register (coc_certificates), the same source and rules as the
+  // Site COC Report, so the two reports can never disagree. subsections.coc_status and
+  // subsection_documents.coc_status are a document roll-up that the register sign-off does not
+  // update, so they are overridden here for every COC-required subsection.
+  const cocModel = buildSiteCocModel({
+    ...(await loadSiteCocData(siteId)),
+    siteId, siteName: site.name ?? "",
+  });
+  const tenantBySub = new Map(cocModel.tenants.map(t => [t.subsectionId, t]));
+  const registerStatus = (t: (typeof cocModel.tenants)[number]) =>
+    t.noCoc ? "Missing"
+      : t.coverage.verdictKind === "fail" ? "Fail"
+      : t.coverage.verdictKind === "pass" && !t.awaitingSignOff ? "Pass"
+      : "Pending";
+  for (const sub of subsections) {
+    const t = tenantBySub.get(sub.id);
+    if (t) sub.coc_status = registerStatus(t);
+  }
+  const certByDoc = new Map<string, string>();
+  for (const t of cocModel.tenants) {
+    if (t.awaitingSignOff) continue;
+    for (const c of t.certs) {
+      if (!c.docId) continue;
+      const k = c.verdictKind === "fail" ? "Fail" : c.verdictKind === "pass" ? "Pass" : "Pending";
+      const prev = certByDoc.get(c.docId);
+      if (prev !== "Fail") certByDoc.set(c.docId, prev === "Pass" && k === "Pending" ? "Pass" : k);
+    }
+  }
+
   // Transform subsections to card format with snags, asset breaker size and COC certificates
-  const subsectionDocsData = subsectionDocsRes.data || [];
+  const subsectionDocsData = (subsectionDocsRes.data || []).map(d =>
+    certByDoc.has(d.id) ? { ...d, coc_status: certByDoc.get(d.id)! } : d);
   const today = new Date().toISOString().split('T')[0];
   const subsectionCardData: SubsectionCardData[] = subsections.map(sub =>
     transformToSubsectionCardData(sub, allSnags, siteAssets, subsectionDocsData, today)
@@ -230,7 +261,7 @@ export async function generateSiteSummaryPdf(
   const subsectionData: SubsectionData[] = subsectionCardData;
 
   // Calculate metrics using spec function
-  const cocRequired = subsections.filter(s => s.is_coc_required).length;
+  const cocRequired = cocModel.summary.required;
   const openSnags = allSnags.filter(snag => isSnagOpen(snag.status)).length;
   // overallHealth is the unified siteHealth number (siteHealth.ts) so the
   // production report matches the on-screen Site Health. Pass the full rows:
@@ -240,6 +271,7 @@ export async function generateSiteSummaryPdf(
   const health = computeSiteHealth(subsections, allSnags, allInspections);
   const metrics = calculateMetrics(subsectionData, {
     cocRequiredCount: cocRequired,
+    cocCompliantCount: cocModel.summary.clear,
     openSnagCount: openSnags,
     overallHealth: health.score,
   });
