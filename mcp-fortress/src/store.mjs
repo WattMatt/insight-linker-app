@@ -209,7 +209,7 @@ export class Store {
     for (const r of rows) {
       const { data, error } = await this.sb.from("coc_certificates")
         .update({ verdict: r.verdict, rules: r.rules, reasons: r.reasons, sign_off_note: r.note, updated_at: new Date().toISOString() })
-        .eq("id", r.id).eq("site_id", siteId).eq("review_status", "signed_off").is("superseded_at", null).select("id");
+        .eq("id", r.id).eq("site_id", siteId).eq("review_status", r.review_status === "final" ? "final" : "signed_off").is("superseded_at", null).select("id");
       if (error) throw new Error(`coc_certificates ${r.id}: ${error.message}`);
       if (!data || data.length !== 1) throw new Error(`coc_certificates ${r.id}: not corrected (row changed, or update not permitted for this account)`);
       if (r.coc_document_id) {
