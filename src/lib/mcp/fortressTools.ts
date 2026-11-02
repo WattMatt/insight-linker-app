@@ -240,7 +240,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
     const unknown = [...want].filter((n) => !subs.some((x: Row) => String(x.name).trim().toUpperCase() === n));
     const held = match.filter((x: Row) => live.has(x.id)).map((x: Row) => ({ id: x.id, shop: x.name, live_certificates: live.get(x.id) }));
     const todo = match.filter((x: Row) => x.is_coc_required === true && !live.has(x.id)).map((x: Row) => ({ id: String(x.id), shop: String(x.name), tenant: x.tenant_name ?? null }));
-    const ids = todo.map((t) => t.id).sort();
+    const ids = todo.map((t: { id: string }) => t.id).sort();
     const state = sha256(canonical(subs.map((x: Row) => [x.id, x.is_coc_required]).sort()));
     const dataHash = sha256(canonical({ unflag: ids }));
     const summary = { site: { id: site.id, name: site.name.trim() }, coc_required_now: subs.filter((x: Row) => x.is_coc_required === true).length, to_unflag: ids.length, shops: todo, held_with_live_certificates: held, unknown_shops: unknown };
