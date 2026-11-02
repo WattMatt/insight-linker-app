@@ -354,18 +354,18 @@ export class Store {
     return { linked: links.length };
   }
 
-  /** Flag shops as COC-required. Verifies afterwards. */
-  async setCocRequired(siteId, ids) {
+  /** Flag shops as COC-required (value=true) or not required (value=false). Verifies afterwards. */
+  async setCocRequired(siteId, ids, value = true) {
     for (const id of ids) {
-      const { data, error } = await this.sb.from("subsections").update({ is_coc_required: true, updated_at: new Date().toISOString() })
+      const { data, error } = await this.sb.from("subsections").update({ is_coc_required: value, updated_at: new Date().toISOString() })
         .eq("id", id).eq("site_id", siteId).select("id");
       if (error) throw new Error(`subsections ${id}: ${error.message}`);
       if (!data || data.length !== 1) throw new Error(`subsections ${id}: not updated (row changed, or update not permitted for this account)`);
     }
     const after = await this.subsections(siteId);
-    const bad = after.filter(s => ids.includes(s.id) && s.is_coc_required !== true);
-    if (bad.length) throw new Error(`verify: ${bad.length} of ${ids.length} shops are still not flagged COC-required`);
-    return { flagged: ids.length };
+    const bad = after.filter(s => ids.includes(s.id) && (s.is_coc_required === true) !== value);
+    if (bad.length) throw new Error(`verify: ${bad.length} of ${ids.length} shops did not take the COC-required flag ${value}`);
+    return value ? { flagged: ids.length } : { unflagged: ids.length };
   }
 
   async logWrite(entry) {
