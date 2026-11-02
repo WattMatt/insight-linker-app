@@ -434,11 +434,12 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const juneBatch = new Set(batches.filter((b: Row) => isJune2026(b.created_at)).map((b: Row) => b.id));
       const byId = new Map<string, Row>(rows.map((r: Row) => [r.id, r]));
       const held: { id: string; cert_no?: string; why: string }[] = [];
-      const todo: { id: string; cert_no: string | null; verdict_now: string | null; verdict_after: string; rules_after: Record<string, string>; reasons: string; note: string; coc_document_id: string | null }[] = [];
+      const todo: { id: string; cert_no: string | null; review_status: string; verdict_now: string | null; verdict_after: string; rules_after: Record<string, string>; reasons: string; note: string; coc_document_id: string | null }[] = [];
       for (const c of list) {
         const r = byId.get(c.id);
         if (!r) { held.push({ id: c.id, why: "not a certificate row of this site" }); continue; }
-        if (r.review_status !== "signed_off" || !r.signed_off_at || r.superseded_at) { held.push({ id: c.id, cert_no: r.cert_no, why: `not a live signed-off row (${r.review_status}${r.superseded_at ? ", superseded" : ""})` }); continue; }
+        const legacyFinal = r.review_status === "final" && !r.superseded_at; // older import rows, never signed off: same correction path
+        if (!legacyFinal && (r.review_status !== "signed_off" || !r.signed_off_at || r.superseded_at)) { held.push({ id: c.id, cert_no: r.cert_no, why: `not a live signed-off or final row (${r.review_status}${r.superseded_at ? ", superseded" : ""})` }); continue; }
         if (juneBatch.has(r.import_batch_id)) { held.push({ id: c.id, cert_no: r.cert_no, why: "June 2026 row (read-only)" }); continue; }
         const rulesAfter: Record<string, string> = { ...(r.rules ?? {}) };
         for (const [code, res] of Object.entries(c.rules)) {
@@ -452,7 +453,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
         if (!anyFail && verdict.toUpperCase().startsWith("FAIL")) throw new Error(`corrections ${c.id}: verdict FAIL but no rule fails after the correction`);
         const stamp = `corrected ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC after re-reading the scan`;
         todo.push({
-          id: c.id, cert_no: r.cert_no, verdict_now: r.verdict, verdict_after: verdict, rules_after: rulesAfter, reasons: c.reasons || String(r.reasons ?? ""),
+          id: c.id, cert_no: r.cert_no, review_status: r.review_status, verdict_now: r.verdict, verdict_after: verdict, rules_after: rulesAfter, reasons: c.reasons || String(r.reasons ?? ""),
           note: [String(r.sign_off_note ?? "").trim(), `${stamp}: ${c.note} (was ${r.verdict ?? "blank"})`].filter(Boolean).join(" | "),
           coc_document_id: r.coc_document_id ?? null,
         });
@@ -484,7 +485,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       const snap = await store.exportSnapshot(site.id, "before correct_signed_verdicts");
       let result: unknown;
       try {
-        result = await store.correctSigned(site.id, todo.map((t) => ({ id: t.id, verdict: t.verdict_after, rules: t.rules_after, reasons: t.reasons, note: t.note, coc_document_id: t.coc_document_id })));
+        result = await store.correctSigned(site.id, todo.map((t) => ({ id: t.id, review_status: t.review_status, verdict: t.verdict_after, rules: t.rules_after, reasons: t.reasons, note: t.note, coc_document_id: t.coc_document_id })));
       } catch (e) {
         await store.logWrite({ tool: "correct_signed_verdicts", status: "failed", site_id: site.id, site: site.name, planned: { ids: ids.length }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) });
         throw e;
