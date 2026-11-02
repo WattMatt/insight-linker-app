@@ -34,3 +34,18 @@ describe("parseNewSubsections", () => {
     expect(() => parseNewSubsections([{ name: "Shop 1" }, { name: "SHOP 1" }])).toThrow(/twice/);
   });
 });
+
+import { parseRowNotes } from "./fortressTools";
+describe("parseRowNotes", () => {
+  it("accepts {id, note} items as an array or JSON string", () => {
+    const want = [{ id: ROW, note: "duplicate of the linked row" }];
+    expect(parseRowNotes(want, "reject")).toEqual(want);
+    expect(parseRowNotes(JSON.stringify(want), "reject")).toEqual(want);
+    expect(parseRowNotes(undefined, "reject")).toEqual([]);
+  });
+  it("refuses a missing note, a bad id and a row listed twice", () => {
+    expect(() => parseRowNotes([{ id: ROW }], "reject")).toThrow(/note/);
+    expect(() => parseRowNotes([{ id: "x", note: "n" }], "reject")).toThrow(/uuid/);
+    expect(() => parseRowNotes([{ id: ROW, note: "a" }, { id: ROW, note: "b" }], "reject")).toThrow(/twice/);
+  });
+});

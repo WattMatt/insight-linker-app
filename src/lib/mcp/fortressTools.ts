@@ -93,6 +93,30 @@ export function parseAssignments(input: unknown): Assignment[] {
   });
 }
 
+export interface RowNote { id: string; note: string }
+
+/** rows: an array (or JSON string) of {id, note}; every id a uuid, every note non-empty, no id twice. */
+export function parseRowNotes(input: unknown, what: string): RowNote[] {
+  let v = input;
+  if (v == null) return [];
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return [];
+    try { v = JSON.parse(s); } catch { throw new Error(`${what}: not valid JSON`); }
+  }
+  if (!Array.isArray(v)) throw new Error(`${what}: expected an array of {id, note}`);
+  const seen = new Set<string>();
+  return v.map((a: Row, i: number) => {
+    const id = String(a?.id ?? "").trim();
+    const note = String(a?.note ?? "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error(`${what}[${i}]: id must be a uuid`);
+    if (!note) throw new Error(`${what}[${i}] (${id}): a note saying why is required`);
+    if (seen.has(id)) throw new Error(`${what}[${i}]: ${id} is listed twice`);
+    seen.add(id);
+    return { id, note };
+  });
+}
+
 export interface NewSubsection { name: string; tenant_name: string | null; shop_number: string | null; meter_serial_number: string | null }
 
 /** subsections: an array, or a JSON string of one. Each item: {name, tenant_name?, shop_number?, meter_serial_number?}. */
@@ -496,6 +520,81 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       catch (e) { await store.logWrite({ tool: "set_coc_required", status: "failed", site_id: site.id, site: site.name, planned: { ids: ids.length }, error: e instanceof Error ? e.message : String(e) }); throw e; }
       const log = await store.logWrite({ tool: "set_coc_required", status: "ok", site_id: site.id, site: site.name, result, planned: { ids: ids.length, before_flags: subs.map((x: Row) => [x.id, x.is_coc_required]) } });
       return { ...summary, written: result, log };
+    },
+
+    /** Park certificate rows that must not count as 'rejected' (kept for audit): duplicates / blank shells of a
+     *  certificate already on file, certificates filed under the wrong site, tenancies that no longer exist. */
+    async reject_cocs({ site_id, rows: input, dry_run = true, confirm_token }: { site_id: string; rows?: unknown; dry_run?: boolean; confirm_token?: string }) {
+      const site = await store.fortressSite(site_id);
+      const list = parseRowNotes(input, "reject");
+      if (!list.length) throw new Error("reject: give at least one {id, note}");
+      const [rows, batches] = await Promise.all([store.certificates(site_id, "id, cert_no, subsection_id, review_status, superseded_at, verdict, import_batch_id"), store.batches(site_id)]);
+      const juneBatch = new Set(batches.filter((b: Row) => isJune2026(b.created_at)).map((b: Row) => b.id));
+      const byId = new Map<string, Row>(rows.map((r: Row) => [r.id, r]));
+      const held: { id: string; cert_no?: string; why: string }[] = [];
+      const todo: { id: string; cert_no: string | null; review_status: string; verdict: string | null; linked: boolean; note: string }[] = [];
+      for (const x of list) {
+        const r = byId.get(x.id);
+        if (!r) { held.push({ id: x.id, why: "not a certificate row of this site" }); continue; }
+        if (r.superseded_at || r.review_status === "rejected") { held.push({ id: x.id, cert_no: r.cert_no, why: "not a live row" }); continue; }
+        if (juneBatch.has(r.import_batch_id)) { held.push({ id: x.id, cert_no: r.cert_no, why: "June 2026 row (read-only)" }); continue; }
+        todo.push({ id: x.id, cert_no: r.cert_no ?? null, review_status: r.review_status, verdict: r.verdict ?? null, linked: !!r.subsection_id, note: x.note });
+      }
+      const ids = todo.map((t) => t.id).sort();
+      const state = sha256(canonical(rows.map((r: Row) => [r.id, r.review_status, r.superseded_at]).sort()));
+      const dataHash = sha256(canonical({ reject: todo.map((t) => [t.id, t.note]).sort() }));
+      const summary = { site: { id: site.id, name: site.name.trim() }, to_reject: ids.length, signed_off: todo.filter((t) => t.review_status === "signed_off").length, held, rows: todo };
+      if (dry_run) {
+        return { ...summary, writes_nothing: true, confirm_token: ids.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null,
+          note: ids.length ? "Apply with dry_run=false, the same rows and this confirm_token within 15 minutes. Signed-off rows need the withdraw_coc_certificate migration (20261102090000)." : "Nothing to reject.", requires: "fortress.write scope and the Admin role" };
+      }
+      if (!opts.isAdmin) throw new Error("reject refused: requires the Admin role");
+      const why = opts.tokens.check(confirm_token, { siteId: site.id, dataHash, planHash: state });
+      if (why) throw new Error(`reject refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("reject refused: token already used");
+      const snap = await store.exportSnapshot(site.id, "before reject_cocs");
+      let result: unknown;
+      try { result = await store.rejectCertificates(site.id, todo.map((t) => ({ id: t.id, review_status: t.review_status, note: `rejected ${new Date().toISOString().slice(0, 10)} via mcp reject_cocs: ${t.note}` }))); }
+      catch (e) { await store.logWrite({ tool: "reject_cocs", status: "failed", site_id: site.id, site: site.name, planned: { ids }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) }); throw e; }
+      const log = await store.logWrite({ tool: "reject_cocs", status: "ok", site_id: site.id, site: site.name, result, planned: { rows: todo }, snapshot: snap.path });
+      return { ...summary, written: result, snapshot: snap.path, log };
+    },
+
+    /** Soft-delete shops that do not belong to the site (deleted_at set; reversible). Refuses shops with live certificates. */
+    async delete_subsections({ site_id, subsections: input, dry_run = true, confirm_token }: { site_id: string; subsections?: unknown; dry_run?: boolean; confirm_token?: string }) {
+      const site = await store.fortressSite(site_id);
+      const list = parseRowNotes(input, "delete_subsections");
+      if (!list.length) throw new Error("delete_subsections: give at least one {id, note}");
+      const [subs, certs] = await Promise.all([store.subsections(site_id), store.certificates(site_id, "id, subsection_id, superseded_at, review_status")]);
+      const byId = new Map<string, Row>(subs.map((x: Row) => [String(x.id), x]));
+      const live = new Map<string, number>();
+      for (const c of certs as Row[]) if (c.subsection_id && !c.superseded_at && c.review_status !== "rejected") live.set(c.subsection_id, (live.get(c.subsection_id) ?? 0) + 1);
+      const held: { id: string; shop?: string; why: string }[] = [];
+      const todo: { id: string; shop: string; tenant: string | null; note: string }[] = [];
+      for (const x of list) {
+        const s0 = byId.get(x.id);
+        if (!s0) { held.push({ id: x.id, why: "not a live shop of this site" }); continue; }
+        if (live.get(x.id)) { held.push({ id: x.id, shop: s0.name, why: `${live.get(x.id)} live certificate row(s) still linked` }); continue; }
+        todo.push({ id: x.id, shop: String(s0.name), tenant: s0.tenant_name ?? null, note: x.note });
+      }
+      const ids = todo.map((t) => t.id).sort();
+      const state = sha256(canonical(subs.map((x: Row) => x.id).sort()));
+      const dataHash = sha256(canonical({ delete: ids }));
+      const summary = { site: { id: site.id, name: site.name.trim() }, shops_now: subs.length, to_delete: ids.length, held, shops: todo };
+      if (dry_run) {
+        return { ...summary, writes_nothing: true, confirm_token: ids.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null,
+          note: ids.length ? "Apply with dry_run=false, the same list and this confirm_token within 15 minutes." : "Nothing to delete.", requires: "fortress.write scope and the Admin role" };
+      }
+      if (!opts.isAdmin) throw new Error("delete_subsections refused: requires the Admin role");
+      const why = opts.tokens.check(confirm_token, { siteId: site.id, dataHash, planHash: state });
+      if (why) throw new Error(`delete_subsections refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("delete_subsections refused: token already used");
+      const snap = await store.exportSnapshot(site.id, "before delete_subsections");
+      let result: unknown;
+      try { result = await store.deleteSubsections(site.id, ids); }
+      catch (e) { await store.logWrite({ tool: "delete_subsections", status: "failed", site_id: site.id, site: site.name, planned: { ids }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) }); throw e; }
+      const log = await store.logWrite({ tool: "delete_subsections", status: "ok", site_id: site.id, site: site.name, result, planned: { shops: todo }, snapshot: snap.path });
+      return { ...summary, written: result, snapshot: snap.path, log };
     },
 
     /** Add shops (subsections) to a site, e.g. from the client's tenant schedule, flagged COC-required.

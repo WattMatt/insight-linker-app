@@ -247,6 +247,49 @@ export class Store {
     return { created: data.length, ids: data.map(d => ({ id: d.id, name: d.name })) };
   }
 
+  /** Park live certificate rows as 'rejected' (kept for audit, out of every live count). Signed-off rows go through
+   *  the withdraw_coc_certificate function (Admin); final rows are updated directly; proposed rows use the sign-off
+   *  function's reject path. Verifies every row ended rejected. */
+  async rejectCertificates(siteId, rows) {
+    for (const r of rows) {
+      if (r.review_status === "signed_off") {
+        const { error } = await this.sb.rpc("withdraw_coc_certificate", { p_id: r.id, p_note: r.note });
+        if (error) throw new Error(`coc_certificates ${r.id}: ${error.message}`);
+      } else if (r.review_status === "proposed") {
+        const { error } = await this.sb.rpc("sign_off_coc_certificate", { p_id: r.id, p_decision: "reject", p_note: r.note });
+        if (error) throw new Error(`coc_certificates ${r.id}: ${error.message}`);
+      } else {
+        const { data, error } = await this.sb.from("coc_certificates")
+          .update({ review_status: "rejected", sign_off_note: r.note, updated_at: new Date().toISOString() })
+          .eq("id", r.id).eq("site_id", siteId).eq("review_status", "final").is("superseded_at", null).select("id");
+        if (error) throw new Error(`coc_certificates ${r.id}: ${error.message}`);
+        if (!data || data.length !== 1) throw new Error(`coc_certificates ${r.id}: not rejected (row changed, or update not permitted for this account)`);
+      }
+    }
+    const after = await this.certificates(siteId, "id, review_status");
+    const want = new Set(rows.map(r => r.id));
+    const bad = after.filter(a => want.has(a.id) && a.review_status !== "rejected");
+    if (bad.length) throw new Error(`verify: ${bad.length} of ${rows.length} rows are not rejected`);
+    return { rejected: rows.length };
+  }
+
+  /** Soft-delete shops (deleted_at = now). Refuses a shop that still has live certificates. */
+  async deleteSubsections(siteId, ids) {
+    const live = (await this.certificates(siteId, "id, subsection_id, superseded_at, review_status"))
+      .filter(c => ids.includes(c.subsection_id) && !c.superseded_at && c.review_status !== "rejected");
+    if (live.length) throw new Error(`shops still hold ${live.length} live certificate row(s); move or reject them first`);
+    const now = new Date().toISOString();
+    for (const id of ids) {
+      const { data, error } = await this.sb.from("subsections").update({ deleted_at: now, updated_at: now })
+        .eq("id", id).eq("site_id", siteId).is("deleted_at", null).select("id");
+      if (error) throw new Error(`subsections ${id}: ${error.message}`);
+      if (!data || data.length !== 1) throw new Error(`subsections ${id}: not deleted (row changed, or update not permitted for this account)`);
+    }
+    const left = (await this.subsections(siteId)).filter(s => ids.includes(s.id));
+    if (left.length) throw new Error(`verify: ${left.length} of ${ids.length} shops are still live`);
+    return { deleted: ids.length };
+  }
+
   /** Link certificate rows to shops: subsection_id + a note. Verifies every row took the link. */
   async linkCertificates(siteId, links) {
     for (const l of links) {
