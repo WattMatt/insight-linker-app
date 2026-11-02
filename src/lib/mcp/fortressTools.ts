@@ -659,7 +659,9 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
 
     /** Move live certificate rows filed under the wrong site to the right site, linked to a shop there. */
     async move_cocs({ site_id, to_site_id, rows: input, dry_run = true, confirm_token }: { site_id: string; to_site_id?: string; rows?: unknown; dry_run?: boolean; confirm_token?: string }) {
-      if (!to_site_id || to_site_id === site_id) throw new Error("move_cocs: to_site_id (another site) is required");
+      // to_site_id omitted or equal to site_id: relink certificates to another shop on the SAME site.
+      if (!to_site_id) to_site_id = site_id;
+      const sameSite = to_site_id === site_id;
       const [from, to] = [await store.fortressSite(site_id), await store.fortressSite(to_site_id)];
       const list = parseAssignments(input);
       if (!list.length) throw new Error("move_cocs: give at least one {id, subsection_id (shop on the target site), note}");
@@ -674,24 +676,25 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
         if (!subName.has(x.subsection_id)) throw new Error(`move_cocs ${x.id}: ${x.subsection_id} is not a shop of the target site`);
         if (!r || r.superseded_at || r.review_status === "rejected") { held.push({ id: x.id, why: !r ? "not a certificate row of the source site" : "not a live row" }); continue; }
         if (juneBatch.has(r.import_batch_id)) { held.push({ id: x.id, why: "June 2026 row (read-only)" }); continue; }
+        if (sameSite && r.subsection_id === x.subsection_id) { held.push({ id: x.id, why: "already on that shop" }); continue; }
         todo.push({ id: x.id, cert_no: r.cert_no ?? null, subsection_id: x.subsection_id, shop: subName.get(x.subsection_id)!, note: x.note });
       }
       const state = sha256(canonical(rows.map((r: Row) => [r.id, r.subsection_id, r.superseded_at]).sort()));
-      const dataHash = sha256(canonical({ move: to.id, rows: todo.map((t) => [t.id, t.subsection_id, t.note]).sort() }));
-      const summary = { from: { id: from.id, name: from.name.trim() }, to: { id: to.id, name: to.name.trim() }, to_move: todo.length, held, rows: todo };
+      const dataHash = sha256(canonical({ move: to.id, sameSite, rows: todo.map((t) => [t.id, t.subsection_id, t.note]).sort() }));
+      const summary = { from: { id: from.id, name: from.name.trim() }, to: { id: to.id, name: to.name.trim() }, same_site_relink: sameSite, to_move: todo.length, held, rows: todo };
       if (dry_run) return { ...summary, writes_nothing: true, confirm_token: todo.length ? opts.tokens.issue({ siteId: from.id, dataHash, planHash: state }) : null, requires: "fortress.write scope and the Admin role" };
       if (!opts.isAdmin) throw new Error("move refused: requires the Admin role");
       const why = opts.tokens.check(confirm_token, { siteId: from.id, dataHash, planHash: state });
       if (why) throw new Error(`move refused: ${why}`);
       if (!(await opts.consumeToken(confirm_token!))) throw new Error("move refused: token already used");
       const snap = await store.exportSnapshot(from.id, "before move_cocs");
-      const snapTo = await store.exportSnapshot(to.id, "before move_cocs (target)");
+      const snapTo = sameSite ? snap : await store.exportSnapshot(to.id, "before move_cocs (target)");
       const stamp = new Date().toISOString().slice(0, 10);
       let result: unknown;
-      try { result = await store.moveCertificates(from.id, to.id, todo.map((t) => ({ id: t.id, subsection_id: t.subsection_id, note: `moved ${stamp} from site ${from.name.trim()} by mcp move_cocs: ${t.note}` }))); }
+      try { result = await store.moveCertificates(from.id, to.id, todo.map((t) => ({ id: t.id, subsection_id: t.subsection_id, note: sameSite ? `relinked ${stamp} to ${t.shop} by mcp move_cocs: ${t.note}` : `moved ${stamp} from site ${from.name.trim()} by mcp move_cocs: ${t.note}` }))); }
       catch (e) { await store.logWrite({ tool: "move_cocs", status: "failed", site_id: from.id, site: from.name, planned: { to: to.id, rows: todo.length }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) }); throw e; }
-      const log = await store.logWrite({ tool: "move_cocs", status: "ok", site_id: from.id, site: from.name, result, planned: { to: to.id, rows: todo }, snapshot: [snap.path, snapTo.path].join(" ; ") });
-      return { ...summary, written: result, snapshot: [snap.path, snapTo.path], log };
+      const log = await store.logWrite({ tool: "move_cocs", status: "ok", site_id: from.id, site: from.name, result, planned: { to: to.id, rows: todo }, snapshot: sameSite ? snap.path : [snap.path, snapTo.path].join(" ; ") });
+      return { ...summary, written: result, snapshot: sameSite ? [snap.path] : [snap.path, snapTo.path], log };
     },
 
     /** Add shops (subsections) to a site, e.g. from the client's tenant schedule, flagged COC-required.
