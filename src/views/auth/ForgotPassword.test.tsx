@@ -139,9 +139,14 @@ describe("ForgotPassword — entering the code", () => {
     expect(state.navigate).not.toHaveBeenCalled();
   });
 
-  it("verifies against the normalised email and goes to the new-password screen", async () => {
+  it("verifies against the normalised email, marks the session, and goes to the new-password screen", async () => {
     state.search = "step=code";
-    state.verifyResult = { data: { session: { access_token: "x" } }, error: null };
+    window.localStorage.removeItem("wm_recovery_session_id");
+    // Live-shaped: a typed reset code yields amr "otp".
+    const b64url = (v: unknown) =>
+      btoa(JSON.stringify(v)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const access_token = `${b64url({ alg: "HS256" })}.${b64url({ sub: "u1", session_id: "sess-reset", amr: [{ method: "otp" }] })}.sig`;
+    state.verifyResult = { data: { session: { access_token } }, error: null };
     render(createElement(ForgotPassword));
     fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: " Someone@Example.com" } });
     fireEvent.change(screen.getByLabelText("Verification Code"), { target: { value: "654321" } });
@@ -150,5 +155,6 @@ describe("ForgotPassword — entering the code", () => {
     await waitFor(() => expect(state.navigate).toHaveBeenCalledWith("/auth/reset-password"));
     expect(state.verifyCalls[0]).toEqual({ email: "someone@example.com", token: "654321", type: "recovery" });
     expect(state.events).toContainEqual({ type: "login", metadata: { method: "recovery" } });
+    expect(window.localStorage.getItem("wm_recovery_session_id")).toBe("sess-reset");
   });
 });

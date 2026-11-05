@@ -202,6 +202,24 @@ describe("ProtectedRoute", () => {
     expect(contentShown()).toBe(false);
   });
 
+  it("sends a session from an accepted reset code to /auth/reset-password", async () => {
+    // Shaped like the live token: a typed reset code yields amr "otp", so only
+    // the app's own recovery mark identifies it.
+    const b64url = (v: unknown) =>
+      btoa(JSON.stringify(v)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const access_token = `${b64url({ alg: "HS256" })}.${b64url({ sub: "user-1", session_id: "s-reset", amr: [{ method: "otp" }] })}.sig`;
+    auth.session = { access_token, user: { id: "user-1" } } as typeof auth.session;
+    window.localStorage.setItem("wm_recovery_session_id", "s-reset");
+    try {
+      renderGuard();
+      await waitForDecision();
+      expect(redirectTarget()).toBe("/auth/reset-password");
+      expect(contentShown()).toBe(false);
+    } finally {
+      window.localStorage.removeItem("wm_recovery_session_id");
+    }
+  });
+
   it("redirects an un-onboarded user to the dedicated /onboarding route", async () => {
     onboardingRow.data = { onboarding_completed: false };
     renderGuard();

@@ -227,6 +227,30 @@ Effect: when a user says "it doesn't work", an admin has no record to look at.
 
    Typing the new password on the live site has to be done by a person: the agent doesn't enter passwords into production.
 
+**Deployed 2026-11-05** (PR #85, `c736d808`). The live reset template is code-only. The previous live template is saved at `supabase/templates/recovery.live-backup-2026-11-05.json` on the worktree; it was already code-only, edited by someone after 29 October.
+
+**Live test (`arno@wmeng.co.za`):**
+
+| Check | Result |
+|---|---|
+| Email arrives (about 30 s) and its button opens `?step=code` | Pass |
+| Resend countdown | Pass |
+| Replaced code is rejected with the "replaced by a newer email (ref: otp_expired)" message | Pass |
+| Latest code opens `/auth/reset-password` | Pass |
+| Leaving to `/` or `/auth/login` is sent back to the new-password screen | **Fail: lands on the dashboard** |
+
+**Why the last check failed:** a reset finished by typing the code produces a session with `amr: [{method: "otp"}]`, not `"recovery"`. That is the same as a magic-link sign-in. The Step 1 helper and its tests assumed `"recovery"` without checking.
+
+**Fix: branch `fix/auth-reset-marker`.**
+- When a reset code (or link) is accepted, the app stores that session's `session_id` in `localStorage` (`wm_recovery_session_id`).
+- `isRecoverySession` is true while the current session's id matches.
+- ResetPassword's password sign-in creates a new session, so the id stops matching; the mark is also cleared there.
+- `ProtectedRoute`, `ClientProtectedRoute` and `ContractorProtectedRoute` now also send a recovery session to `/auth/reset-password`.
+- Tests use live-shaped `otp` tokens. With the deployed amr-only rule, the 3 code-reset routing tests fail; with the fix, they pass.
+- Known gap: a code accepted *before* this deploy has no mark, so that session isn't caught.
+
+**Also fixed (live, 2026-11-05):** Supabase renders `{{ }}` tags inside HTML comments. The template's documentation comment put the token link into the live email's source for about 1 minute. The comment no longer contains tags, and uploads strip comments.
+
 Not in Step 1:
 - The magic-link template still has code + link (same scanner exposure, sign-in only).
 - Admin actions (Step 2), invites (Step 3), server-side audit (Step 4).

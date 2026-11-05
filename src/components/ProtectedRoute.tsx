@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from "@/lib/navigation";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuthSession } from "@/components/auth/useAuthSession";
+import { isRecoverySession } from "@/lib/auth/recoveryFlow";
 import { useOnboardingStatus } from "@/components/auth/useOnboardingStatus";
 import { AuthLoading } from "@/components/auth/AuthLoading";
 
@@ -24,6 +25,10 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   // The flag is cleared by SetPassword/ResetPassword after a successful change.
   if (session.user?.user_metadata?.requires_password_change === true) {
     return <Navigate to="/auth/set-password" replace />;
+  }
+  // A session from an accepted reset code must set its new password first.
+  if (isRecoverySession(session)) {
+    return <Navigate to="/auth/reset-password" replace />;
   }
   if (userRole === "Contractor") return <Navigate to="/contractor" replace />;
   if (userRole === "Client") return <Navigate to="/client-portal" replace />;
