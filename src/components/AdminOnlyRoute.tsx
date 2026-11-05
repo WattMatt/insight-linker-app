@@ -12,9 +12,14 @@ import { AuthLoading } from "@/components/auth/AuthLoading";
 // FAILS CLOSED: loading shows the loader; error, null, or any non-Admin role
 // redirects to /dashboard. RLS remains the hard boundary underneath.
 const AdminOnlyRoute = ({ children }: { children: React.ReactNode }) => {
-  const { data: userRole, isLoading, isError } = useUserRole();
+  const { data: userRole, isPending, isError } = useUserRole();
 
-  if (isLoading) return <AuthLoading variant="spinner" />;
+  // isPending, not isLoading: the role query is *disabled* until getSession()
+  // supplies the user id, and a disabled query reports isLoading=false with no
+  // data — this gate then bounced every Admin from /users to /dashboard
+  // (same trap as ClientProtectedRoute). isPending stays true until a result
+  // or an error arrives; an error is not pending, so it still fails closed.
+  if (isPending && !isError) return <AuthLoading variant="spinner" />;
   if (isError || userRole !== "Admin") return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 };
