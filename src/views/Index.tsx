@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
+import { isRecoverySession } from "@/lib/auth/recoveryFlow";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -13,6 +14,13 @@ const Index = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         navigate("/auth");
+        return;
+      }
+      // An emailed reset link whose redirect Supabase refused lands here (Site
+      // URL root). The user came to change their password, so never route a
+      // recovery session into the app.
+      if (isRecoverySession(session) || session.user.user_metadata?.requires_password_change) {
+        navigate("/auth/reset-password");
         return;
       }
 

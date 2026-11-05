@@ -13,6 +13,7 @@ import { useRoleRedirect } from "@/views/auth/useRoleRedirect";
 import { PasswordStrengthMeter } from "@/views/auth/PasswordStrengthMeter";
 import { recordAuthEvent } from "@/lib/auth-audit";
 import { evaluatePassword } from "@/lib/password-strength";
+import { isRecoverySession } from "@/lib/auth/recoveryFlow";
 import { setPasswordSchema, type SetPasswordInput } from "@/lib/validation-schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,7 @@ export default function ResetPassword() {
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => {
       if (!data.session) {
-        toast.error("Reset link expired. Request a new one.", { duration: 6000 });
+        toast.error("Your reset session has ended. Request a new code.", { duration: 6000 });
         navigate("/auth/forgot-password");
       }
     });
@@ -48,6 +49,11 @@ export default function ResetPassword() {
 
   async function onSubmit({ password }: SetPasswordInput) {
     setServerError(null);
+    const { data: { session: sessionAtSubmit } } = await supabase.auth.getSession();
+    if (!sessionAtSubmit) {
+      setServerError("Your reset session has ended. Request a new code.");
+      return;
+    }
 
     // Strength + breach gate (best-effort; HIBP network failure does not block).
     const evalRes = await evaluatePassword(password);
@@ -71,17 +77,40 @@ export default function ResetPassword() {
       toast.error(msg);
       return;
     }
-    if (!data.user) {
+    if (!data.user?.email) {
       setServerError("Failed to update password.");
       return;
     }
+    const method = isRecoverySession(sessionAtSubmit) ? "recovery" : "self";
 
-    // Clear the forced-change flag if present.
-    await supabase.auth.updateUser({ data: { requires_password_change: false } });
+    // Clear the forced-change flag if present. If this fails the user would be
+    // sent back here on every login, so say so rather than carry on silently.
+    const { error: flagError } = await supabase.auth.updateUser({ data: { requires_password_change: false } });
 
-    recordAuthEvent("password_changed", { method: "recovery" });
-    toast.success("Password updated. Signing you in...");
-    await redirectByRole(data.user.id);
+    // Replace the recovery session with a normal password sign-in. That ends
+    // the recovery session (which would otherwise keep routing the user back
+    // here) and proves the new password actually works before we say it does.
+    // NB: if server-side captcha is ever enabled this call needs a token.
+    const { data: signIn, error: signInError } = await supabase.auth.signInWithPassword({
+      email: data.user.email,
+      password,
+    });
+    if (signInError || !signIn.session) {
+      const ref = signInError?.code ?? (signInError?.status ? `http_${signInError.status}` : "no_session");
+      recordAuthEvent("password_changed", { method, reason: "resignin_failed", error_code: ref });
+      setServerError(
+        `Your new password was saved, but signing in with it failed (ref: ${ref}). Go to the login page and sign in with your new password.`,
+      );
+      return;
+    }
+
+    recordAuthEvent("password_changed", { method, reason: flagError ? "flag_clear_failed" : "verified" });
+    toast.success(
+      flagError
+        ? "Password updated. If you're asked to change it again, contact your administrator."
+        : "Password updated. Signing you in...",
+    );
+    await redirectByRole(signIn.session.user.id);
   }
 
   return (

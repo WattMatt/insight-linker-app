@@ -1,16 +1,21 @@
 <!--
   Supabase "Reset Password" (recovery) email template — code-first.
 
-  WHY: src/views/auth/ForgotPassword.tsx is OTP-first — it shows an "enter the
-  6-digit code" screen and calls verifyOtp({ type: "recovery" }). That only works
-  if THIS template renders {{ .Token }} (the 6-digit code). The Supabase default
-  template ships a link only ({{ .ConfirmationURL }}), so no code ever arrives and
-  the user is stuck on the code screen. This template leads with the code and keeps
-  the link as a secondary fallback.
+  WHY: src/views/auth/ForgotPassword.tsx is code-only — it calls
+  verifyOtp({ type: "recovery" }) with the 6-digit {{ .Token }} rendered here.
 
-  Supabase template variables used: {{ .Token }} (6-digit code), {{ .ConfirmationURL }} (fallback link).
-  Paste into: Dashboard → Authentication → Emails → "Reset Password" → Message body.
-  Suggested subject: "Your WM Compliance password reset code"
+  This template must NOT contain {{ .ConfirmationURL }} (or any link carrying a
+  token). The code and that link are the same single-use token, and mail
+  scanners (Microsoft Defender Safe Links etc.) open links on arrival, which
+  used up the token before the user typed the code — the "code doesn't work /
+  says expired" reports of Oct 2026 (docs/AUTH_PASSWORD_REVIEW_2026-10-29.md).
+  The button below opens the code-entry screen and carries no token, so a
+  scanner opening it changes nothing.
+
+  Supabase template variables used: {{ .Token }} (6-digit code), {{ .SiteURL }} (https://watsonmattheus.com).
+  Applied to the live project via the Management API (mailer_templates_recovery_content);
+  the dashboard equivalent is Authentication → Emails → "Reset Password".
+  Subject: "Your WM Compliance password reset code"
 -->
 <!DOCTYPE html>
 <html>
@@ -50,16 +55,21 @@
                 </tr>
               </table>
 
-              <p style="margin: 0 0 32px; color: #71717a; font-size: 14px; line-height: 1.6;">
-                This code expires in 1 hour. If you didn't request a password reset, you can safely ignore this email — your password won't change.
+              <p style="margin: 0 0 24px; color: #71717a; font-size: 14px; line-height: 1.6;">
+                This code expires in 1 hour. Only the code in the most recent email works — asking for another code cancels this one.
+                If you didn't request a password reset, you can safely ignore this email — your password won't change.
               </p>
 
-              <!-- Fallback link -->
-              <p style="margin: 0 0 8px; color: #71717a; font-size: 14px; line-height: 1.6;">
-                Prefer a link? You can also
-                <a href="{{ .ConfirmationURL }}" style="color: #2563eb;">reset your password here</a>
-                — though the code above is more reliable if your email provider scans links.
-              </p>
+              <!-- Opens the code-entry screen. Deliberately carries no token. -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center">
+                    <a href="{{ .SiteURL }}/auth/forgot-password?step=code" style="display: inline-block; padding: 14px 32px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px;">
+                      Enter your code
+                    </a>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
 
