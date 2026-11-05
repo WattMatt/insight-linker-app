@@ -210,6 +210,23 @@ Effect: when a user says "it doesn't work", an admin has no record to look at.
 | RC-6 | Reset completion checks that the flag was cleared, then signs in again with the new password. That ends the recovery session and proves the password works before the user is told it does. | `ResetPassword.tsx` |
 | RC-5 (interim) | Events recorded: each send (`sent` / `send_failed`), each rejected code (`code_rejected`) with the Supabase error code, a verified code (`login`, method `recovery`, with the user), and the password change (`verified` / `flag_clear_failed` / `resignin_failed`). Failures are still anonymous until Step 4 moves audit to the server. | — |
 
+**Verified before deploy:**
+- 22 new tests: 11 helper, 7 Forgot Password screen, 4 landing. The 2 recovery landing tests fail on `main`'s code and pass on this branch.
+- Full suite: 901 tests pass. 4 MCP test files don't load in this worktree because `@modelcontextprotocol/sdk` is missing from the borrowed `node_modules`; this branch doesn't touch them.
+- `tsc` reports no errors in the changed files. ESLint: 0 errors.
+- **Not browser-checked:** the local `next dev` hung at start-up, so the screens were exercised through component tests instead.
+
+**Deploy plan (proposed, not done):**
+1. **Web:** merge the branch to `main`, then `vercel --prod --yes`. Build takes about 5–8 minutes. Users on the old PWA shell need one reload. There is no database migration and no edge-function change.
+2. **Live email template** (only after step 1 is live): PATCH `mailer_templates_recovery_content` with `supabase/templates/recovery.html`, and set the subject to "Your WM Compliance password reset code". Save the current template first, so rolling back is a single PATCH. Order matters: until the new screen is live, the new button would open the old email-entry screen.
+3. **Check:** re-read the template through the API and confirm it has no `ConfirmationURL`.
+4. **E2E:** request a reset for a test account on the `wmeng.co.za` mailbox (behind Microsoft 365 scanning). Read the code from that mailbox, then:
+   - the code is accepted, even after the email has sat long enough for a scan,
+   - a second request makes the first code fail with the "replaced" message,
+   - `auth_events` gets `sent`, `code_rejected` and `login`/`recovery` rows.
+
+   Typing the new password on the live site has to be done by a person: the agent doesn't enter passwords into production.
+
 Not in Step 1:
 - The magic-link template still has code + link (same scanner exposure, sign-in only).
 - Admin actions (Step 2), invites (Step 3), server-side audit (Step 4).
