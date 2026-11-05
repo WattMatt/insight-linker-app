@@ -19,6 +19,7 @@ import { recordAuthEvent } from "@/lib/auth-audit";
 import {
   describeCodeError,
   describeSendError,
+  markRecoverySession,
   RESEND_COOLDOWN_SECONDS,
 } from "@/lib/auth/recoveryFlow";
 import { forgotPasswordSchema, type ForgotPasswordInput } from "@/lib/validation-schemas";
@@ -181,6 +182,9 @@ export default function ForgotPassword() {
       return;
     }
 
+    // The token can't identify this as a reset (amr says "otp"), so record it:
+    // until the new password is set, every page sends this session back here.
+    markRecoverySession(data.session);
     recordAuthEvent("login", { method: "recovery" });
     toast.success("Code verified");
     navigate("/auth/reset-password");

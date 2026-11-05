@@ -1,6 +1,7 @@
 import { Navigate, useSearchParams, useLocation } from "@/lib/navigation";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuthSession } from "@/components/auth/useAuthSession";
+import { isRecoverySession } from "@/lib/auth/recoveryFlow";
 import { useOnboardingStatus } from "@/components/auth/useOnboardingStatus";
 import { AuthLoading } from "@/components/auth/AuthLoading";
 import { OrphanResolutionModal } from "@/components/OrphanResolutionModal";
@@ -25,6 +26,10 @@ const ContractorProtectedRoute = ({ children }: { children: React.ReactNode }) =
   // Forced password change enforced at the guard (see ProtectedRoute).
   if (session.user?.user_metadata?.requires_password_change === true) {
     return <Navigate to="/auth/set-password" replace />;
+  }
+  // A session from an accepted reset code must set its new password first.
+  if (isRecoverySession(session)) {
+    return <Navigate to="/auth/reset-password" replace />;
   }
   if (userRole === "Admin" && previewSiteId) return <>{children}</>;
   if (userRole !== "Contractor") return <Navigate to="/dashboard" replace />;

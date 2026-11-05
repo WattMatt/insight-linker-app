@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { describeCodeError, describeSendError, isRecoverySession } from "./recoveryFlow";
+/**
+ * @vitest-environment jsdom
+ */
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  clearRecoveryMark,
+  describeCodeError,
+  describeSendError,
+  isRecoverySession,
+  markRecoverySession,
+} from "./recoveryFlow";
 
 function tokenWith(payload: unknown): string {
   const b64url = (v: unknown) =>
@@ -7,28 +16,51 @@ function tokenWith(payload: unknown): string {
   return `${b64url({ alg: "HS256" })}.${b64url(payload)}.sig`;
 }
 
+// What Supabase actually issued on 2026-11-05 for a reset completed by typing
+// the code: amr "otp" — indistinguishable from a magic-link sign-in.
+const codeResetSession = (sessionId = "sess-reset") => ({
+  access_token: tokenWith({ sub: "u1", session_id: sessionId, aal: "aal1", amr: [{ method: "otp", timestamp: 1 }] }),
+});
+
+afterEach(() => clearRecoveryMark());
+
 describe("isRecoverySession", () => {
-  it("is true for a session created from a recovery code or link", () => {
-    const access_token = tokenWith({ sub: "u1", amr: [{ method: "recovery", timestamp: 1 }] });
-    expect(isRecoverySession({ access_token })).toBe(true);
+  it("does not treat an amr 'otp' session as a reset on the token alone", () => {
+    expect(isRecoverySession(codeResetSession())).toBe(false);
   });
 
-  it("is false for a password or magic-link session", () => {
-    expect(isRecoverySession({ access_token: tokenWith({ amr: [{ method: "password" }] }) })).toBe(false);
+  it("is true for the session marked when its reset code was accepted", () => {
+    const session = codeResetSession();
+    markRecoverySession(session);
+    expect(isRecoverySession(session)).toBe(true);
+  });
+
+  it("stops being true for a new session (the password sign-in after the reset)", () => {
+    markRecoverySession(codeResetSession("sess-reset"));
+    expect(isRecoverySession(codeResetSession("sess-after-password-sign-in"))).toBe(false);
+  });
+
+  it("stops being true once the mark is cleared", () => {
+    const session = codeResetSession();
+    markRecoverySession(session);
+    clearRecoveryMark();
+    expect(isRecoverySession(session)).toBe(false);
+  });
+
+  it("ignores a mark when the token has no session_id", () => {
+    markRecoverySession({ access_token: tokenWith({ amr: [{ method: "otp" }] }) });
     expect(isRecoverySession({ access_token: tokenWith({ amr: [{ method: "otp" }] }) })).toBe(false);
   });
 
-  it("is false for no session, no amr, or a malformed token", () => {
-    expect(isRecoverySession(null)).toBe(false);
-    expect(isRecoverySession({ access_token: tokenWith({ sub: "u1" }) })).toBe(false);
-    expect(isRecoverySession({ access_token: "not-a-jwt" })).toBe(false);
-    expect(isRecoverySession({ access_token: "a.%%%.c" })).toBe(false);
+  it("still accepts an amr 'recovery' token (link verification)", () => {
+    expect(isRecoverySession({ access_token: tokenWith({ amr: [{ method: "recovery" }] }) })).toBe(true);
   });
 
-  it("decodes base64url payloads that need padding and use - or _", () => {
-    // A name with characters that encode to '-'/'_' in base64url.
-    const access_token = tokenWith({ n: "??>>~~", amr: [{ method: "recovery" }] });
-    expect(isRecoverySession({ access_token })).toBe(true);
+  it("is false for no session, a password session, or a malformed token", () => {
+    expect(isRecoverySession(null)).toBe(false);
+    expect(isRecoverySession({ access_token: tokenWith({ session_id: "s", amr: [{ method: "password" }] }) })).toBe(false);
+    expect(isRecoverySession({ access_token: "not-a-jwt" })).toBe(false);
+    expect(isRecoverySession({ access_token: "a.%%%.c" })).toBe(false);
   });
 });
 

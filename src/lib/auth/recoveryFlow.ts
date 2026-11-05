@@ -8,8 +8,15 @@ import type { Session } from "@supabase/supabase-js";
  * 1. Recognising a recovery session without a race. The SDK announces a
  *    recovery link through a PASSWORD_RECOVERY event fired on a timer after
  *    getSession() has already resolved, so pages that waited for the event
- *    routed the user to the dashboard first. The session's own access token
- *    says how it was obtained (the `amr` claim), which is there synchronously.
+ *    routed the user to the dashboard first.
+ *
+ *    The token alone can't say it either: a reset completed by TYPING the code
+ *    carries `amr: [{ method: "otp" }]` — the same as a magic-link sign-in
+ *    (observed live 2026-11-05). So the app records the intent itself: when a
+ *    reset code is accepted it stores that session's `session_id`, and a
+ *    session is a recovery session while its id matches. The stored id stops
+ *    matching once ResetPassword signs in again with the new password (a new
+ *    session) and is cleared there too.
  *
  * 2. Telling the user what actually went wrong. Supabase answers a wrong,
  *    used, superseded AND expired code with one error, `otp_expired`, whose
@@ -35,16 +42,56 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
+const RECOVERY_MARK_KEY = "wm_recovery_session_id";
+
+function sessionIdOf(session: Pick<Session, "access_token"> | null | undefined): string | null {
+  if (!session?.access_token) return null;
+  const id = decodeJwtPayload(session.access_token)?.session_id;
+  return typeof id === "string" && id ? id : null;
+}
+
+function readMark(): string | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage.getItem(RECOVERY_MARK_KEY);
+  } catch {
+    return null;
+  }
+}
+
 /**
- * True when the session was created by verifying a password-recovery code or
- * link. Such a session must go to /auth/reset-password, never the dashboard.
- * ResetPassword replaces it with a password sign-in once the new password is
- * set, so this stops being true after a completed reset.
+ * Record that this session came from an accepted reset code or link. Call it
+ * the moment the recovery session is established, before navigating.
+ */
+export function markRecoverySession(session: Pick<Session, "access_token"> | null | undefined): void {
+  const id = sessionIdOf(session);
+  if (!id) return;
+  try {
+    window.localStorage.setItem(RECOVERY_MARK_KEY, id);
+  } catch {
+    /* storage blocked: the direct navigation to /auth/reset-password still happens */
+  }
+}
+
+/** Forget the recovery mark once the new password is set. */
+export function clearRecoveryMark(): void {
+  try {
+    window.localStorage.removeItem(RECOVERY_MARK_KEY);
+  } catch {
+    /* nothing to clear */
+  }
+}
+
+/**
+ * True when the session was created by an accepted password-recovery code or
+ * link and the new password hasn't been set yet. Such a session must go to
+ * /auth/reset-password, never into the app.
  */
 export function isRecoverySession(session: Pick<Session, "access_token"> | null | undefined): boolean {
   if (!session?.access_token) return false;
   const amr = decodeJwtPayload(session.access_token)?.amr;
-  return Array.isArray(amr) && amr.some((entry: AmrEntry) => entry?.method === "recovery");
+  if (Array.isArray(amr) && amr.some((entry: AmrEntry) => entry?.method === "recovery")) return true;
+  const id = sessionIdOf(session);
+  return id !== null && readMark() === id;
 }
 
 export interface AuthErrorLike {

@@ -1,10 +1,14 @@
 <!--
   Supabase "Reset Password" (recovery) email template — code-first.
 
-  WHY: src/views/auth/ForgotPassword.tsx is code-only — it calls
-  verifyOtp({ type: "recovery" }) with the 6-digit {{ .Token }} rendered here.
+  NOTE: Supabase renders template tags even inside HTML comments, so this
+  comment must never contain one (write the names without braces). The deploy
+  strips this comment before upload anyway.
 
-  This template must NOT contain {{ .ConfirmationURL }} (or any link carrying a
+  WHY: src/views/auth/ForgotPassword.tsx is code-only — it calls
+  verifyOtp({ type: "recovery" }) with the 6-digit .Token rendered here.
+
+  This template must NOT contain .ConfirmationURL (or any link carrying a
   token). The code and that link are the same single-use token, and mail
   scanners (Microsoft Defender Safe Links etc.) open links on arrival, which
   used up the token before the user typed the code — the "code doesn't work /
@@ -12,7 +16,7 @@
   The button below opens the code-entry screen and carries no token, so a
   scanner opening it changes nothing.
 
-  Supabase template variables used: {{ .Token }} (6-digit code), {{ .SiteURL }} (https://watsonmattheus.com).
+  Supabase template variables used: .Token (6-digit code), .SiteURL (https://watsonmattheus.com).
   Applied to the live project via the Management API (mailer_templates_recovery_content);
   the dashboard equivalent is Authentication → Emails → "Reset Password".
   Subject: "Your WM Compliance password reset code"

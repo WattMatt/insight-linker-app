@@ -13,7 +13,7 @@ import { useRoleRedirect } from "@/views/auth/useRoleRedirect";
 import { PasswordStrengthMeter } from "@/views/auth/PasswordStrengthMeter";
 import { recordAuthEvent } from "@/lib/auth-audit";
 import { evaluatePassword } from "@/lib/password-strength";
-import { isRecoverySession } from "@/lib/auth/recoveryFlow";
+import { clearRecoveryMark, isRecoverySession } from "@/lib/auth/recoveryFlow";
 import { setPasswordSchema, type SetPasswordInput } from "@/lib/validation-schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,6 +104,8 @@ export default function ResetPassword() {
       return;
     }
 
+    // The new session no longer matches the recovery mark; drop it anyway.
+    clearRecoveryMark();
     recordAuthEvent("password_changed", { method, reason: flagError ? "flag_clear_failed" : "verified" });
     toast.success(
       flagError

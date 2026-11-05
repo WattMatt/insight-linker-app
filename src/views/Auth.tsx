@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useNavigate } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { LoadingState } from "@/components/LoadingState";
-import { isRecoverySession } from "@/lib/auth/recoveryFlow";
+import { isRecoverySession, markRecoverySession } from "@/lib/auth/recoveryFlow";
 
 // Auth — backward-compatibility dispatcher.
 //
@@ -62,6 +62,7 @@ const Auth = () => {
     //    then fall through to /auth/login.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY" && session) {
+        markRecoverySession(session);
         navigate("/auth/reset-password");
       }
     });
@@ -126,6 +127,7 @@ const Auth = () => {
       return;
     }
 
+    markRecoverySession(data.session);
     navigate("/auth/reset-password");
   }
 
