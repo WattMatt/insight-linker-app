@@ -367,3 +367,27 @@ Decision (user, 2026-11-05): pre-sign-in failures are matched to users through a
 3. The web app.
 
 The web app's history dialog needs the function. Until step 1 is done, the dialog shows the database error.
+
+**Deployed 2026-11-05 ~12:20 UTC:**
+- The migration was applied to production through the Management API (HTTP 201) and recorded with `migration repair`. Then `log-auth-event` v6, then PR #90 (`acc9ec98`).
+- Live-verified: the function returns 200 for an Admin and 401 for anonymous callers.
+- Supabase actions seen live: `login`, `user_recovery_requested`, `user_modified`, `user_updated_password`.
+- Users → Sign-in History showed a wrong code entered on the live reset page as "Reset code rejected · Reported by sign-in page · ref: otp_expired", on the right user.
+
+### Magic-link (sign-in code) email: branch `fix/magic-link-code-only` (not deployed)
+
+Same cause as RC-2: the live Magic Link template carried both `{{ .Token }}` and `{{ .ConfirmationURL }}`, which are one single-use token.
+
+| Change | Files |
+|---|---|
+| Code-only template. The button opens `{{ .SiteURL }}/auth/login?mode=code`, which carries no token. Subject: "Your WM Compliance sign-in code". | `supabase/templates/magic_link.html` |
+| The Login "Magic Link" tab becomes "Sign-in code". `?mode=code` and "I already have a code" open the code screen, which has an editable email field. Send failures are shown; the 60-second limit leads to the code screen with an explanation; "Send a new code" has a countdown; the screen says only the latest code works; pasted "123 456" is accepted; a rejected code is explained with a `ref`. | `src/views/auth/Login.tsx` |
+| Audit: `magic_link_requested` with reason `sent` / `send_failed` / `code_rejected` and the typed email (stored as a hash). Sign-in History words these as sign-in codes, not resets. | `Login.tsx`, `src/lib/auth/signInHistory.ts` |
+
+**Verified before deploy:** 7 new tests (6 for the screen, 1 for the labels). Full suite: 125 files, 996 tests pass. No type errors; no lint warnings in the changed files.
+
+**Not verified:** whether Supabase uses the same stored token for sign-in codes and reset codes. If it does, asking for one would cancel the other. The screens already say "asking for a new code cancels the old one".
+
+**Deploy order:**
+1. The web app first, because the new email's button needs `?mode=code`.
+2. Then save the live Magic Link template and replace it. HTML comments are stripped before upload, because Supabase renders tags inside comments.

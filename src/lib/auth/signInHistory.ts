@@ -78,6 +78,13 @@ const REASON_LABELS: Record<string, string> = {
   flag_clear_failed: "Password changed, but the must-change flag stuck",
 };
 
+// The same reasons on a sign-in-code event (Login's "Sign-in code" tab).
+const SIGN_IN_CODE_REASON_LABELS: Record<string, string> = {
+  sent: "Asked for a sign-in code",
+  send_failed: "Sign-in code email NOT sent",
+  code_rejected: "Sign-in code rejected",
+};
+
 const APP_KINDS: Record<string, string> = {
   login: "Signed in",
   logout: "Signed out",
@@ -125,7 +132,8 @@ export function describeEvent(event: HistoryEvent): DescribedEvent {
 
   const reason = str(d.reason);
   const method = str(d.method);
-  let title = (reason && REASON_LABELS[reason]) || APP_KINDS[event.kind] || event.kind.replace(/_/g, " ");
+  const reasonLabels = event.kind === "magic_link_requested" ? SIGN_IN_CODE_REASON_LABELS : REASON_LABELS;
+  let title = (reason && reasonLabels[reason]) || APP_KINDS[event.kind] || event.kind.replace(/_/g, " ");
   if (!reason && method && METHOD_LABELS[method] && (event.kind === "login" || event.kind === "password_changed")) {
     title = `${title} ${METHOD_LABELS[method]}`;
   }

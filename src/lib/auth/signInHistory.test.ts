@@ -25,6 +25,19 @@ describe("describeEvent", () => {
     ).toEqual({ title: "Reset code rejected", notes: ["ref: otp_expired"], problem: true });
   });
 
+  it("words sign-in-code events as sign-in, not reset", () => {
+    expect(
+      describeEvent({ at, source: "reported", kind: "magic_link_requested", detail: { reason: "code_rejected", error_code: "otp_expired" } }),
+    ).toEqual({ title: "Sign-in code rejected", notes: ["ref: otp_expired"], problem: true });
+    expect(describeEvent({ at, source: "reported", kind: "magic_link_requested", detail: { reason: "sent" } }).title).toBe(
+      "Asked for a sign-in code",
+    );
+    // Older rows without a reason keep the generic title.
+    expect(describeEvent({ at, source: "reported", kind: "magic_link_requested", detail: { method: "magic_link" } }).title).toBe(
+      "Asked for a sign-in code",
+    );
+  });
+
   it("describes admin actions with the admin's id", () => {
     const d = describeEvent({
       at,
