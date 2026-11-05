@@ -148,7 +148,7 @@ export default function Login() {
       await new Promise((r) => setTimeout(r, minDuration - elapsed));
     }
 
-    recordAuthEvent("magic_link_requested", { method: "magic_link" });
+    recordAuthEvent("magic_link_requested", { method: "magic_link" }, { email: trimmed });
 
     if (error && process.env.NODE_ENV === "development") {
       console.warn("[login] signInWithOtp error", error);

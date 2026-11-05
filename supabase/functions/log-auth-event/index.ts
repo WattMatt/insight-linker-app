@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { emailSha256 } from './emailHash.ts';
 
 // log-auth-event — writes a single row to public.auth_events.
 //
@@ -139,6 +140,16 @@ Deno.serve(async (req) => {
     // For ANON_EVENTS we deliberately ignore any Authorization header
     // and persist user_id as NULL — never trust an attacker-supplied
     // identity when no session is required.
+    //
+    // They may carry the email the person typed (a rejected code, an email
+    // that didn't send). Only its SHA-256 is stored, as metadata.email_sha256,
+    // so admin_user_sign_in_history can show the row on the right user — as a
+    // "reported" row, since anyone can send one. The address is never stored,
+    // and the response is identical whether or not the address has an account.
+    if (isAnon) {
+      const hash = await emailSha256(body?.email);
+      if (hash) metadata.email_sha256 = hash;
+    }
 
     const userAgent = req.headers.get('user-agent')?.slice(0, 500) ?? null;
     const ipForStore = ipAddress === 'unknown' ? null : ipAddress;

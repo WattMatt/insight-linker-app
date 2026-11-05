@@ -121,11 +121,11 @@ export default function ForgotPassword() {
 
     if (error) {
       const described = describeSendError(error);
-      recordAuthEvent("password_reset_requested", {
-        method: "recovery",
-        reason: "send_failed",
-        error_code: described.ref,
-      });
+      recordAuthEvent(
+        "password_reset_requested",
+        { method: "recovery", reason: "send_failed", error_code: described.ref },
+        { email: trimmed },
+      );
       if (described.retryAfterSeconds) {
         // A code went out recently and is still the valid one — carry on to
         // the code screen rather than treating this as a dead end.
@@ -141,7 +141,7 @@ export default function ForgotPassword() {
 
     // Supabase answers the same way whether or not the address has an account,
     // so this message must not claim the address exists.
-    recordAuthEvent("password_reset_requested", { method: "recovery", reason: "sent" });
+    recordAuthEvent("password_reset_requested", { method: "recovery", reason: "sent" }, { email: trimmed });
     startCooldown(RESEND_COOLDOWN_SECONDS);
     setCode("");
     setStep("code");
@@ -171,11 +171,11 @@ export default function ForgotPassword() {
       const described = error
         ? describeCodeError(error)
         : { message: "The code couldn't be checked. Try again.", ref: "no_session" };
-      recordAuthEvent("password_reset_requested", {
-        method: "recovery",
-        reason: "code_rejected",
-        error_code: described.ref,
-      });
+      recordAuthEvent(
+        "password_reset_requested",
+        { method: "recovery", reason: "code_rejected", error_code: described.ref },
+        { email: trimmedEmail },
+      );
       setServerError(`${described.message} (ref: ${described.ref})`);
       toast.error("Code not accepted");
       setVerifying(false);

@@ -5,6 +5,7 @@ import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { generateInitialPassword } from "@/lib/auth/initialInvite";
 import { readInvokeError } from "@/lib/edgeFunctionError";
 import { AdminResetPasswordDialog } from "@/components/AdminResetPasswordDialog";
+import { SignInHistoryDialog } from "@/components/SignInHistoryDialog";
 import { ListPagination } from "@/components/ListPagination";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
-import { UserPlus, Mail, Send, MoreVertical, Edit, Upload, X, Eye, Trash2, Shield } from "lucide-react";
+import { UserPlus, Mail, Send, MoreVertical, Edit, Upload, X, Eye, Trash2, Shield, History } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -116,6 +117,7 @@ const Users = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [resendOpen, setResendOpen] = useState(false);
+  const [historyUser, setHistoryUser] = useState<UserProfile | null>(null);
   const [resendUser, setResendUser] = useState<UserProfile | null>(null);
   const [editSitesOpen, setEditSitesOpen] = useState(false);
   const [editSitesUser, setEditSitesUser] = useState<UserProfile | null>(null);
@@ -1047,6 +1049,10 @@ const Users = () => {
                           <Mail className="mr-2 h-4 w-4" />
                           Reset Password
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setHistoryUser(user)}>
+                          <History className="mr-2 h-4 w-4" />
+                          Sign-in History
+                        </DropdownMenuItem>
                         {user.role === "Contractor" && (
                           <DropdownMenuItem 
                             onClick={() => {
@@ -1386,6 +1392,15 @@ const Users = () => {
         onOpenChange={(next) => {
           setResendOpen(next);
           if (!next) setResendUser(null);
+        }}
+      />
+
+      {/* Sign-in History — account state + merged audit timeline (admin-only RPC) */}
+      <SignInHistoryDialog
+        user={historyUser}
+        open={historyUser !== null}
+        onOpenChange={(next) => {
+          if (!next) setHistoryUser(null);
         }}
       />
 

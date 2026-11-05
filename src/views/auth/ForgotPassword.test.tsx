@@ -15,6 +15,7 @@ const { state } = vi.hoisted(() => ({
     verifyResult: { data: { session: null }, error: null } as { data: { session: unknown }; error: unknown },
     navigate: vi.fn(),
     events: [] as Array<{ type: string; metadata: Record<string, unknown> }>,
+    emails: [] as Array<string | undefined>,
     verifyCalls: [] as unknown[],
   },
 }));
@@ -43,7 +44,10 @@ vi.mock("@/components/CaptchaTurnstile", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: () => {}, error: () => {} } }));
 vi.mock("@/lib/auth-audit", () => ({
-  recordAuthEvent: (type: string, metadata: Record<string, unknown> = {}) => state.events.push({ type, metadata }),
+  recordAuthEvent: (type: string, metadata: Record<string, unknown> = {}, options: { email?: string } = {}) => {
+    state.events.push({ type, metadata });
+    state.emails.push(options.email);
+  },
 }));
 vi.mock("@/views/auth/AuthLayout", () => ({
   AuthLayout: ({ subtitle, children }: { subtitle: string; children: ReactNode }) =>
@@ -63,6 +67,7 @@ beforeEach(() => {
   state.verifyResult = { data: { session: null }, error: null };
   state.navigate = vi.fn();
   state.events = [];
+  state.emails = [];
   state.verifyCalls = [];
 });
 
@@ -76,6 +81,8 @@ describe("ForgotPassword — sending the code", () => {
     const resend = screen.getByRole("button", { name: /Send a new code \(\d+s\)/ }) as HTMLButtonElement;
     expect(resend.disabled).toBe(true);
     expect(state.events).toContainEqual({ type: "password_reset_requested", metadata: { method: "recovery", reason: "sent" } });
+    // Attributed by the (hashed, server-side) normalised address.
+    expect(state.emails).toEqual(["someone@example.com"]);
   }, 10_000);
 
   it("shows a refused send instead of claiming an email is on its way", async () => {
@@ -136,6 +143,7 @@ describe("ForgotPassword — entering the code", () => {
       type: "password_reset_requested",
       metadata: { method: "recovery", reason: "code_rejected", error_code: "otp_expired" },
     });
+    expect(state.emails).toEqual(["someone@example.com"]);
     expect(state.navigate).not.toHaveBeenCalled();
   });
 

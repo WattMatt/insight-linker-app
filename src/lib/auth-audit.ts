@@ -57,10 +57,14 @@ function writeQueue(queue: QueuedEvent[]): void {
   }
 }
 
-async function sendOne(event_type: AuthEventType, metadata: AuthEventMetadata): Promise<boolean> {
+async function sendOne(
+  event_type: AuthEventType,
+  metadata: AuthEventMetadata,
+  email?: string,
+): Promise<boolean> {
   try {
     const { error } = await supabase.functions.invoke("log-auth-event", {
-      body: { event_type, metadata },
+      body: { event_type, metadata, ...(email ? { email } : {}) },
     });
     return !error;
   } catch {
@@ -84,12 +88,20 @@ if (typeof window !== "undefined") {
   void drainQueue().catch(() => {});
 }
 
+/**
+ * `options.email` — for events before sign-in (a code sent, a code rejected):
+ * the address the person typed. log-auth-event stores only its SHA-256, so an
+ * admin's Sign-in history can show the event on the right user. It is sent
+ * once and never written to the retry queue: a retried event is still
+ * recorded, just not attributed.
+ */
 export function recordAuthEvent(
   event_type: AuthEventType,
   metadata: AuthEventMetadata = {},
+  options: { email?: string } = {},
 ): void {
   void (async () => {
-    const ok = await sendOne(event_type, metadata);
+    const ok = await sendOne(event_type, metadata, options.email);
     if (ok) {
       // Opportunistically retry anything that piled up while we were down.
       void drainQueue().catch(() => {});
