@@ -191,14 +191,14 @@ describe("ProtectedRoute", () => {
     await waitFor(() => expect(contentShown()).toBe(true));
   });
 
-  it("redirects a user who must change their password to /auth/set-password", async () => {
+  it("redirects a user who must change their password to /auth/reset-password", async () => {
     auth.session = {
       user: { id: "user-1", user_metadata: { requires_password_change: true } },
     };
     renderGuard();
     await waitForDecision();
 
-    expect(redirectTarget()).toBe("/auth/set-password");
+    expect(redirectTarget()).toBe("/auth/reset-password");
     expect(contentShown()).toBe(false);
   });
 

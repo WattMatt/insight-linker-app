@@ -98,10 +98,6 @@ const Users = () => {
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [selectedAgencyId, setSelectedAgencyId] = useState<string>("");
   const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([]);
-  const [temporaryPassword, setTemporaryPassword] = useState("");
-  // When true, the invite emails a generated initial password to the user
-  // (forced-change on first login) instead of sending a magic-link invite.
-  const [sendCredentialsByEmail, setSendCredentialsByEmail] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [editRole, setEditRole] = useState<"Admin" | "Moderator" | "User" | "Contractor" | "Client">("User");
   const [editStatus, setEditStatus] = useState<"Active" | "Inactive">("Active");
@@ -290,7 +286,13 @@ const Users = () => {
   const sendInviteMutation = useMutation({
     mutationFn: async ({ invite, role }: { invite: PendingInvite; role: InviteRole }) => {
       const { data, error } = await supabase.functions.invoke('invite-user', {
-        body: { email: invite.email, fullName: invite.full_name || '', role }
+        body: {
+          email: invite.email,
+          fullName: invite.full_name || '',
+          role,
+          temporaryPassword: generateInitialPassword(),
+          deliverByEmail: true,
+        }
       });
 
       if (error) throw await readInvokeError(error, 'Failed to send invite');
@@ -363,16 +365,7 @@ const Users = () => {
       return data;
     },
     onSuccess: (data) => {
-      if (data.passwordEmailed) {
-        toast.success("User created — login details emailed. They'll change the password on first login.");
-      } else if (data.temporaryPassword) {
-        toast.success(
-          `User created! Temporary password: ${data.temporaryPassword}`,
-          { duration: 10000 }
-        );
-      } else {
-        toast.success(data.message || "Invitation sent successfully!");
-      }
+      toast.success(data.message || "User created — login details emailed. They'll change the password on first login.");
       setOpen(false);
       setEmail("");
       setFullName("");
@@ -380,8 +373,6 @@ const Users = () => {
       setSelectedClientId("");
       setSelectedAgencyId("");
       setSelectedSiteIds([]);
-      setTemporaryPassword("");
-      setSendCredentialsByEmail(false);
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (error: any) => {
@@ -645,18 +636,15 @@ const Users = () => {
       return;
     }
     
-    // When emailing credentials, the user needs an initial password to receive.
-    // Use the admin-typed one if present, otherwise generate a strong one.
-    const initialPassword = sendCredentialsByEmail
-      ? (temporaryPassword || generateInitialPassword())
-      : (temporaryPassword || undefined);
-
+    // Every invite emails a generated temporary password (forced change at first
+    // sign-in). Single-use invite links were retired: mail scanners used them up
+    // and they expired within the hour (docs/AUTH_PASSWORD_REVIEW_2026-10-29.md).
     inviteMutation.mutate({
       email,
       fullName,
       role,
-      temporaryPassword: initialPassword,
-      deliverByEmail: sendCredentialsByEmail || undefined,
+      temporaryPassword: generateInitialPassword(),
+      deliverByEmail: true,
       clientId: role === "Client" ? selectedClientId : undefined,
       managingAgencyId: role === "Client" && selectedAgencyId ? selectedAgencyId : undefined,
       siteIds: role === "Contractor" ? selectedSiteIds : undefined
@@ -827,39 +815,10 @@ const Users = () => {
                     </p>
                   </div>
                 )}
-                <div className="space-y-2">
-                  <Label htmlFor="temporaryPassword">Temporary Password (Optional)</Label>
-                  <Input
-                    id="temporaryPassword"
-                    type="text"
-                    placeholder={sendCredentialsByEmail ? "Leave blank to auto-generate" : "Leave blank to send email invite"}
-                    value={temporaryPassword}
-                    onChange={(e) => setTemporaryPassword(e.target.value)}
-                    minLength={6}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    If set, user can login immediately and will be required to change password on first login.
-                  </p>
-                </div>
-                <div className="flex items-start gap-2 rounded-md border border-border p-3">
-                  <input
-                    id="sendCredentialsByEmail"
-                    type="checkbox"
-                    className="mt-1 h-4 w-4"
-                    checked={sendCredentialsByEmail}
-                    onChange={(e) => setSendCredentialsByEmail(e.target.checked)}
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="sendCredentialsByEmail" className="cursor-pointer">
-                      Email login details to the user
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Sends a branded email with their email address and an initial password
-                      (auto-generated if left blank above). They must change it on first login.
-                      Leave unchecked to send a passwordless invite link instead.
-                    </p>
-                  </div>
-                </div>
+                <p className="rounded-md border border-border p-3 text-xs text-muted-foreground">
+                  The user is emailed their login details with a generated temporary password. They must
+                  choose their own password the first time they sign in. You never see the password.
+                </p>
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>

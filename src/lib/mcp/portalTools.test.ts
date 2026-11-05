@@ -113,10 +113,13 @@ describe("portal tools", () => {
     await expect(tools.invite_portal_users({ users, dry_run: false, confirm_token: "nope" })).rejects.toThrow(/invite refused/);
     const done: any = await tools.invite_portal_users({ users, dry_run: false, confirm_token: dry.confirm_token });
     expect(done.sent).toBe(2);
+    // Every invite emails a generated temporary password; no single-use links.
+    const password = expect.stringMatching(/^.{16}$/);
     expect(sent).toEqual([
-      { email: "never@broll.com", fullName: "Never", role: "Client", clientId: CLIENT, managingAgencyId: BROLL, isResend: true },
-      { email: "new@broll.com", fullName: "New", role: "Client", clientId: CLIENT, managingAgencyId: BROLL },
+      { email: "never@broll.com", fullName: "Never", role: "Client", clientId: CLIENT, managingAgencyId: BROLL, isResend: true, temporaryPassword: password, deliverByEmail: true },
+      { email: "new@broll.com", fullName: "New", role: "Client", clientId: CLIENT, managingAgencyId: BROLL, temporaryPassword: password, deliverByEmail: true },
     ]);
+    expect(sent[0].temporaryPassword).not.toBe(sent[1].temporaryPassword);
     await expect(tools.invite_portal_users({ users, dry_run: false, confirm_token: dry.confirm_token })).rejects.toThrow(/already used/);
   });
 
