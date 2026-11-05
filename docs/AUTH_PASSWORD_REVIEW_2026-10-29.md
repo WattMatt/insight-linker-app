@@ -254,3 +254,34 @@ Effect: when a user says "it doesn't work", an admin has no record to look at.
 Not in Step 1:
 - The magic-link template still has code + link (same scanner exposure, sign-in only).
 - Admin actions (Step 2), invites (Step 3), server-side audit (Step 4).
+
+**PR #86, deployed and live-verified 2026-11-05.** With a fresh code (`amr: otp`, matching mark), `/`, `/auth/login` and `/dashboard` all return to `/auth/reset-password`.
+
+### Step 2: branch `fix/admin-reset-actions` (not deployed)
+
+The admin "Reset Password" dialog now offers two explicit actions. Both go through `invite-user` with `action: "reset_password"`, which **only resets the password**: it never rewrites the user's role, client or sites, as the old resend path did.
+
+| Action | What happens | Failure handling |
+|---|---|---|
+| **Email reset code** (try first) | Sends Supabase's code-only email. Its button opens the code screen. The old password keeps working until the user sets a new one. | A send blocked by the 60-second limit says the earlier code is still valid. Any other send failure is reported with a `ref`. |
+| **Replace password and email it** | Sets a generated 16-character password (generated in the browser, never shown to the admin), sets `requires_password_change`, and emails it using the reset wording ("Your … password has been reset"). | If Supabase rejects the password: "Nothing was changed", and nothing is emailed. If only the email fails: "The password WAS changed…", with how to retry. |
+
+Both actions write an `auth_events` row tied to the **user**, with the acting admin's id (`reason` = `admin_email_code`, `admin_temp_password`, or the matching `…_failed` / `…_rejected` value). This is a direct service-role insert, not via `log-auth-event`.
+
+Fixes to the existing invite and resend paths in `invite-user` (RC-4):
+- Emails are trimmed and lower-cased, and account lookup is case-insensitive.
+- `updateUserById` errors now stop the request. Before, they were only logged and the admin was told "Password reset successfully. Temporary password: X".
+- Role, client and site writes in the resend path are checked.
+- "Confirmed" is tested by truthiness, so an absent `email_confirmed_at` no longer counts as confirmed.
+
+`readInvokeError` moved to `src/lib/edgeFunctionError.ts`; `Users.tsx` re-exports it.
+
+**Verified before deploy:**
+- 15 new tests: 10 for the reset logic, covering every success and failure branch, and 5 for the dialog.
+- Full suite: 921 pass. The same 4 MCP test files don't load locally, as before.
+- `invite-user` was type-checked against the local Supabase types. The only errors are the two kinds `main`'s copy also has: a typing mismatch between versions, and a possibly-null `settings`.
+- ESLint: 0 errors. `Users.tsx` went from 26 warnings to 25.
+
+**Deploy order:**
+1. `supabase functions deploy invite-user --use-api` first. The old dialog keeps working against the new function.
+2. Then the web app. Until then, the new dialog's `action` field is unknown to the old function, which rejects the request with "No role was supplied", so nothing changes.

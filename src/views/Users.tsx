@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { generateInitialPassword } from "@/lib/auth/initialInvite";
+import { readInvokeError } from "@/lib/edgeFunctionError";
+import { AdminResetPasswordDialog } from "@/components/AdminResetPasswordDialog";
 import { ListPagination } from "@/components/ListPagination";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -83,34 +85,9 @@ const INVITE_ROLES = ["Admin", "Moderator", "User", "Contractor", "Client"] as c
 
 type InviteRole = (typeof INVITE_ROLES)[number];
 
-/**
- * supabase-js replaces the message of every non-2xx Edge Function reply with the fixed
- * string "Edge Function returned a non-2xx status code" and leaves the untouched
- * Response on `error.context` — the function's own `{ success: false, error }` body is
- * the only place the real reason survives. `context` is absent for network-level
- * failures and its body reads only once, so nothing here may throw: this runs on a
- * failure path, where a second error would bury the first.
- */
-export const readInvokeError = async (error: unknown, fallback: string): Promise<Error> => {
-  const failure = error as { message?: string; context?: Response } | null | undefined;
-  const context = failure?.context;
-
-  try {
-    if (context && typeof context.text === "function") {
-      // clone() leaves the caller's body unread; it throws once the body is consumed,
-      // which the catch below absorbs.
-      const source = typeof context.clone === "function" ? context.clone() : context;
-      const body = JSON.parse(await source.text()) as { error?: unknown } | null;
-      if (typeof body?.error === "string" && body.error.trim()) {
-        return new Error(body.error);
-      }
-    }
-  } catch {
-    // Absent, non-JSON, or already-consumed body — keep the original message.
-  }
-
-  return new Error(failure?.message || fallback);
-};
+// readInvokeError lives in @/lib/edgeFunctionError (shared with
+// AdminResetPasswordDialog); re-exported here for existing importers.
+export { readInvokeError };
 
 const Users = () => {
   const [open, setOpen] = useState(false);
@@ -147,7 +124,6 @@ const Users = () => {
   const [editSitesOpen, setEditSitesOpen] = useState(false);
   const [editSitesUser, setEditSitesUser] = useState<UserProfile | null>(null);
   const [editUserSiteIds, setEditUserSiteIds] = useState<string[]>([]);
-  const [resendTempPassword, setResendTempPassword] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [rlsPoliciesOpen, setRlsPoliciesOpen] = useState(false);
@@ -413,71 +389,6 @@ const Users = () => {
     },
   });
 
-  // Resend invite mutation for existing users
-  const resendInviteMutation = useMutation({
-    mutationFn: async ({ user, temporaryPassword }: { user: UserProfile; temporaryPassword?: string }) => {
-      const role = user.role || 'User';
-      
-      // Fetch existing client/site assignments for the user
-      let clientId: string | undefined;
-      let managingAgencyId: string | undefined;
-      let siteIds: string[] | undefined;
-
-      if (role === 'Client' && user.id) {
-        const { data: clientMapping } = await supabase
-          .from('user_clients')
-          .select('client_id, managing_agency_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        clientId = clientMapping?.client_id || undefined;
-        // Preserve the user's agency scope across a resend.
-        managingAgencyId = clientMapping?.managing_agency_id || undefined;
-      }
-
-      if (role === 'Contractor' && user.id) {
-        const { data: siteMappings } = await supabase
-          .from('user_sites')
-          .select('site_id')
-          .eq('user_id', user.id);
-        siteIds = siteMappings?.map(s => s.site_id) || [];
-      }
-
-      const { data, error } = await supabase.functions.invoke('invite-user', {
-        body: {
-          email: user.email,
-          fullName: user.full_name || '',
-          role,
-          isResend: true,
-          temporaryPassword,
-          clientId,
-          managingAgencyId,
-          siteIds,
-        },
-      });
-
-      if (error) throw await readInvokeError(error, 'Failed to resend invitation');
-      if (!data.success) throw new Error(data.error || 'Failed to resend invitation');
-
-      return data;
-    },
-    onSuccess: (data) => {
-      if (data.temporaryPassword) {
-        toast.success(
-          `Password reset! Temporary password: ${data.temporaryPassword}`,
-          { duration: 10000 }
-        );
-      } else {
-        toast.success(data.message || "Invitation resent successfully!");
-      }
-      setResendOpen(false);
-      setResendUser(null);
-      setResendTempPassword("");
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to resend invitation");
-    },
-  });
 
   // Update user role mutation
   const updateRoleMutation = useMutation({
@@ -1509,58 +1420,15 @@ const Users = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Reset Password Dialog */}
-      <Dialog open={resendOpen} onOpenChange={setResendOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reset User Password</DialogTitle>
-            <DialogDescription>
-              Set a temporary password for {resendUser?.full_name || resendUser?.email}, or leave blank to send an email invitation.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="resendTempPassword">Temporary Password (Optional)</Label>
-              <Input
-                id="resendTempPassword"
-                type="text"
-                placeholder="Leave blank to send email invite"
-                value={resendTempPassword}
-                onChange={(e) => setResendTempPassword(e.target.value)}
-                minLength={6}
-              />
-              <p className="text-xs text-muted-foreground">
-                If set, user can login immediately and will be required to change password on first login.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setResendOpen(false);
-                setResendTempPassword("");
-                setResendUser(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                if (resendUser) {
-                  resendInviteMutation.mutate({
-                    user: resendUser,
-                    temporaryPassword: resendTempPassword || undefined
-                  });
-                }
-              }}
-              disabled={resendInviteMutation.isPending}
-            >
-              {resendInviteMutation.isPending ? "Processing..." : "Reset Password"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Reset Password Dialog — two explicit actions, never touches role or access */}
+      <AdminResetPasswordDialog
+        user={resendUser}
+        open={resendOpen}
+        onOpenChange={(next) => {
+          setResendOpen(next);
+          if (!next) setResendUser(null);
+        }}
+      />
 
       {/* Edit Sites Dialog */}
       <Dialog open={editSitesOpen} onOpenChange={setEditSitesOpen}>
