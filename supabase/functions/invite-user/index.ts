@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { Resend } from 'https://esm.sh/resend@2.0.0';
 import { adminResetPassword, normalizeEmail, type AdminResetMethod } from './adminReset.ts';
+import { assertInviteCredentials } from './invitePolicy.ts';
 
 const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
 
@@ -35,10 +36,10 @@ interface InviteUserRequest {
   // that agency's slice of the client's portfolio. Must belong to clientId.
   managingAgencyId?: string;
   siteIds?: string[];
-  // When true, the initial password is delivered to the user in a branded email
-  // (with a forced-change-on-first-login notice) instead of being returned to the
-  // admin to relay by hand. Requires `temporaryPassword` to be present — the admin
-  // UI generates it with src/lib/auth/initialInvite.ts:generateInitialPassword().
+  // Must be true, with `temporaryPassword` set, for an invite or re-send: the
+  // initial password is emailed to the user with a forced-change-on-first-login
+  // notice (./invitePolicy.ts). Callers generate it with
+  // src/lib/auth/initialInvite.ts:generateInitialPassword().
   deliverByEmail?: boolean;
 }
 
@@ -204,7 +205,7 @@ async function sendInitialPasswordEmail(
   if (emailError) {
     console.error('Initial-password email error:', emailError);
     throw new Error(
-      `Failed to email login details: ${emailError.message}. The account and its password are already set - use Resend on the user's row to retry delivery.`,
+      `Failed to email login details: ${emailError.message}. The account and its password are already set - use Reset Password > "Replace password and email it" on their row to send new login details.`,
     );
   }
 }
@@ -252,7 +253,7 @@ async function findUserByEmail(
   }
 
   throw new Error(
-    `Could not confirm whether ${email} already has an account after checking ${MAX_USER_PAGES * USER_PAGE_SIZE} of them. Find the user in Supabase Auth and use Resend on their existing row instead.`,
+    `Could not confirm whether ${email} already has an account after checking ${MAX_USER_PAGES * USER_PAGE_SIZE} of them. Find the user in the list and use Reset Password on their row instead.`,
   );
 }
 
@@ -360,11 +361,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Emailing credentials requires a password to email. Fail loud rather than
-    // silently create an account the user can never reach.
-    if (deliverByEmail && !temporaryPassword) {
-      throw new Error('deliverByEmail requires an initial password to be provided - send the invite without emailing the password, or supply one.');
-    }
+    // Every invite emails a generated temporary password (see ./invitePolicy.ts).
+    const credentials = { deliverByEmail, temporaryPassword };
+    assertInviteCredentials(credentials);
+    const initialPassword = credentials.temporaryPassword;
 
     console.log(isResend ? 'Resending invite to:' : 'Inviting user:', email, 'with role:', role);
     
@@ -400,15 +400,6 @@ Deno.serve(async (req) => {
       console.log('Invite scoped to managing agency:', agency.name);
     }
 
-    // Validate temporary password if provided
-    if (temporaryPassword && temporaryPassword.length < 6) {
-      throw new Error('Temporary password must be at least 6 characters - enter a longer one and send the invite again.');
-    }
-
-    const redirectTo = `${origin}/auth?type=invite`;
-
-    console.log('Redirect URL:', redirectTo);
-
     // Check if user already exists
     const existingUser = await findUserByEmail(supabase, email);
 
@@ -418,30 +409,18 @@ Deno.serve(async (req) => {
     if (existingUser && isResend) {
       // User exists, resending invite
       userId = existingUser.id;
-      // Truthiness, not `!== null`: the field can be absent (undefined) for an
-      // unconfirmed user, which `!== null` would read as confirmed.
-      const isConfirmed = Boolean(existingUser.email_confirmed_at);
-      console.log('User already exists:', userId, 'Email confirmed:', isConfirmed);
-      
-      // Update user metadata if needed
-      const updateData: any = {
+      console.log('User already exists:', userId);
+
+      const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+        password: initialPassword,
+        email_confirm: true,
         user_metadata: {
+          ...(existingUser.user_metadata ?? {}),
           full_name: fullName,
           role: role,
-          requires_password_change: temporaryPassword ? true : false,
+          requires_password_change: true,
         },
-      };
-
-      // If temporary password is provided, update it
-      if (temporaryPassword) {
-        updateData.password = temporaryPassword;
-        updateData.email_confirm = true; // Auto-confirm when setting temp password
-      }
-
-      const { error: updateError } = await supabase.auth.admin.updateUserById(
-        userId,
-        updateData
-      );
+      });
 
       // This used to be a console.warn, after which the admin was told "Password
       // reset successfully. Temporary password: X" for a password Supabase had
@@ -449,7 +428,7 @@ Deno.serve(async (req) => {
       if (updateError) {
         console.error('Failed to update user:', updateError);
         throw new Error(
-          `Supabase rejected the update for ${email}: ${updateError.message}${temporaryPassword ? ' - the temporary password was NOT set' : ''}. Nothing was emailed.`,
+          `Supabase rejected the update for ${email}: ${updateError.message} - the temporary password was NOT set. Nothing was emailed.`,
         );
       }
 
@@ -530,101 +509,26 @@ Deno.serve(async (req) => {
         console.log(`Updated user site assignments to ${siteIds.length} site(s)`);
       }
 
-      // Temporary password path.
-      if (temporaryPassword) {
-        if (deliverByEmail) {
-          // Email the credentials to the user (never echo the plaintext back to
-          // the admin — one delivery channel, not two).
-          await sendInitialPasswordEmail(supabase, {
-            email,
-            fullName,
-            role,
-            password: temporaryPassword,
-            origin,
-          });
-          console.log('User updated with temporary password - login details emailed');
-          return new Response(
-            JSON.stringify({
-              success: true,
-              userId: userId,
-              isNewUser: false,
-              passwordEmailed: true,
-              message: 'Login details emailed to the user. They must change the password on first login.',
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
-          );
-        }
-
-        // Legacy path: admin relays the password out-of-band.
-        console.log('User updated with temporary password - skipping email');
-        return new Response(
-          JSON.stringify({
-            success: true,
-            userId: userId,
-            isNewUser: false,
-            message: `Password reset successfully. Temporary password: ${temporaryPassword}. User must change password on first login.`,
-            temporaryPassword: temporaryPassword,
-          }),
-          {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
-          }
-        );
-      }
-
-      // If user is already confirmed, send password recovery instead of invite
-      if (isConfirmed) {
-        console.log('User is confirmed, sending password recovery email');
-        const recoveryRedirect = `${origin}/auth`;
-        const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: recoveryRedirect,
-        });
-
-        if (recoveryError) {
-          console.error('Password recovery error:', recoveryError);
-          throw new Error(
-            `Failed to send password reset: ${recoveryError.message}. The account is unchanged - check the project's Auth email settings, then try again.`,
-          );
-        }
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            userId: userId,
-            isNewUser: false,
-            message: 'Password reset email sent successfully. User will receive an email to set a new password.',
-          }),
-          {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
-          }
-        );
-      }
     } else if (existingUser && !isResend) {
-      throw new Error('User with this email already exists. Use resend invite instead.');
+      throw new Error(
+        `${email} already has an account. To help them sign in, use Reset Password on their row instead.`,
+      );
     } else {
-      // Create new user with temporary password if provided
-      const createUserOptions: any = {
+      const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
         email,
-        email_confirm: temporaryPassword ? true : false, // Auto-confirm if using temp password
+        password: initialPassword,
+        email_confirm: true,
         user_metadata: {
           full_name: fullName,
           role: role,
-          requires_password_change: temporaryPassword ? true : false,
+          requires_password_change: true,
         },
-      };
-
-      // Add password if provided
-      if (temporaryPassword) {
-        createUserOptions.password = temporaryPassword;
-      }
-
-      const { data: newUser, error: createError } = await supabase.auth.admin.createUser(createUserOptions);
+      });
 
       if (createError) {
         console.error('User creation error:', createError);
         throw new Error(
-          `Failed to create user: ${createError.message}. If it says the address is already registered, reload the user list and use Resend on their row instead.`,
+          `Failed to create user: ${createError.message}. If it says the address is already registered, reload the user list and use Reset Password on their row instead.`,
         );
       }
 
@@ -662,7 +566,7 @@ Deno.serve(async (req) => {
           if (roleError) {
             console.error('Role update error:', roleError);
             throw new Error(
-              `Failed to update role: ${roleError.message}. The account exists but still holds its previous role - use Resend on their row to try again.`,
+              `Failed to update role: ${roleError.message}. The account exists but still holds its previous role - set it with Edit User on their row.`,
             );
           }
           console.log('Role updated successfully');
@@ -681,7 +585,7 @@ Deno.serve(async (req) => {
         if (roleError) {
           console.error('Role assignment error:', roleError);
           throw new Error(
-            `Failed to assign role: ${roleError.message}. The account exists with no role and cannot sign in usefully - use Resend on their row to finish setting it up.`,
+            `Failed to assign role: ${roleError.message}. The account exists with no role and cannot sign in usefully - set the role with Edit User on their row.`,
           );
         }
         console.log('Role assigned successfully');
@@ -700,7 +604,7 @@ Deno.serve(async (req) => {
         if (clientMappingError) {
           console.error('Client mapping error:', clientMappingError);
           throw new Error(
-            `Failed to map user to client: ${clientMappingError.message}. The account exists but is not linked to the client, so it will see nothing - use Resend on their row to retry the link.`,
+            `Failed to map user to client: ${clientMappingError.message}. The account exists but is not linked to the client, so it will see nothing - delete the user and invite them again.`,
           );
         }
 
@@ -721,7 +625,7 @@ Deno.serve(async (req) => {
         if (siteMappingError) {
           console.error('Site mapping error:', siteMappingError);
           throw new Error(
-            `Failed to map user to sites: ${siteMappingError.message}. The account exists but has no site assignments - use Resend on their row to retry them.`,
+            `Failed to map user to sites: ${siteMappingError.message}. The account exists but has no site assignments - assign them with Edit Sites on their row.`,
           );
         }
 
@@ -729,180 +633,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Temporary password path.
-    if (temporaryPassword) {
-      if (deliverByEmail) {
-        await sendInitialPasswordEmail(supabase, {
-          email,
-          fullName,
-          role,
-          password: temporaryPassword,
-          origin,
-        });
-        console.log('User created with temporary password - login details emailed');
-        return new Response(
-          JSON.stringify({
-            success: true,
-            userId: userId,
-            isNewUser,
-            passwordEmailed: true,
-            message: 'User created. Login details emailed. They must change the password on first login.',
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
-        );
-      }
-
-      // Legacy path: admin relays the password out-of-band.
-      console.log('User created with temporary password - skipping email invitation');
-      return new Response(
-        JSON.stringify({
-          success: true,
-          userId: userId,
-          isNewUser,
-          message: isNewUser
-            ? `User created successfully. Temporary password: ${temporaryPassword}. User must change password on first login.`
-            : 'User updated successfully.',
-          temporaryPassword: temporaryPassword,
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        }
-      );
-    }
-
-    // Generate a fresh invite link (only if not using temp password)
-    const { data: inviteData, error: inviteError } = await supabase.auth.admin.generateLink({
-      type: 'invite',
+    // The one invite path: email the login details with the temporary
+    // password. If the email fails the account and password are already set,
+    // and the error says so (sendInitialPasswordEmail throws).
+    await sendInitialPasswordEmail(supabase, {
       email,
-      options: {
-        data: {
-          full_name: fullName,
-          role: role,
-        },
-        redirectTo,
-      },
+      fullName,
+      role,
+      password: initialPassword,
+      origin,
     });
-
-    if (inviteError) {
-      console.error('Invite link generation error:', inviteError);
-      throw new Error(
-        `Failed to generate invite link: ${inviteError.message}. The account is set up but no email went out - use Resend on their row to try again.`,
-      );
-    }
-
-    console.log('Fresh invite link generated');
-    
-    // Get the magic link URL from the generated link
-    const inviteUrl = inviteData?.properties?.action_link || redirectTo;
-
-    // Send branded invite email via Resend
-    const { data: companySettings } = await supabase
-      .from('settings')
-      .select('company_name, company_logo_url')
-      .single();
-
-    const companyName = companySettings?.company_name || 'WM Compliance';
-    const logoUrl = companySettings?.company_logo_url;
-
-    const emailHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>You're Invited to ${companyName}</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5;">
-    <tr>
-      <td align="center" style="padding: 40px 20px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <!-- Header -->
-          <tr>
-            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #e4e4e7;">
-              ${logoUrl ? `<img src="${logoUrl}" alt="${companyName}" style="max-height: 60px; max-width: 200px;">` : `<h1 style="margin: 0; color: #18181b; font-size: 24px; font-weight: 700;">${companyName}</h1>`}
-            </td>
-          </tr>
-          
-          <!-- Content -->
-          <tr>
-            <td style="padding: 40px;">
-              <h2 style="margin: 0 0 16px; color: #18181b; font-size: 20px; font-weight: 600;">
-                Welcome, ${fullName}!
-              </h2>
-              <p style="margin: 0 0 24px; color: #52525b; font-size: 16px; line-height: 1.6;">
-                You've been invited to join <strong>${companyName}</strong> as a <strong style="color: #2563eb;">${role}</strong>.
-              </p>
-              <p style="margin: 0 0 32px; color: #52525b; font-size: 16px; line-height: 1.6;">
-                Click the button below to set up your password and access your account.
-              </p>
-              
-              <!-- CTA Button -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td align="center">
-                    <a href="${inviteUrl}" style="display: inline-block; padding: 14px 32px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px;">
-                      Accept Invitation
-                    </a>
-                  </td>
-                </tr>
-              </table>
-              
-              <p style="margin: 32px 0 0; color: #71717a; font-size: 14px; line-height: 1.6;">
-                If the button doesn't work, copy and paste this link into your browser:
-              </p>
-              <p style="margin: 8px 0 0; word-break: break-all;">
-                <a href="${inviteUrl}" style="color: #2563eb; font-size: 14px;">${inviteUrl}</a>
-              </p>
-            </td>
-          </tr>
-          
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 24px 40px; background-color: #fafafa; border-top: 1px solid #e4e4e7; border-radius: 0 0 12px 12px;">
-              <p style="margin: 0; color: #71717a; font-size: 12px; text-align: center;">
-                This invitation was sent by ${companyName}. If you didn't expect this email, you can safely ignore it.
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-    `;
-
-    const { error: emailError } = await resend.emails.send({
-      from: `${companyName} <noreply@watsonmattheus.com>`,
-      to: [email],
-      subject: `You're invited to join ${companyName}`,
-      html: emailHtml,
-    });
-
-    if (emailError) {
-      console.error('Resend email error:', emailError);
-      throw new Error(
-        `Failed to send invite email: ${emailError.message}. The account and invite link exist but the email did not send - use Resend on their row to try again.`,
-      );
-    }
-
-    console.log('Invite email sent via Resend');
-
+    console.log(isNewUser ? 'User created' : 'User updated', '- login details emailed');
     return new Response(
       JSON.stringify({
         success: true,
         userId: userId,
         isNewUser,
-        message: isResend 
-          ? 'Invitation resent successfully. User will receive a new email with password setup link.'
-          : 'Invitation sent successfully. User will receive an email with password setup link.',
+        passwordEmailed: true,
+        message: isNewUser
+          ? `User created. Login details emailed to ${email}. They must choose their own password at first sign-in.`
+          : `Login details re-sent to ${email} with a new temporary password. They must choose their own password at first sign-in.`,
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
     );
   } catch (error) {
     console.error('Error in invite-user function:', error);

@@ -24,8 +24,10 @@ const ContractorProtectedRoute = ({ children }: { children: React.ReactNode }) =
     return <Navigate to={`/auth/login?next=${next}`} replace />;
   }
   // Forced password change enforced at the guard (see ProtectedRoute).
+  // Same hardened screen as Login and /auth use: it checks the flag was cleared
+  // and signs in with the new password before letting the user in.
   if (session.user?.user_metadata?.requires_password_change === true) {
-    return <Navigate to="/auth/set-password" replace />;
+    return <Navigate to="/auth/reset-password" replace />;
   }
   // A session from an accepted reset code must set its new password first.
   if (isRecoverySession(session)) {

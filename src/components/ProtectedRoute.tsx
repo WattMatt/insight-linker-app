@@ -23,8 +23,10 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   // Forced password change is enforced at the guard, not just on the login
   // pages — a user who deep-links past /auth/login still lands on set-password.
   // The flag is cleared by SetPassword/ResetPassword after a successful change.
+  // Same hardened screen as Login and /auth use: it checks the flag was cleared
+  // and signs in with the new password before letting the user in.
   if (session.user?.user_metadata?.requires_password_change === true) {
-    return <Navigate to="/auth/set-password" replace />;
+    return <Navigate to="/auth/reset-password" replace />;
   }
   // A session from an accepted reset code must set its new password first.
   if (isRecoverySession(session)) {

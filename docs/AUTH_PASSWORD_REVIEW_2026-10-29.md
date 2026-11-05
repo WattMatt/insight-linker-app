@@ -285,3 +285,37 @@ Fixes to the existing invite and resend paths in `invite-user` (RC-4):
 **Deploy order:**
 1. `supabase functions deploy invite-user --use-api` first. The old dialog keeps working against the new function.
 2. Then the web app. Until then, the new dialog's `action` field is unknown to the old function, which rejects the request with "No role was supplied", so nothing changes.
+
+**Deployed 2026-11-05:**
+- `invite-user` v305, then PR #87 (`edf8d922`).
+- PR #88 (`16b78c2e`) fixed `AdminOnlyRoute`, which had sent every Admin from `/users` to `/dashboard` since 2026-08-05 (`isLoading` read on a disabled query).
+- Live-verified: "Email reset code" sent the email. An immediate second request showed "less than a minute ago… still the valid one", and no second email was sent.
+
+### Step 3: branch `fix/invites-temp-password` (not deployed)
+
+Decision (user, 2026-11-05): **every invite emails a generated temporary password.** The single-use invite link is retired. It was burned by mail scanners and likely expired within the hour (`mailer_otp_exp` = 3600).
+
+| Entry point | Before | Now |
+|---|---|---|
+| Admin "Invite User" form | Link by default; a typed password shown in a toast; or emailed password if a box was ticked | Always a generated, emailed password. The password field and the checkbox are removed. |
+| Pending invites "Send" | Link | Generated, emailed password |
+| MCP `invite_portal_users` (invite and re-send) | Link | Generated, emailed password; each person gets a different one |
+| `invite-user`, any other caller | Link, or password returned to the caller | Refused unless `deliverByEmail` and a password of 12+ characters (`invitePolicy.ts`). The link-generation and "return the password" code is removed, as is the resend-path recovery email. |
+
+Also in Step 3:
+- The forced first-sign-in change now goes to the hardened `/auth/reset-password` from all three route guards. Login and `/auth` already did.
+- Error messages that said "use Resend on their row" (a button that no longer exists) now name the current action: Reset Password, Edit User or Edit Sites.
+- Re-sending to an existing user keeps their other `user_metadata`, merged rather than replaced.
+
+Users who accepted a link invite and never set a password can be helped with Reset Password → "Email reset code" (Step 2).
+
+**Verified before deploy:**
+- This worktree now has its own `npm ci`, so the MCP tests load: **120/120 files, 969 tests pass**, including the updated `portalTools` invite test (emailed password, distinct per person).
+- New `invitePolicy` tests: 4.
+- `tsc` reports no errors in the changed app files.
+- The function type-checks against the local types with only the two known kinds of error.
+- ESLint warnings are unchanged from `main`, file by file.
+
+**Deploy order:** web app first, then `invite-user`.
+- The new web app sends emailed passwords, which the old function already supports.
+- The new function refuses link invites, which the old web app sends by default.

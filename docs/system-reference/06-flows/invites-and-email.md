@@ -8,6 +8,8 @@ Schema/route/fn facts are cited to the earlier review chapters rather than re-de
 - Tables/RLS/RPCs: `docs/system-reference/02-data-model/tables-03.md`, `…/rls-policies-03.md`, `…/rpcs-and-functions-01.md`, `…/triggers-enums-storage.md`
 - Known issues: `docs/system-reference/GAPS.md`, `docs/system-reference/SECURITY-FINDINGS-phase2.md`
 
+> **Superseded in part (2026-11).** Invites no longer send a single-use invite link (Step 8 below), and no longer return a cleartext temporary password to the admin. Every invite and re-send (admin form, pending invites, MCP `invite_portal_users`) emails a generated temporary password with `requires_password_change: true`, enforced by `supabase/functions/invite-user/invitePolicy.ts`. Forced changes go to `/auth/reset-password`. Admin password help is the two-action "Reset Password" dialog (`action: "reset_password"`). See `docs/AUTH_PASSWORD_REVIEW_2026-10-29.md` §6 for the reasons and the verification.
+
 > **Doc-drift note (read first).** `03-auth-and-access/auth-flows.md:197-201` still describes the **pre-fix** invite (`origin` from request header; sender `onboarding@resend.dev`). The **current code** read for this chapter reflects the deployed fixes — `origin = Deno.env.get('APP_URL')` (`invite-user/index.ts:78`) and sender `noreply@watsonmattheus.com` (`:466`). GAPS G-SEC-06 and G-SEC-07 are marked CLOSED/deployed (`GAPS.md:72,79`). This chapter documents the current code; §auth-flows.md is stale on these two points.
 
 ---

@@ -14,6 +14,7 @@ import { buildSiteCocModel, loadSiteCocData } from "@/lib/siteCoc/siteCocData";
 import { judgementRules, type RuleResult } from "@/lib/siteCoc/judgementRules";
 import { planCertLinks, type LinkDecision } from "@/lib/siteCoc/linkCerts";
 import { storagePathFromUrl } from "@/lib/documents/paths";
+import { generateInitialPassword } from "@/lib/auth/initialInvite";
 import { isSnagOpen } from "@/lib/subsectionStatus";
 
 type Row = Record<string, any>;
@@ -374,7 +375,7 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
         return {
           writes_nothing: true, to_invite: plan.filter((x) => x.action === "invite"), to_resend: plan.filter((x) => x.action === "resend"), skipped,
           confirm_token: plan.length ? opts.tokens.issue({ siteId: store.client.id, dataHash, planHash: state }) : null,
-          note: "Applying sends each person an invite email from the app (role Client on Fortress_Fund, agency scope as listed). Requires fortress.write and the Admin role.",
+          note: "Applying emails each person their login details with a generated temporary password they must change at first sign-in (role Client on Fortress_Fund, agency scope as listed). For a re-send this replaces their unused temporary password. Requires fortress.write and the Admin role.",
         };
       }
       if (!opts.isAdmin) throw new Error("invite refused: requires the Admin role");
@@ -383,8 +384,11 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       if (!(await opts.consumeToken(confirm_token!))) throw new Error("invite refused: token already used");
       const results: { email: string; action: string; ok: boolean; status: number; error?: string }[] = [];
       for (const x of plan) {
+        // Login details with a generated temporary password (forced change at first
+        // sign-in): invite-user no longer sends single-use invite links.
         const r = await p.inviteUser({
           email: x.email, fullName: x.full_name, role: "Client", clientId: store.client.id,
+          temporaryPassword: generateInitialPassword(), deliverByEmail: true,
           ...(x.managing_agency_id ? { managingAgencyId: x.managing_agency_id } : {}), ...(x.action === "resend" ? { isResend: true } : {}),
         });
         const b = r.body as Row | null;
