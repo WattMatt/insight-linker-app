@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { Resend } from 'https://esm.sh/resend@2.0.0';
+import { adminResetPassword, normalizeEmail, type AdminResetMethod } from './adminReset.ts';
 
 const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
 
@@ -20,6 +21,10 @@ const USER_PAGE_SIZE = 200;
 const MAX_USER_PAGES = 50;
 
 interface InviteUserRequest {
+  // 'reset_password' runs one explicit admin reset (see ./adminReset.ts) and
+  // nothing else — no role, client or site changes. Omitted = invite/resend.
+  action?: 'reset_password';
+  method?: AdminResetMethod;
   email: string;
   fullName: string;
   role: string;
@@ -56,20 +61,32 @@ function renderInitialPasswordEmailHtml(params: {
   companyName: string;
   logoUrl?: string | null;
   fullName: string;
-  role: string;
+  role?: string;
   email: string;
   password: string;
   loginUrl: string;
+  purpose: 'new_account' | 'reset';
 }): string {
-  const { companyName, logoUrl, fullName, role, email, password, loginUrl } = params;
+  const { companyName, logoUrl, fullName, role, email, password, loginUrl, purpose } = params;
   const brand = escapeHtml(companyName);
+  const title = purpose === 'reset' ? `Your ${brand} password has been reset` : `Your ${brand} account is ready`;
+  const greeting = fullName ? `Hello, ${escapeHtml(fullName)}` : 'Hello';
+  const intro =
+    purpose === 'reset'
+      ? `An administrator has reset your password for <strong>${brand}</strong>. Use the temporary password below to sign in.`
+      : `An account has been created for you on <strong>${brand}</strong> as a
+                <strong style="color: #2563eb;">${escapeHtml(role ?? '')}</strong>. Use the details below to sign in.`;
+  const footer =
+    purpose === 'reset'
+      ? `This password reset was made by ${brand}. If you weren't expecting it, please contact your administrator.`
+      : `This account was created by ${brand}. If you weren't expecting it, please contact your administrator.`;
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your ${brand} account is ready</title>
+  <title>${title}</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5;">
@@ -84,11 +101,10 @@ function renderInitialPasswordEmailHtml(params: {
           <tr>
             <td style="padding: 40px;">
               <h2 style="margin: 0 0 16px; color: #18181b; font-size: 20px; font-weight: 600;">
-                Welcome, ${escapeHtml(fullName)}!
+                ${purpose === 'reset' ? greeting : `Welcome, ${escapeHtml(fullName)}!`}
               </h2>
               <p style="margin: 0 0 24px; color: #52525b; font-size: 16px; line-height: 1.6;">
-                An account has been created for you on <strong>${brand}</strong> as a
-                <strong style="color: #2563eb;">${escapeHtml(role)}</strong>. Use the details below to sign in.
+                ${intro}
               </p>
 
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin: 0 0 24px; background-color: #f8fafc; border: 1px solid #e4e4e7; border-radius: 8px;">
@@ -129,7 +145,7 @@ function renderInitialPasswordEmailHtml(params: {
           <tr>
             <td style="padding: 24px 40px; background-color: #fafafa; border-top: 1px solid #e4e4e7; border-radius: 0 0 12px 12px;">
               <p style="margin: 0; color: #71717a; font-size: 12px; text-align: center;">
-                This account was created by ${brand}. If you weren't expecting it, please contact your administrator.
+                ${footer}
               </p>
             </td>
           </tr>
@@ -149,8 +165,16 @@ function renderInitialPasswordEmailHtml(params: {
  */
 async function sendInitialPasswordEmail(
   supabase: ReturnType<typeof createClient>,
-  params: { email: string; fullName: string; role: string; password: string; origin: string },
+  params: {
+    email: string;
+    fullName: string;
+    role?: string;
+    password: string;
+    origin: string;
+    purpose?: 'new_account' | 'reset';
+  },
 ): Promise<void> {
+  const purpose = params.purpose ?? 'new_account';
   const { data: settings } = await supabase
     .from('settings')
     .select('company_name, company_logo_url')
@@ -167,12 +191,13 @@ async function sendInitialPasswordEmail(
     email: params.email,
     password: params.password,
     loginUrl: `${params.origin}/auth/login`,
+    purpose,
   });
 
   const { error: emailError } = await resend.emails.send({
     from: `${companyName} <noreply@watsonmattheus.com>`,
     to: [params.email],
-    subject: `Your ${companyName} account is ready`,
+    subject: purpose === 'reset' ? `Your ${companyName} password has been reset` : `Your ${companyName} account is ready`,
     html,
   });
 
@@ -218,7 +243,9 @@ async function findUserByEmail(
       return undefined;
     }
 
-    const match = users.find(u => u.email === email);
+    // Supabase stores addresses lower-cased; compare the same way so a
+    // capitalised address typed by an admin still finds the account.
+    const match = users.find(u => normalizeEmail(u.email) === normalizeEmail(email));
     if (match) {
       return match;
     }
@@ -278,7 +305,45 @@ Deno.serve(async (req) => {
       throw new Error(`Only admins can invite users - your role is ${roleData.role}.`);
     }
 
-    const { email, fullName, role, isResend, temporaryPassword, clientId, managingAgencyId, siteIds, deliverByEmail }: InviteUserRequest = await req.json();
+    const body: InviteUserRequest = await req.json();
+    const { fullName, role, isResend, temporaryPassword, clientId, managingAgencyId, siteIds, deliverByEmail } = body;
+    const email = normalizeEmail(body.email);
+
+    // Redirect base from env, NOT the request origin — a preview deployment or a
+    // spoofed Origin/Referer header must never end up in emailed links. Mirrors
+    // send-password-reset (APP_URL). Feeds the invite, recovery and reset paths.
+    const origin = Deno.env.get('APP_URL') ?? 'https://insight-linker-app.vercel.app';
+
+    if (body.action === 'reset_password') {
+      const result = await adminResetPassword(
+        { email, method: body.method as AdminResetMethod, temporaryPassword, actorId: user.id },
+        {
+          findUserByEmail: (address) => findUserByEmail(supabase, address),
+          sendResetCode: (address) => supabase.auth.resetPasswordForEmail(address, { redirectTo: `${origin}/auth` }),
+          setTemporaryPassword: (target, password) =>
+            supabase.auth.admin.updateUserById(target.id, {
+              password,
+              email_confirm: true,
+              user_metadata: { ...(target.user_metadata ?? {}), requires_password_change: true },
+            }),
+          emailTemporaryPassword: ({ email: address, fullName: name, password }) =>
+            sendInitialPasswordEmail(supabase, { email: address, fullName: name, password, origin, purpose: 'reset' }),
+          recordEvent: async (userId, metadata) => {
+            const { error } = await supabase.from('auth_events').insert({
+              user_id: userId,
+              event_type: 'password_reset_requested',
+              metadata,
+            });
+            if (error) console.warn('auth_events admin reset insert failed (non-fatal):', error);
+          },
+        },
+      );
+      console.log('Admin reset', body.method, 'for', email, 'by', user.id);
+      return new Response(JSON.stringify({ success: true, message: result.message }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }
 
     // The role reaches user_metadata and the user_roles insert unchecked, so an
     // absent or unknown one is rejected here. Never substitute a default: which
@@ -340,10 +405,6 @@ Deno.serve(async (req) => {
       throw new Error('Temporary password must be at least 6 characters - enter a longer one and send the invite again.');
     }
 
-    // Redirect base from env, NOT the request origin — a preview deployment or a
-    // spoofed Origin/Referer header must never end up in invite links. Mirrors
-    // send-password-reset (APP_URL). Feeds both redirectTo and recoveryRedirect below.
-    const origin = Deno.env.get('APP_URL') ?? 'https://insight-linker-app.vercel.app';
     const redirectTo = `${origin}/auth?type=invite`;
 
     console.log('Redirect URL:', redirectTo);
@@ -357,7 +418,9 @@ Deno.serve(async (req) => {
     if (existingUser && isResend) {
       // User exists, resending invite
       userId = existingUser.id;
-      const isConfirmed = existingUser.email_confirmed_at !== null;
+      // Truthiness, not `!== null`: the field can be absent (undefined) for an
+      // unconfirmed user, which `!== null` would read as confirmed.
+      const isConfirmed = Boolean(existingUser.email_confirmed_at);
       console.log('User already exists:', userId, 'Email confirmed:', isConfirmed);
       
       // Update user metadata if needed
@@ -380,56 +443,74 @@ Deno.serve(async (req) => {
         updateData
       );
 
+      // This used to be a console.warn, after which the admin was told "Password
+      // reset successfully. Temporary password: X" for a password Supabase had
+      // rejected (e.g. found in a breach). Stop here instead.
       if (updateError) {
-        console.warn('Failed to update user:', updateError);
+        console.error('Failed to update user:', updateError);
+        throw new Error(
+          `Supabase rejected the update for ${email}: ${updateError.message}${temporaryPassword ? ' - the temporary password was NOT set' : ''}. Nothing was emailed.`,
+        );
       }
 
       // Update role if changed
-      const { data: existingRole } = await supabase
+      const { data: existingRole, error: roleReadError } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', userId)
         .maybeSingle();
+      if (roleReadError) {
+        throw new Error(`Could not read the current role for ${email}: ${roleReadError.message}.`);
+      }
 
       if (existingRole && existingRole.role !== role) {
-        await supabase
+        const { error } = await supabase
           .from('user_roles')
           .update({ role })
           .eq('user_id', userId);
+        if (error) throw new Error(`Failed to update the role for ${email}: ${error.message}.`);
       } else if (!existingRole) {
-        await supabase
+        const { error } = await supabase
           .from('user_roles')
           .insert({ user_id: userId, role });
+        if (error) throw new Error(`Failed to assign the role for ${email}: ${error.message}.`);
       }
 
       // Update client mapping if Client role
       if (role === 'Client' && clientId) {
         // Check if mapping exists
-        const { data: existingMapping } = await supabase
+        const { data: existingMapping, error: mappingReadError } = await supabase
           .from('user_clients')
           .select('id')
           .eq('user_id', userId)
           .maybeSingle();
+        if (mappingReadError) {
+          throw new Error(`Could not read the client link for ${email}: ${mappingReadError.message}.`);
+        }
 
-        if (existingMapping) {
-          await supabase
-            .from('user_clients')
-            .update({ client_id: clientId, managing_agency_id: managingAgencyId ?? null })
-            .eq('user_id', userId);
-        } else {
-          await supabase
-            .from('user_clients')
-            .insert({ user_id: userId, client_id: clientId, managing_agency_id: managingAgencyId ?? null });
+        const { error: mappingError } = existingMapping
+          ? await supabase
+              .from('user_clients')
+              .update({ client_id: clientId, managing_agency_id: managingAgencyId ?? null })
+              .eq('user_id', userId)
+          : await supabase
+              .from('user_clients')
+              .insert({ user_id: userId, client_id: clientId, managing_agency_id: managingAgencyId ?? null });
+        if (mappingError) {
+          throw new Error(`Failed to link ${email} to the client: ${mappingError.message}.`);
         }
       }
 
       // Update site mappings if Contractor role
       if (role === 'Contractor' && siteIds && siteIds.length > 0) {
         // Delete existing site mappings
-        await supabase
+        const { error: siteDeleteError } = await supabase
           .from('user_sites')
           .delete()
           .eq('user_id', userId);
+        if (siteDeleteError) {
+          throw new Error(`Could not clear the site assignments for ${email}: ${siteDeleteError.message}. They are unchanged.`);
+        }
 
         // Insert new site mappings
         const siteMappings = siteIds.map(siteId => ({
@@ -437,9 +518,14 @@ Deno.serve(async (req) => {
           site_id: siteId,
         }));
 
-        await supabase
+        const { error: siteInsertError } = await supabase
           .from('user_sites')
           .insert(siteMappings);
+        if (siteInsertError) {
+          throw new Error(
+            `Site assignments for ${email} were cleared but the new ones failed to save: ${siteInsertError.message}. Re-assign their sites.`,
+          );
+        }
 
         console.log(`Updated user site assignments to ${siteIds.length} site(s)`);
       }
