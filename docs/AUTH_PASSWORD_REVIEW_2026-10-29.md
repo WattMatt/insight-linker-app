@@ -319,3 +319,51 @@ Users who accepted a link invite and never set a password can be helped with Res
 **Deploy order:** web app first, then `invite-user`.
 - The new web app sends emailed passwords, which the old function already supports.
 - The new function refuses link invites, which the old web app sends by default.
+
+**Deployed 2026-11-05:**
+- Web from PR #89 (`4cb72404`) first, then `invite-user` v306.
+- Live-verified:
+  - The invite dialog has no password box, checkbox or link option.
+  - The function refuses a link-style invite and a password under 12 characters before touching any account.
+  - An anonymous call is refused.
+- A real invite was not sent, because that creates an account.
+
+### Step 4: branch `feat/sign-in-history` (not deployed)
+
+Decision (user, 2026-11-05): pre-sign-in failures are matched to users through a **hash of the typed email**. These lines are labelled "Reported by sign-in page", because anyone could send one.
+
+**Facts checked before building:**
+- `auth_events` exists in production and is being written. With the user's own session, the test account showed 5 rows today: 2 code sign-ins, the password change ("verified"), and both admin "Email reset code" attempts with `actor_id` and the rate-limit `error_code`.
+- Supabase's own audit log is written to Postgres: auth config `audit_log_disable_postgres = false`.
+
+**Changes:**
+- **Migration `20261105130000_admin_sign_in_history.sql`:** `public.admin_user_sign_in_history(p_user_id, p_limit)`. It is SECURITY DEFINER, refuses non-Admins (42501), and is not executable by `anon`. It returns:
+  - `account`: password ever set, email confirmed, last sign-in, last reset email, forced-change flag, ban;
+  - `events`: one newest-first timeline from `auth.audit_log_entries` (source `supabase`; token refresh/revoke left out), plus `auth_events` tied to the user (`app`), plus pre-sign-in rows matched by `metadata.email_sha256` (`reported`). The hash is removed from the output.
+  - It also adds a partial index for the hash lookup.
+- **`log-auth-event`:** for pre-sign-in events, it takes `email`, stores only `metadata.email_sha256` (SHA-256 of the trimmed, lower-cased address), and never stores the address. Clients cannot set the hash key themselves; it isn't on the metadata allow-list.
+- **`recordAuthEvent(type, metadata, { email })`:** used for reset sends, failed sends, rejected codes and sign-in-code requests. The email is sent once and never written to the `localStorage` retry queue.
+- **Users → row menu → "Sign-in History":**
+  - account warnings first, e.g. "No password has ever been set, but they have signed in before… send a reset code";
+  - then the timeline in plain language, with a source badge and `ref` codes.
+
+**Verified before deploy:**
+- The migration ran on a local Postgres 17 with stand-ins for the Supabase `auth` schema. All 8 checks pass, including after applying the migration twice:
+  - non-Admin and anonymous callers are refused;
+  - the account state is correct;
+  - the timeline order is correct, and token refreshes, other users and other hashes are excluded;
+  - a reported row keeps its error code and IP, with the hash stripped;
+  - admin actions are attributed to the admin;
+  - the limit and unknown-user cases behave.
+- The JavaScript hash equals the SQL hash for the same input (`7a126a99…`).
+- Full suite: **124/124 files, 989 tests pass.**
+- No type errors in the changed files. ESLint is unchanged (`Users.tsx` 25 warnings, the same as `main`; the new files have none).
+
+**Not verified:** the exact `auth.audit_log_entries` payload fields on this project. The function reads `action`, `actor_id`, `actor_username` and `traits.user_id`, which is Supabase's documented shape. Any unknown action is shown with its raw name.
+
+**Deploy order:**
+1. The migration on production (one SQL file; then `supabase migration repair --status applied 20261105130000`).
+2. `log-auth-event`.
+3. The web app.
+
+The web app's history dialog needs the function. Until step 1 is done, the dialog shows the database error.
