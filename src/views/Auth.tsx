@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useNavigate } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { LoadingState } from "@/components/LoadingState";
+import { isRecoverySession } from "@/lib/auth/recoveryFlow";
 
 // Auth — backward-compatibility dispatcher.
 //
@@ -67,7 +68,14 @@ const Auth = () => {
 
     // 4. Default: redirect to login (or dashboard if already authed —
     //    the /auth/login page handles that case in its own useEffect).
+    //    A recovery link (/auth#access_token=…&type=recovery) resolves
+    //    getSession() BEFORE the SDK fires PASSWORD_RECOVERY, so the session
+    //    itself is checked here rather than waiting on the event.
     void supabase.auth.getSession().then(({ data }) => {
+      if (isRecoverySession(data.session)) {
+        navigate("/auth/reset-password");
+        return;
+      }
       if (data.session?.user?.user_metadata?.requires_password_change) {
         navigate("/auth/reset-password");
         return;

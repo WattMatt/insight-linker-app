@@ -18,6 +18,7 @@ import {
   type CaptchaTurnstileHandle,
 } from "@/components/CaptchaTurnstile";
 import { recordAuthEvent } from "@/lib/auth-audit";
+import { describeCodeError, isRecoverySession } from "@/lib/auth/recoveryFlow";
 import { signInSchema, forgotPasswordSchema, type SignInInput, type ForgotPasswordInput } from "@/lib/validation-schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,7 +63,8 @@ export default function Login() {
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
-        const needsChange = data.session.user.user_metadata?.requires_password_change;
+        const needsChange =
+          data.session.user.user_metadata?.requires_password_change || isRecoverySession(data.session);
         if (needsChange) {
           navigate("/auth/reset-password");
         } else {
@@ -170,9 +172,10 @@ export default function Login() {
     });
 
     if (error || !data.session) {
-      const msg = error?.message?.includes("expired")
-        ? "Code expired. Request a new one."
-        : "Invalid code. Check the email and try again.";
+      const described = error ? describeCodeError(error) : null;
+      const msg = described
+        ? `${described.message} (ref: ${described.ref})`
+        : "The code couldn't be checked. Try again.";
       setServerError(msg);
       toast.error(msg);
       setMlVerifying(false);
