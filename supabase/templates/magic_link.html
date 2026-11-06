@@ -1,0 +1,92 @@
+<!--
+  Supabase "Magic Link" email template: code-only sign-in.
+
+  NOTE: Supabase renders template tags even inside HTML comments, so this
+  comment must never contain one (write the names without braces). The deploy
+  strips this comment before upload anyway.
+
+  WHY: the Login page's "Sign-in code" tab (src/views/auth/Login.tsx) calls
+  signInWithOtp, then verifyOtp({ type: "email" }) with the 6-digit .Token
+  rendered here.
+
+  This template must NOT contain .ConfirmationURL (or any link carrying a
+  token). The code and that link are one single-use token, and mail scanners
+  (Microsoft Defender Safe Links etc.) open links on arrival, which used it up
+  before the user typed the code. Same cause as the reset email
+  (docs/AUTH_PASSWORD_REVIEW_2026-10-29.md, RC-2). The button below opens the
+  code-entry screen and carries no token.
+
+  Supabase template variables used: .Token (6-digit code), .SiteURL (https://watsonmattheus.com).
+  Applied to the live project via the Management API (mailer_templates_magic_link_content).
+  Subject: "Your WM Compliance sign-in code"
+-->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your sign-in code</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #e4e4e7;">
+              <h1 style="margin: 0; color: #18181b; font-size: 24px; font-weight: 700;">WM Compliance</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 16px; color: #18181b; font-size: 20px; font-weight: 600;">
+                Sign in
+              </h2>
+              <p style="margin: 0 0 24px; color: #52525b; font-size: 16px; line-height: 1.6;">
+                Enter this 6-digit code in the app to sign in:
+              </p>
+
+              <!-- The code -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin: 0 0 24px;">
+                <tr>
+                  <td align="center" style="padding: 20px; background-color: #f8fafc; border: 1px solid #e4e4e7; border-radius: 8px;">
+                    <span style="color: #18181b; font-size: 34px; font-weight: 700; font-family: 'SF Mono', Menlo, Consolas, monospace; letter-spacing: 10px;">{{ .Token }}</span>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0 0 24px; color: #71717a; font-size: 14px; line-height: 1.6;">
+                This code expires in 1 hour. Only the code in the most recent email works — asking for another code cancels this one.
+                If you didn't ask to sign in, you can safely ignore this email.
+              </p>
+
+              <!-- Opens the code-entry screen. Deliberately carries no token. -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center">
+                    <a href="{{ .SiteURL }}/auth/login?mode=code" style="display: inline-block; padding: 14px 32px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px;">
+                      Enter your code
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 40px; background-color: #fafafa; border-top: 1px solid #e4e4e7; border-radius: 0 0 12px 12px;">
+              <p style="margin: 0; color: #71717a; font-size: 12px; text-align: center;">
+                This email was sent by WM Compliance. For security, this code expires in 1 hour.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
