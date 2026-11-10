@@ -1,8 +1,9 @@
-import { supabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { supabase as browserDb } from "@/integrations/supabase/client";
 import { normCert } from "@/lib/siteCoc/normalize";
 import { extractEvalVerdict } from "@/lib/cocFilename";
 import { docStatusFromVerdict } from "@/lib/siteCoc/verdictMap";
-import { findOrCreateCategory, insertCocCertificateDoc, insertEvaluationReportDoc } from "@/lib/coc/uploadCocFiles";
+import { findOrCreateCategory, insertCocCertificateDoc, insertEvaluationReportDoc, type CocDataCtx } from "@/lib/coc/uploadCocFiles";
 import { LIVE_REVIEW_STATUSES } from "@/lib/siteCoc/liveRows";
 
 export interface AssignablePoolFile {
@@ -15,7 +16,7 @@ export interface AssignablePoolFile {
 
 // Linking a file is not a verdict, so proposed rows may receive the link (sign-off then stamps
 // the document); superseded rows may not.
-async function stampCert(siteId: string, subsectionId: string, certKey: string, col: "coc_document_id" | "eval_document_id", docId: string) {
+async function stampCert(supabase: SupabaseClient, siteId: string, subsectionId: string, certKey: string, col: "coc_document_id" | "eval_document_id", docId: string) {
   if (!certKey) return;
   const { data: empty } = await supabase.from("coc_certificates").select("id")
     .eq("site_id", siteId).eq("subsection_id", subsectionId).eq("cert_no_norm", certKey).is("superseded_at", null).is(col, null).limit(1);
@@ -30,7 +31,7 @@ async function stampCert(siteId: string, subsectionId: string, certKey: string, 
 
 /** Register-truth: the doc's status comes from the matching register cert's verdict.
  * No cert on this subsection => Pending ("awaiting verification"). */
-async function lookupRegisterVerdict(siteId: string, subsectionId: string, certKey: string): Promise<string | null> {
+async function lookupRegisterVerdict(supabase: SupabaseClient, siteId: string, subsectionId: string, certKey: string): Promise<string | null> {
   if (!certKey) return null;
   const { data } = await supabase.from("coc_certificates").select("verdict")
     .eq("site_id", siteId).eq("subsection_id", subsectionId).eq("cert_no_norm", certKey)
@@ -39,11 +40,12 @@ async function lookupRegisterVerdict(siteId: string, subsectionId: string, certK
 }
 
 /** Insert a subsection_documents row for a pooled file (firing the COC rollup), link the cert, mark the pool row assigned. */
-export async function assignPoolFile(siteId: string, file: AssignablePoolFile, subsectionId: string, kind: "coc" | "eval"): Promise<void> {
+export async function assignPoolFile(siteId: string, file: AssignablePoolFile, subsectionId: string, kind: "coc" | "eval", ctx?: CocDataCtx): Promise<void> {
+  const supabase = ctx?.client ?? (browserDb as unknown as SupabaseClient);
   const certNo = file.detected_cert_no;
   const certKey = certNo ? normCert(certNo) : "";
-  const cat = await findOrCreateCategory(subsectionId, kind === "coc" ? "01 COC" : "07 COC Evaluation Reports");
-  const status = docStatusFromVerdict(await lookupRegisterVerdict(siteId, subsectionId, certKey));
+  const cat = await findOrCreateCategory(subsectionId, kind === "coc" ? "01 COC" : "07 COC Evaluation Reports", ctx);
+  const status = docStatusFromVerdict(await lookupRegisterVerdict(supabase, siteId, subsectionId, certKey));
 
   const { data: dupe } = await supabase.from("subsection_documents").select("id")
     .eq("subsection_id", subsectionId).eq("category_id", cat.id).eq("file_name", file.file_name).limit(1);
@@ -51,20 +53,20 @@ export async function assignPoolFile(siteId: string, file: AssignablePoolFile, s
 
   if (!docId) {
     if (kind === "coc") {
-      docId = (await insertCocCertificateDoc({ subsectionId, cocCategoryId: cat.id, fileName: file.file_name, fileUrl: file.file_url, fileSize: file.file_size, cocNumber: certNo, cocStatus: status })).id;
+      docId = (await insertCocCertificateDoc({ subsectionId, cocCategoryId: cat.id, fileName: file.file_name, fileUrl: file.file_url, fileSize: file.file_size, cocNumber: certNo, cocStatus: status }, ctx)).id;
     } else {
       let parentId: string | null = null;
       if (certNo) {
         const { data: p } = await supabase.from("subsection_documents").select("id").eq("subsection_id", subsectionId).eq("coc_number", certNo).is("parent_document_id", null).limit(1);
         parentId = p?.[0]?.id ?? null;
       }
-      docId = (await insertEvaluationReportDoc({ subsectionId, evalCategoryId: cat.id, parentCocId: parentId, fileName: file.file_name, fileUrl: file.file_url, fileSize: file.file_size, cocNumber: certNo, verdict: extractEvalVerdict(file.file_name) })).id;
+      docId = (await insertEvaluationReportDoc({ subsectionId, evalCategoryId: cat.id, parentCocId: parentId, fileName: file.file_name, fileUrl: file.file_url, fileSize: file.file_size, cocNumber: certNo, verdict: extractEvalVerdict(file.file_name) }, ctx)).id;
     }
   } else if (kind === "coc") {
     // Re-assignment of an existing doc: re-stamp its status from the register.
     await supabase.from("subsection_documents").update({ coc_status: status }).eq("id", docId);
   }
 
-  await stampCert(siteId, subsectionId, certKey, kind === "coc" ? "coc_document_id" : "eval_document_id", docId);
+  await stampCert(supabase, siteId, subsectionId, certKey, kind === "coc" ? "coc_document_id" : "eval_document_id", docId);
   await supabase.from("coc_file_pool").update({ status: "assigned", assigned_subsection_id: subsectionId, assigned_document_id: docId }).eq("id", file.id);
 }

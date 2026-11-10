@@ -16,6 +16,10 @@ import { planCertLinks, type LinkDecision } from "@/lib/siteCoc/linkCerts";
 import { storagePathFromUrl } from "@/lib/documents/paths";
 import { generateInitialPassword } from "@/lib/auth/initialInvite";
 import { isSnagOpen } from "@/lib/subsectionStatus";
+import { poolDetection, poolObjectPath } from "@/lib/coc/poolUpload";
+import { planPoolAssignment } from "@/lib/siteCoc/assignmentEngine";
+import { assignPoolFile } from "@/lib/coc/assignPoolFile";
+import { createHash } from "node:crypto";
 
 type Row = Record<string, any>;
 const must = <T>({ data, error }: { data: T | null; error: { message: string } | null }, what: string): T => {
@@ -192,7 +196,25 @@ export function portalStatus(a: AuthFacts | undefined): "active" | "invited_neve
   return a.last_sign_in_at ? "active" : "invited_never_signed_in";
 }
 
-export function createFortressTools(sb: SupabaseClient, store: Store, opts: { tokens: any; consumeToken: (t: string) => Promise<boolean>; isAdmin: boolean; portal?: PortalOpts }) {
+const COC_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
+const COC_UPLOAD_EXT = /\.(html?|pdf|docx?|jpe?g|png)$/i;
+const COC_UPLOAD_TYPES: Record<string, string> = { pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", htm: "text/html", html: "text/html" };
+
+/** Validate a COC upload request and return its content type (same limits as the app's COC upload). */
+export function checkCocUpload(fileName: string, bytes?: number | null): string {
+  const name = String(fileName ?? "").trim();
+  if (!name || /[\\/]/.test(name)) throw new Error("file_name: give the bare file name (no folders)");
+  if (!COC_UPLOAD_EXT.test(name)) throw new Error("file_name: only PDF, DOC, DOCX, JPG, PNG or HTML files can be uploaded");
+  if (bytes != null && (!Number.isFinite(bytes) || bytes <= 0 || bytes > COC_UPLOAD_MAX_BYTES)) throw new Error("bytes: must be between 1 and 50 MB");
+  return COC_UPLOAD_TYPES[name.split(".").pop()!.toLowerCase()] ?? "application/octet-stream";
+}
+
+/** The pool object path must be a file directly in <siteId>/_pool/. */
+export function isPoolPathOf(siteId: string, path: string): boolean {
+  return new RegExp(`^${siteId.replace(/[^0-9a-f-]/gi, "")}/_pool/[0-9]+-[A-Za-z0-9._-]+$`).test(String(path ?? ""));
+}
+
+export function createFortressTools(sb: SupabaseClient, store: Store, opts: { tokens: any; consumeToken: (t: string) => Promise<boolean>; isAdmin: boolean; userId?: string; portal?: PortalOpts }) {
   async function subsections(siteId: string) {
     return all((f, t) => sb.from("subsections").select("id, name, tenant_name, shop_number, meter_serial_number, is_coc_required, updated_at")
       .eq("site_id", siteId).is("deleted_at", null).order("id").range(f, t), "subsections");
@@ -728,6 +750,99 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       catch (e) { await store.logWrite({ tool: "create_subsections", status: "failed", site_id: site.id, site: site.name, planned: { create: todo.length }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) }); throw e; }
       const log = await store.logWrite({ tool: "create_subsections", status: "ok", site_id: site.id, site: site.name, result, planned: { create: todo }, snapshot: snap.path });
       return { ...summary, written: result, snapshot: snap.path, log };
+    },
+
+
+    /** Step 1 of an MCP COC upload: a short-lived signed URL to PUT the file into the site's COC pool
+     *  (the same storage place the app's Site COC upload uses). Nothing is recorded until coc_upload_register. */
+    async coc_upload_url({ site_id, file_name, sha256: wantSha, bytes }: { site_id: string; file_name: string; sha256?: string; bytes?: number }) {
+      const site = await store.fortressSite(site_id);
+      if (!opts.isAdmin) throw new Error("coc_upload_url refused: requires the Admin role");
+      const contentType = checkCocUpload(file_name, bytes);
+      if (wantSha != null && !/^[0-9a-f]{64}$/i.test(wantSha)) throw new Error("sha256: give the file's hex SHA-256");
+      const path = poolObjectPath(site.id, file_name);
+      const signed = must(await sb.storage.from("documents").createSignedUploadUrl(path), "storage signed upload") as { signedUrl: string; path: string };
+      const upload_token = opts.tokens.issue({ siteId: site.id, dataHash: sha256(canonical({ path, file_name, sha256: wantSha?.toLowerCase() ?? null, bytes: bytes ?? null })), planHash: "coc_upload" });
+      return {
+        site: { id: site.id, name: site.name.trim() }, file_name, path, content_type: contentType,
+        detected: poolDetection(file_name),
+        signed_upload_url: signed.signedUrl, method: "PUT",
+        curl: `curl -sS --fail -X PUT -H "Content-Type: ${contentType}" -H "x-upsert: false" --data-binary @"<local file>" "${signed.signedUrl}"`,
+        upload_token, register_within: "15 minutes",
+        next: "PUT the file to signed_upload_url, then call coc_upload_register with the same site_id, file_name, path, sha256/bytes and upload_token (dry_run first).",
+      };
+    },
+
+    /** Step 2: confirm the uploaded object, add it to the site's COC pool and match it to its shop by the
+     *  certificate number in the file name, exactly as the app does (unmatched files go to Exceptions).
+     *  Only this file is processed; a match to a June 2026 or superseded row is held. */
+    async coc_upload_register({ site_id, file_name, path, sha256: wantSha, bytes, upload_token, dry_run = true, confirm_token }: { site_id: string; file_name: string; path: string; sha256?: string; bytes?: number; upload_token: string; dry_run?: boolean; confirm_token?: string }) {
+      const site = await store.fortressSite(site_id);
+      checkCocUpload(file_name, bytes);
+      if (!isPoolPathOf(site.id, path)) throw new Error("path: not a COC pool path of this site (use the path coc_upload_url returned)");
+      const bind = { siteId: site.id, dataHash: sha256(canonical({ path, file_name, sha256: wantSha?.toLowerCase() ?? null, bytes: bytes ?? null })), planHash: "coc_upload" };
+      const why0 = opts.tokens.check(upload_token, bind);
+      if (why0) throw new Error(`coc_upload_register refused: upload_token ${why0}`);
+
+      // The object must exist, with the declared size/hash.
+      const dir = path.slice(0, path.lastIndexOf("/")), base = path.slice(path.lastIndexOf("/") + 1);
+      const listed = (must(await sb.storage.from("documents").list(dir, { search: base, limit: 10 }), "storage list") as Row[]).find((o) => o.name === base);
+      if (!listed) throw new Error("coc_upload_register refused: the file is not in storage yet — PUT it to the signed URL first");
+      const size = Number(listed.metadata?.size ?? listed.metadata?.contentLength ?? NaN);
+      if (bytes != null && Number.isFinite(size) && size !== bytes) throw new Error(`coc_upload_register refused: stored size ${size} differs from bytes ${bytes}`);
+      if (wantSha) {
+        const blob = must(await sb.storage.from("documents").download(path), "storage download") as Blob;
+        const got = createHash("sha256").update(Buffer.from(await blob.arrayBuffer())).digest("hex");
+        if (got !== wantSha.toLowerCase()) throw new Error("coc_upload_register refused: stored file's sha256 differs from the declared sha256");
+      }
+      const fileUrl = sb.storage.from("documents").getPublicUrl(path).data.publicUrl;
+      const already = must(await sb.from("coc_file_pool").select("id, status").eq("site_id", site.id).eq("file_url", fileUrl).limit(1), "coc_file_pool") as Row[];
+      if (already.length) throw new Error(`coc_upload_register refused: this file is already registered (pool row ${already[0].id}, ${already[0].status})`);
+
+      // Predict where it lands with the app's own matching rule.
+      const det = poolDetection(file_name);
+      const [certs, batches, subs] = await Promise.all([
+        all((f, t) => sb.from("coc_certificates").select("id, cert_no_norm, subsection_id, import_batch_id, review_status").eq("site_id", site.id).is("superseded_at", null).order("id").range(f, t), "coc_certificates"),
+        store.batches(site.id), store.subsections(site.id),
+      ]);
+      const juneBatch = new Set(batches.filter((b: Row) => isJune2026(b.created_at)).map((b: Row) => b.id));
+      const [plan] = planPoolAssignment([{ id: "new", detected_cert_no: det.detected_cert_no, detected_kind: det.detected_kind }], certs as never);
+      const matched = plan.certId ? certs.find((c) => c.id === plan.certId) : null;
+      const juneHit = plan.outcome === "assigned" && certs.some((c) => c.cert_no_norm === matched?.cert_no_norm && c.subsection_id === plan.subsectionId && juneBatch.has(c.import_batch_id));
+      const shopName = new Map(subs.map((x: Row) => [x.id, x.name]));
+      const outcome = juneHit ? "held_june_2026_row" : plan.outcome;
+      const prediction = { detected_cert_no: det.detected_cert_no, detected_kind: det.detected_kind, outcome,
+        shop: plan.subsectionId ? { id: plan.subsectionId, name: shopName.get(plan.subsectionId) ?? null } : null,
+        candidate_shops: (plan.candidateSubsectionIds ?? []).map((id) => ({ id, name: shopName.get(id) ?? null })) };
+      const summary = { site: { id: site.id, name: site.name.trim() }, file_name, path, stored_bytes: Number.isFinite(size) ? size : null, prediction,
+        lands_in: outcome === "assigned" ? "the shop's COC documents (01 COC), linked to its certificate row" : "the site's COC pool Exceptions queue (assign it in the app)" };
+      const regHash = sha256(canonical({ path, fileUrl, outcome, sub: plan.subsectionId ?? null }));
+      if (dry_run) return { ...summary, writes_nothing: true, confirm_token: opts.tokens.issue({ siteId: site.id, dataHash: regHash, planHash: "coc_upload_register" }), requires: "fortress.write scope and the Admin role" };
+
+      if (!opts.isAdmin) throw new Error("coc_upload_register refused: requires the Admin role");
+      if (!opts.userId) throw new Error("coc_upload_register refused: no user id on this server");
+      const why = opts.tokens.check(confirm_token, { siteId: site.id, dataHash: regHash, planHash: "coc_upload_register" });
+      if (why) throw new Error(`coc_upload_register refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("coc_upload_register refused: token already used");
+      const row = must(await sb.from("coc_file_pool").insert({
+        site_id: site.id, file_name, file_url: fileUrl, file_size: Number.isFinite(size) ? size : (bytes ?? null),
+        ...det, uploaded_by: opts.userId,
+      }).select("id, file_name, file_url, file_size, detected_cert_no, detected_kind").single(), "coc_file_pool insert") as Row;
+      let error: string | null = null;
+      try {
+        if (outcome === "assigned" && plan.subsectionId) {
+          await assignPoolFile(site.id, row as never, plan.subsectionId, det.detected_kind === "eval" ? "eval" : "coc", { client: sb, userId: opts.userId });
+        } else {
+          must(await sb.from("coc_file_pool").update({ reason: outcome, candidate_ids: plan.candidateSubsectionIds ?? [] }).eq("id", row.id).select("id"), "coc_file_pool reason");
+        }
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e);
+        await sb.from("coc_file_pool").update({ reason: "assign_failed", candidate_ids: [] }).eq("id", row.id);
+      }
+      const after = must(await sb.from("coc_file_pool").select("id, status, reason, assigned_subsection_id, assigned_document_id").eq("id", row.id).single(), "coc_file_pool") as Row;
+      const log = await store.logWrite({ tool: "coc_upload_register", status: error ? "failed" : "ok", site_id: site.id, site: site.name, planned: { file_name, path, outcome, shop: summary.prediction.shop }, result: after, error });
+      if (error) throw new Error(`coc_upload_register: file pooled (row ${row.id}) but assignment failed: ${error}`);
+      return { ...summary, written: after, log };
     },
 
     /** Link live certificate rows that have no shop to a shop (schedule, shop number, or a clear name match). June 2026 rows are held. */
