@@ -5,6 +5,17 @@ import { reassignPendingPoolFiles } from "@/lib/coc/reassignPool";
 
 const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9.-]/g, "_");
 
+/** Storage path (in the "documents" bucket) for a file dropped into a site's COC pool. Shared by the
+ *  UI upload and the MCP upload so both land files in exactly the same place. */
+export function poolObjectPath(siteId: string, fileName: string, ts: number = Date.now()): string {
+  return `${siteId}/_pool/${ts}-${sanitize(fileName)}`;
+}
+
+/** The coc_file_pool row fields derived from the file name (cert number, COC vs evaluation report). */
+export function poolDetection(fileName: string): { detected_cert_no: string | null; detected_kind: ReturnType<typeof classifyCocFile> } {
+  return { detected_cert_no: extractCocNumber(fileName), detected_kind: classifyCocFile(fileName) };
+}
+
 export interface PoolRouteResult {
   poolId: string;
   detectedCertNo: string | null;
@@ -17,15 +28,15 @@ export interface PoolRouteResult {
 /** Upload ONE file into the site COC pool (storage + coc_file_pool row). */
 export async function uploadFileToPool(siteId: string, file: File): Promise<{ poolId: string; detectedCertNo: string | null }> {
   const { data: { user } } = await supabase.auth.getUser();
-  const ts = Date.now();
-  const path = `${siteId}/_pool/${ts}-${sanitize(file.name)}`;
+  const path = poolObjectPath(siteId, file.name);
   const { data: up, error: upErr } = await supabase.storage.from("documents").upload(path, file);
   if (upErr || !up?.path) throw new Error(upErr?.message ?? "upload error");
   const { data: urlData } = supabase.storage.from("documents").getPublicUrl(up.path);
-  const detected = extractCocNumber(file.name);
+  const det = poolDetection(file.name);
+  const detected = det.detected_cert_no;
   const { data: row, error } = await supabase.from("coc_file_pool").insert({
     site_id: siteId, file_name: file.name, file_url: urlData.publicUrl, file_size: file.size,
-    detected_cert_no: detected, detected_kind: classifyCocFile(file.name), uploaded_by: user?.id ?? null,
+    ...det, uploaded_by: user?.id ?? null,
   }).select("id").single();
   if (error || !row) {
     await supabase.storage.from("documents").remove([up.path]);

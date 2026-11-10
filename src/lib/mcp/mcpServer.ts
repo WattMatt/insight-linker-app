@@ -114,7 +114,7 @@ export async function handleMcp(req: Request): Promise<Response> {
       return { ok: res.ok, status: res.status, body: parsed };
     },
   };
-  const extra = createFortressTools(sb, store, { tokens, consumeToken, isAdmin, portal });
+  const extra = createFortressTools(sb, store, { tokens, consumeToken, isAdmin, userId: user.id, portal });
 
   const server = new McpServer({ name: "wm-fortress", version: "1.0.0" });
   const tool = (name: string, description: string, inputSchema: z.ZodRawShape, run: (a: any) => Promise<unknown>, o: { write?: boolean; writeWhen?: (a: any) => boolean } = {}) =>
@@ -193,6 +193,12 @@ export async function handleMcp(req: Request): Promise<Response> {
     async ({ site_id, link, link_apply, link_confirm_token, link_exclude }: { site_id: string; link?: boolean; link_apply?: boolean; link_confirm_token?: string; link_exclude?: string }) =>
       link ? extra.link_unlinked_cocs({ site_id, dry_run: link_apply !== true, confirm_token: link_confirm_token, exclude: emailList(link_exclude ?? "") }) : extra.get_site_coc_detail({ site_id }),
     { writeWhen: (a) => a?.link === true && a?.link_apply === true });
+  const cocUpload = (a: any) => {
+    const u = typeof a.coc_upload === "string" ? JSON.parse(a.coc_upload) : a.coc_upload;
+    if (u?.step === "url") return extra.coc_upload_url({ site_id: a.site_id, file_name: u.file_name, sha256: u.sha256, bytes: u.bytes });
+    if (u?.step === "register") return extra.coc_upload_register({ site_id: a.site_id, file_name: u.file_name, path: u.path, sha256: u.sha256, bytes: u.bytes, upload_token: u.upload_token, dry_run: a.dry_run, confirm_token: a.confirm_token });
+    throw new Error("coc_upload: step must be \"url\" or \"register\"");
+  };
   // create_subsections is also reachable through set_coc_required, for clients holding a cached tool list.
   tool("set_coc_required", "Flag a Fortress site's shops as COC-required: every shop not yet flagged, or the named shops. dry_run=true (default) lists them (with whether certificates are on file) and returns a confirm token; dry_run=false applies it (fortress.write + Admin). With create_subsections it runs create_subsections instead.",
     { site_id: siteId, shops: z.array(z.string()).optional(), dry_run: z.boolean().optional(), confirm_token: z.string().optional(),
@@ -201,14 +207,21 @@ export async function handleMcp(req: Request): Promise<Response> {
       reject_cocs: z.any().optional().describe("runs reject_cocs instead: array (or JSON string) of {id: certificate row id, note}"),
       swap_site_names: z.string().optional().describe("runs swap_site_names instead: the other site's id"),
       move_cocs: z.any().optional().describe("runs move_cocs instead: {to_site_id, rows: [{id, subsection_id, note}]} (object or JSON string)"),
-      not_required: z.union([z.boolean(), z.enum(["true", "false"])]).optional().describe("true: mark the named `shops` as NOT requiring a COC (e.g. minisubs, generators); shops holding live certificates are refused") },
-    (a: any) => (a.create_subsections != null ? extra.create_subsections({ site_id: a.site_id, subsections: a.create_subsections, dry_run: a.dry_run, confirm_token: a.confirm_token })
+      not_required: z.union([z.boolean(), z.enum(["true", "false"])]).optional().describe("true: mark the named `shops` as NOT requiring a COC (e.g. minisubs, generators); shops holding live certificates are refused"),
+      coc_upload: z.any().optional().describe("runs the COC file upload instead: {step: \"url\", file_name, sha256?, bytes?} = coc_upload_url; {step: \"register\", file_name, path, sha256?, bytes?, upload_token} = coc_upload_register (with this call's dry_run / confirm_token). Object or JSON string") },
+    (a: any) => (a.coc_upload != null ? cocUpload(a)
+      : a.create_subsections != null ? extra.create_subsections({ site_id: a.site_id, subsections: a.create_subsections, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.delete_subsections != null ? extra.delete_subsections({ site_id: a.site_id, subsections: a.delete_subsections, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.reject_cocs != null ? extra.reject_cocs({ site_id: a.site_id, rows: a.reject_cocs, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.swap_site_names != null ? extra.swap_site_names({ site_id: a.site_id, other_site_id: a.swap_site_names, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : a.move_cocs != null ? extra.move_cocs({ site_id: a.site_id, to_site_id: (typeof a.move_cocs === "string" ? JSON.parse(a.move_cocs) : a.move_cocs)?.to_site_id, rows: (typeof a.move_cocs === "string" ? JSON.parse(a.move_cocs) : a.move_cocs)?.rows, dry_run: a.dry_run, confirm_token: a.confirm_token })
       : extra.set_coc_required({ ...a, not_required: a.not_required === true || a.not_required === "true" })),
-    { writeWhen: (a) => a?.dry_run === false });
+    { writeWhen: (a) => a?.dry_run === false || (a?.coc_upload != null && /"?step"?\s*:\s*"url"/.test(typeof a.coc_upload === "string" ? a.coc_upload : JSON.stringify(a.coc_upload))) });
+  tool("coc_upload_url", "Step 1 of uploading a COC file into a Fortress site's COC pool (the app's Site COC upload place): returns a short-lived signed URL to PUT the file to, and an upload_token. Name files with the certificate number first (e.g. NM-1751468_SHOP-12-TRADING_I.pdf) so the pool can match them. PDF/DOC/DOCX/JPG/PNG/HTML, max 50 MB (fortress.write + Admin).",
+    { site_id: siteId, file_name: z.string(), sha256: z.string().optional(), bytes: z.number().optional() }, extra.coc_upload_url, { write: true });
+  tool("coc_upload_register", "Step 2: confirm the uploaded file and add it to the site's COC pool; it is matched to its shop by the certificate number in the file name exactly as the app does, otherwise it goes to the pool's Exceptions queue. Only this file is processed; matches to June 2026 rows are held. dry_run=true (default) shows where it will land and returns a confirm token (fortress.write + Admin).",
+    { site_id: siteId, file_name: z.string(), path: z.string(), sha256: z.string().optional(), bytes: z.number().optional(), upload_token: z.string(), dry_run: z.boolean().optional(), confirm_token: z.string().optional() },
+    extra.coc_upload_register, { writeWhen: (a) => a?.dry_run === false });
   tool("link_unlinked_cocs", "Link a site's live certificate rows that have no shop to a shop: by the DB/COC schedule, by shop number, or by a clear name match (folder name, DB name, location). Weak or ambiguous matches are listed for review, not written; June 2026 rows are held. dry_run=true (default) returns the plan with before/after shop counts and a confirm token; dry_run=false applies it, snapshot first (fortress.write + Admin).",
     { site_id: siteId, dry_run: z.boolean().optional(), confirm_token: z.string().optional(), exclude: z.array(z.string()).optional().describe("certificate row ids to leave unlinked"),
       assign: z.any().optional().describe("manual links a reviewer has matched (e.g. from the tenant schedule): array (or JSON string) of {id: certificate row id, subsection_id, note}. They replace the automatic decision for those rows; only live unlinked rows of this site and shops of this site") },

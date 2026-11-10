@@ -1,4 +1,16 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+
+/** Optional data context: a server caller (the MCP) passes its own per-user client and the user id;
+ *  the browser UI omits it and uses the signed-in singleton. */
+export interface CocDataCtx { client?: SupabaseClient; userId?: string }
+const db = (ctx?: CocDataCtx) => (ctx?.client ?? (supabase as unknown as SupabaseClient));
+async function uploaderId(ctx?: CocDataCtx): Promise<string> {
+  if (ctx?.userId) return ctx.userId;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  return user.id;
+}
 import { extractCocNumber, extractEvalVerdict } from "@/lib/cocFilename";
 
 const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9.-]/g, "_");
@@ -11,7 +23,8 @@ function validate(file: File) {
 }
 
 /** Find a subsection document category by name (case-insensitive), creating it if absent. */
-export async function findOrCreateCategory(subsectionId: string, name: string): Promise<{ id: string; name: string }> {
+export async function findOrCreateCategory(subsectionId: string, name: string, ctx?: CocDataCtx): Promise<{ id: string; name: string }> {
+  const supabase = db(ctx);
   const { data: existing } = await supabase
     .from("document_categories").select("id, name").eq("subsection_id", subsectionId).ilike("name", name).limit(1);
   if (existing && existing[0]) return existing[0];
@@ -24,12 +37,12 @@ export async function findOrCreateCategory(subsectionId: string, name: string): 
 }
 
 /** Insert a COC certificate document row from an already-stored file (no upload). */
-export async function insertCocCertificateDoc(opts: { subsectionId: string; cocCategoryId: string; fileName: string; fileUrl: string; fileSize: number | null; cocNumber: string | null; cocStatus?: "Pass" | "Fail" | "Pending" }): Promise<{ id: string }> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+export async function insertCocCertificateDoc(opts: { subsectionId: string; cocCategoryId: string; fileName: string; fileUrl: string; fileSize: number | null; cocNumber: string | null; cocStatus?: "Pass" | "Fail" | "Pending" }, ctx?: CocDataCtx): Promise<{ id: string }> {
+  const supabase = db(ctx);
+  const uid = await uploaderId(ctx);
   const { data: row, error } = await supabase.from("subsection_documents").insert({
     subsection_id: opts.subsectionId, category_id: opts.cocCategoryId, file_name: opts.fileName,
-    file_url: opts.fileUrl, file_size: opts.fileSize, uploaded_by: user.id,
+    file_url: opts.fileUrl, file_size: opts.fileSize, uploaded_by: uid,
     coc_number: opts.cocNumber, coc_status: opts.cocStatus ?? "Pending",
   }).select("id").single();
   if (error || !row) throw new Error(`Save failed: ${error?.message}`);
@@ -60,12 +73,12 @@ export async function uploadEvaluationReport(opts: { subsectionId: string; evalC
 }
 
 /** Insert an evaluation-report document row from an already-stored file (no upload). */
-export async function insertEvaluationReportDoc(opts: { subsectionId: string; evalCategoryId: string; parentCocId: string | null; fileName: string; fileUrl: string; fileSize: number | null; cocNumber: string | null; verdict: string | null }): Promise<{ id: string }> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+export async function insertEvaluationReportDoc(opts: { subsectionId: string; evalCategoryId: string; parentCocId: string | null; fileName: string; fileUrl: string; fileSize: number | null; cocNumber: string | null; verdict: string | null }, ctx?: CocDataCtx): Promise<{ id: string }> {
+  const supabase = db(ctx);
+  const uid = await uploaderId(ctx);
   const { data: row, error } = await supabase.from("subsection_documents").insert({
     subsection_id: opts.subsectionId, category_id: opts.evalCategoryId, parent_document_id: opts.parentCocId,
-    file_name: opts.fileName, file_url: opts.fileUrl, file_size: opts.fileSize, uploaded_by: user.id,
+    file_name: opts.fileName, file_url: opts.fileUrl, file_size: opts.fileSize, uploaded_by: uid,
     coc_number: opts.cocNumber, coc_status: opts.verdict ?? "Pending",
   }).select("id").single();
   if (error || !row) throw new Error(`Save failed: ${error?.message}`);
