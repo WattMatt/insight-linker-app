@@ -19,6 +19,7 @@ import { isSnagOpen } from "@/lib/subsectionStatus";
 import { poolDetection, poolObjectPath } from "@/lib/coc/poolUpload";
 import { planPoolAssignment } from "@/lib/siteCoc/assignmentEngine";
 import { assignPoolFile } from "@/lib/coc/assignPoolFile";
+import { certDigits, toProposedRow, type ProposedRow, type SourceDoc } from "@/lib/siteCoc/reverification";
 import { createHash } from "node:crypto";
 
 type Row = Record<string, any>;
@@ -212,6 +213,40 @@ export function checkCocUpload(fileName: string, bytes?: number | null): string 
 /** The pool object path must be a file directly in <siteId>/_pool/. */
 export function isPoolPathOf(siteId: string, path: string): boolean {
   return new RegExp(`^${siteId.replace(/[^0-9a-f-]/gi, "")}/_pool/[0-9]+-[A-Za-z0-9._-]+$`).test(String(path ?? ""));
+}
+
+
+/** add_cocs input: array (or JSON string) of re-verification docs plus the shop each belongs to. */
+export interface AddDoc extends SourceDoc { subsection_id: string }
+export function parseAddDocs(input: unknown): AddDoc[] {
+  const v = typeof input === "string" ? JSON.parse(input) : input;
+  if (!Array.isArray(v) || !v.length) throw new Error("add_cocs: give docs, a non-empty array of {id, file, cert_no, cls_type, verdict, verdict_alt?, reason, rules, subsection_id, ...}");
+  if (v.length > 200) throw new Error("add_cocs: at most 200 docs per call");
+  const seen = new Set<string>();
+  return v.map((d: Record<string, unknown>, i: number) => {
+    const id = String(d.id ?? "");
+    if (!/^add-[A-Za-z0-9._-]{3,60}$/.test(id)) throw new Error(`add_cocs doc ${i}: id must look like "add-<something>" (got "${id}")`);
+    if (seen.has(id)) throw new Error(`add_cocs: duplicate id ${id}`);
+    seen.add(id);
+    const verdict = String(d.verdict ?? "");
+    if (!["PASS", "FAIL", "REVIEW"].includes(verdict)) throw new Error(`add_cocs ${id}: verdict must be PASS, FAIL or REVIEW`);
+    if (d.verdict_alt != null && !["PASS", "FAIL", "REVIEW"].includes(String(d.verdict_alt))) throw new Error(`add_cocs ${id}: verdict_alt must be PASS, FAIL or REVIEW`);
+    if (!d.file || typeof d.file !== "string") throw new Error(`add_cocs ${id}: file (the renamed COC file name) is required`);
+    if (!d.subsection_id || typeof d.subsection_id !== "string") throw new Error(`add_cocs ${id}: subsection_id is required`);
+    if (!Array.isArray(d.rules)) throw new Error(`add_cocs ${id}: rules must be an array of {rule, res, note?, val?}`);
+    if (d.copy_of) throw new Error(`add_cocs ${id}: copy_of is not supported here`);
+    return {
+      id, file: d.file, doc_class: String(d.doc_class ?? "electrical_coc"), cert_no: d.cert_no == null ? null : String(d.cert_no),
+      cls_type: d.cls_type == null ? null : String(d.cls_type), verdict: verdict as SourceDoc["verdict"],
+      verdict_alt: d.verdict_alt == null ? verdict : String(d.verdict_alt), reason: String(d.reason ?? ""),
+      flags: Array.isArray(d.flags) ? d.flags.map(String) : [], rules: d.rules as SourceDoc["rules"],
+      db: d.db == null ? null : String(d.db), building: d.building == null ? null : String(d.building),
+      address: d.address == null ? null : String(d.address), date: d.date == null ? null : String(d.date),
+      reg_person: d.reg_person == null ? null : String(d.reg_person), reg_no: d.reg_no == null ? null : String(d.reg_no),
+      form: d.form == null ? null : String(d.form), confidence: d.confidence == null ? null : String(d.confidence),
+      subsection_id: d.subsection_id,
+    };
+  });
 }
 
 export function createFortressTools(sb: SupabaseClient, store: Store, opts: { tokens: any; consumeToken: (t: string) => Promise<boolean>; isAdmin: boolean; userId?: string; portal?: PortalOpts }) {
@@ -721,6 +756,53 @@ export function createFortressTools(sb: SupabaseClient, store: Store, opts: { to
       catch (e) { await store.logWrite({ tool: "move_cocs", status: "failed", site_id: from.id, site: from.name, planned: { to: to.id, rows: todo.length }, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) }); throw e; }
       const log = await store.logWrite({ tool: "move_cocs", status: "ok", site_id: from.id, site: from.name, result, planned: { to: to.id, rows: todo }, snapshot: sameSite ? snap.path : [snap.path, snapTo.path].join(" ; ") });
       return { ...summary, written: result, snapshot: sameSite ? [snap.path] : [snap.path, snapTo.path], log };
+    },
+
+    /** Add newly received COCs to a site as PROPOSED re-verification rows, without touching any existing row
+     *  (replace_cocs needs the site's whole verdicts.json, because rows a batch no longer carries are
+     *  superseded). Each doc is linked to the shop the caller gives; older live rows of the SAME certificate on
+     *  the SAME shop (never June 2026 rows) go into supersedes_ids, so sign-off replaces them. Same insert
+     *  path as replace_cocs (fortress_replace_cocs, adds only). Sign off afterwards with sign_off_verdicts. */
+    async add_cocs({ site_id, docs: input, dry_run = true, confirm_token }: { site_id: string; docs?: unknown; dry_run?: boolean; confirm_token?: string }) {
+      const site = await store.fortressSite(site_id);
+      const docs = parseAddDocs(input);
+      const [existing, juneIds, subs] = await Promise.all([
+        store.certificates(site_id, "id, cert_no, cert_no_norm, subsection_id, superseded_at, review_status, record_key, import_batch_id"),
+        store.juneIds(site_id),
+        store.subsections(site_id),
+      ]);
+      const subName = new Map<string, string>(subs.map((x: Row) => [String(x.id), String(x.name)] as [string, string]));
+      const keys = new Set(existing.map((r: Row) => r.record_key).filter(Boolean));
+      const adds: { row: ProposedRow; subsection_id: string; coc_document_id: null; eval_document_id: null; supersedes_ids: string[] }[] = [];
+      const lines: { record_key: string; cert_no: string | null; shop: string; verdict: string; supersedes: number; supersedes_june_skipped: number }[] = [];
+      for (const d of docs) {
+        if (keys.has(d.id)) throw new Error(`add_cocs ${d.id}: record_key already exists on this site`);
+        if (!subName.has(d.subsection_id)) throw new Error(`add_cocs ${d.id}: ${d.subsection_id} is not a shop of this site`);
+        const digits = certDigits(d.cert_no);
+        const same = digits ? existing.filter((r: Row) => !r.superseded_at && r.review_status !== "rejected" && r.subsection_id === d.subsection_id && certDigits(r.cert_no_norm ?? r.cert_no) === digits) : [];
+        const sup = same.filter((r: Row) => !juneIds.has(r.id)).map((r: Row) => String(r.id)).sort();
+        const row = toProposedRow(site.name, { ...d, doc_class: d.doc_class ?? "electrical_coc", cert_norm: digits || null }, [], sha256);
+        adds.push({ row, subsection_id: d.subsection_id, coc_document_id: null, eval_document_id: null, supersedes_ids: sup });
+        lines.push({ record_key: d.id, cert_no: d.cert_no, shop: subName.get(d.subsection_id)!, verdict: `${d.verdict}${d.verdict_alt && d.verdict_alt !== d.verdict ? ` (alt ${d.verdict_alt})` : ""}`, supersedes: sup.length, supersedes_june_skipped: same.length - sup.length });
+        keys.add(d.id);
+      }
+      adds.sort((x, y) => x.row.record_key.localeCompare(y.row.record_key));
+      const plan = { adds, updates: [], superseded: [] };
+      const state = sha256(canonical(existing.map((r: Row) => [r.id, r.subsection_id, r.superseded_at, r.review_status]).sort()));
+      const dataHash = sha256(canonical(docs));
+      const summary = { site: { id: site.id, name: site.name.trim() }, to_add: adds.length, rows: lines };
+      if (dry_run) return { ...summary, writes_nothing: true, confirm_token: adds.length ? opts.tokens.issue({ siteId: site.id, dataHash, planHash: state }) : null, requires: "fortress.write scope and the Admin role" };
+      if (!opts.isAdmin) throw new Error("add_cocs refused: requires the Admin role");
+      const why = opts.tokens.check(confirm_token, { siteId: site.id, dataHash, planHash: state });
+      if (why) throw new Error(`add_cocs refused: ${why}`);
+      if (!(await opts.consumeToken(confirm_token!))) throw new Error("add_cocs refused: token already used");
+      const snap = await store.exportSnapshot(site.id, "before add_cocs");
+      const counts = { adds: adds.length, pass: docs.filter((d) => d.verdict === "PASS").length, fail: docs.filter((d) => d.verdict === "FAIL").length, review: docs.filter((d) => d.verdict === "REVIEW").length, via_tool: "add_cocs" };
+      let result: unknown;
+      try { result = await store.replace(site.id, { ...plan, counts }, `mcp add_cocs ${new Date().toISOString().slice(0, 10)}`, dataHash); }
+      catch (e) { await store.logWrite({ tool: "add_cocs", status: "failed", site_id: site.id, site: site.name, planned: counts, snapshot: snap.path, error: e instanceof Error ? e.message : String(e) }); throw e; }
+      const log = await store.logWrite({ tool: "add_cocs", status: "ok", site_id: site.id, site: site.name, result, planned: { ...counts, rows: lines }, snapshot: snap.path });
+      return { ...summary, written: result, snapshot: snap.path, log };
     },
 
     /** Add shops (subsections) to a site, e.g. from the client's tenant schedule, flagged COC-required.
