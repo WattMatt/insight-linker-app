@@ -30,6 +30,9 @@ const withPWA = withPWAInit({
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === "development",
+  // next-pwa globs `{src/,}index.{ts,js}` INSIDE this dir, relative to the project root
+  // (its docs say "root or src"; 10.2.9 does not look in src/worker by default).
+  customWorkerSrc: "src/worker",
   // Precache /offline and serve it when a navigation to an uncached route fails while
   // offline — otherwise the browser shows a blank/error page (the app had no fallback).
   fallbacks: {
@@ -40,31 +43,44 @@ const withPWA = withPWAInit({
     cleanupOutdatedCaches: true,
     skipWaiting: true,
     clientsClaim: true,
+    // Cache names below are repeated in src/worker/cacheNames.ts (the cache janitor,
+    // bundled into sw.js from src/worker/) — cacheNames.contract.test.ts pins them.
+    // Renamed to -v2 on 2026-11-13: the old caches had grown past their limits (31 GB
+    // on one device) through entries workbox-expiration had lost track of; the janitor
+    // deletes the old names and any untracked entry. See src/worker/cacheJanitor.ts.
     runtimeCaching: [
       // Supabase API calls — network-first with 24h fallback
       {
         urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/.*/i,
         handler: "NetworkFirst",
         options: {
-          cacheName: "supabase-api-cache",
+          cacheName: "supabase-api-cache-v2",
           expiration: {
             maxEntries: 100,
             maxAgeSeconds: 60 * 60 * 24, // 24 hours
+            purgeOnQuotaError: true,
           },
           cacheableResponse: {
             statuses: [0, 200],
           },
         },
       },
-      // Supabase storage images — cache-first with 7-day TTL
+      // Supabase storage IMAGES only — cache-first with 7-day TTL. PDFs and other
+      // documents from storage are no longer cached here (they made each entry several
+      // MB). Serialised into sw.js by workbox-build: must stay self-contained.
       {
-        urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
+        urlPattern: ({ request, url }) =>
+          url.hostname.endsWith(".supabase.co") &&
+          url.pathname.startsWith("/storage/v1/") &&
+          (request.destination === "image" ||
+            /\.(?:png|jpe?g|webp|gif|avif|svg|heic|heif)$/i.test(url.pathname)),
         handler: "CacheFirst",
         options: {
-          cacheName: "supabase-images",
+          cacheName: "supabase-images-v2",
           expiration: {
-            maxEntries: 200,
+            maxEntries: 100,
             maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+            purgeOnQuotaError: true,
           },
           cacheableResponse: {
             statuses: [0, 200],
