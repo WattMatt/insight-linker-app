@@ -142,7 +142,10 @@ export function buildCocReportModel(input: BuildInput): CocReportModel {
   const verdict = { pass: 0, fail: 0, review: 0, cv: 0, pending: 0 };
   for (const t of tenants) for (const c of t.certs) verdict[c.verdictKind] += 1;
   const kpis = {
-    cocCoveragePct: pct(tenants.filter(t => t.coverage.hasCoc).length),
+    // Coverage = a certificate is on record for the shop (final or awaiting sign-off). It used to
+    // require an attached PDF (coc_document_id), which read 0% for sites whose certificates were
+    // registered without a linked document and contradicted the headline.
+    cocCoveragePct: pct(tenants.filter(t => !t.noCoc).length),
     evalCoveragePct: pct(tenants.filter(t => t.coverage.hasEval).length),
     verdict,
     outstanding: tenants.reduce((n, t) => n + t.actions.length, 0),

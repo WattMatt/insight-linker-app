@@ -1,7 +1,7 @@
 import type { TDocumentDefinitions, Content } from "pdfmake/interfaces";
 import { COC_SANS_RULES } from "./sansRules";
-import type { CocReportModel, VerdictKind, ScheduleTableRow, VerificationRow, FileRegisterRow } from "./cocReportModel";
-import { scheduleStatusTone, verdictTone, type Tone } from "./statusDisplay";
+import type { CocReportModel, VerdictKind, VerificationRow, FileRegisterRow } from "./cocReportModel";
+import { verdictTone, type Tone } from "./statusDisplay";
 import { miniBar, gaugeBar, segmentedBar } from "../pdfBars";
 import { createBaseDocDefinition } from "../pdfMakeConfig";
 import { createPageFooter } from "../pdfMakeUtils";
@@ -20,25 +20,6 @@ const glyph = (v: string) => { const t = (v || "").toUpperCase(); return t === "
 const ruleFill = (v: string) => { const t = (v || "").toUpperCase(); return t === "FAIL" ? FILL.fail : t === "CV" ? FILL.cv : t === "N/A" ? FILL.na : FILL.pass; };
 
 const hcell = (t: string) => ({ text: t, bold: true, fontSize: 7, color: "#FFFFFF", fillColor: "#0C447C" });
-
-function scheduleTableContent(rows: ScheduleTableRow[]): Content {
-  const head = ["Shop No", "Trading name", "Req", "Initial COC(s)", "Supplementary COC(s)", "Files", "Status", "Notes"].map(hcell);
-  const body = rows.map(r => {
-    const t = TONE[scheduleStatusTone(r.status)];
-    return [
-      { text: r.shopNo || "—", fontSize: 7 },
-      { text: r.trading || "—", fontSize: 7 },
-      { text: r.req || "—", fontSize: 7, alignment: "center" as const },
-      { text: r.initial || "—", fontSize: 7 },
-      { text: r.supplementary || "—", fontSize: 7 },
-      { text: r.files != null ? String(r.files) : "—", fontSize: 7, alignment: "center" as const },
-      { text: r.status || "—", fontSize: 7, fillColor: t.fill, color: t.text },
-      { text: r.notes || "", fontSize: 6, color: "#5F5E5A" },
-    ];
-  });
-  if (!rows.length) body.push([{ text: "No schedule imported.", fontSize: 7, colSpan: 8 } as any, {}, {}, {}, {}, {}, {}, {}]);
-  return { table: { headerRows: 1, widths: [42, 110, 18, 92, 100, 22, 86, "*"], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
-}
 
 function verificationContent(rows: VerificationRow[]): Content {
   const A = COC_SANS_RULES.filter(r => r.group === "A");
@@ -72,7 +53,7 @@ function verificationContent(rows: VerificationRow[]): Content {
 }
 
 function fileRegisterContent(rows: FileRegisterRow[]): Content {
-  const head = ["File", "Matched", "Doc type", "Cert no", "Type", "9(2)", "Issued", "Conf", "Notes"].map(hcell);
+  const head = ["File", "Matched", "Doc type", "Cert no", "Type", "9(2)", "Issued", "Conf"].map(hcell);
   const confColor = (c: string) => { const v = (c || "").toLowerCase(); return v === "high" ? "#0F6E56" : v === "med" ? "#854F0B" : v === "low" ? "#A32D2D" : "#5F5E5A"; };
   const body = rows.map(r => {
     const isCoc = r.docType === "electrical_coc";
@@ -85,10 +66,9 @@ function fileRegisterContent(rows: FileRegisterRow[]): Content {
       { text: (r.clause92 || "").toUpperCase() || "—", fontSize: 6, alignment: "center" as const },
       { text: r.issued ?? "—", fontSize: 6 },
       { text: r.conf || "—", fontSize: 6, color: confColor(r.conf) },
-      { text: r.notes || "", fontSize: 5, color: "#5F5E5A" },
     ];
   });
-  return { table: { headerRows: 1, widths: ["*", 42, 64, 56, 40, 22, 48, 30, "*"], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
+  return { table: { headerRows: 1, widths: ["*", 60, 70, 70, 50, 26, 54, 34], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
 }
 
 // Bar primitives (table-based, canvas-free) live in the shared pdfBars.ts —
@@ -155,7 +135,7 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
     { text: model.siteName, fontSize: 18, bold: true },
     { text: cov.address || "", fontSize: 11, color: "#5F5E5A", margin: [0, 1, 0, 16] },
     { table: { widths: ["auto", "*"], body: [
-      [{ text: "Prepared for", color: "#5F5E5A" }, { text: cov.clientName || "—", bold: true }],
+      [{ text: "Prepared for", color: "#5F5E5A" }, { text: (cov.clientName || "—").replace(/_/g, " "), bold: true }],
       [{ text: "Prepared by", color: "#5F5E5A" }, { text: "Watson Mattheus Consulting Electrical Engineers" }],
       [{ text: "Generated", color: "#5F5E5A" }, { text: `${model.generatedAt}${model.lastImport ? ` · data as of ${model.lastImport}` : ""}` }],
     ] }, layout: "noBorders", fontSize: 10, margin: [0, 0, 0, 26] },
@@ -173,7 +153,7 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
   const awaitingNote = s.awaitingSignOff
     ? ` A further ${s.awaitingSignOff} ${s.awaitingSignOff === 1 ? "shop has a COC" : "shops have COCs"} on file whose re-verification verdict is awaiting engineer sign-off; ${s.awaitingSignOff === 1 ? "it is" : "they are"} listed under that verdict, not as missing.`
     : "";
-  const narrative = `${model.siteName} has ${s.required} COC-required shops. ${s.clear} are clear (Pass), ${s.noCoc} have no COC on file, and ${s.failed} ${s.failed === 1 ? "has a failed certificate" : "have failed certificates"}.${awaitingNote} Overall compliance is ${s.compliantPct}%, with ${k.outstanding} outstanding ${k.outstanding === 1 ? "action" : "actions"}. COC documents are on record for ${k.cocCoveragePct}% of required shops and evaluation reports for ${k.evalCoveragePct}%.`;
+  const narrative = `${model.siteName} has ${s.required} COC-required shops. ${s.clear} are clear (Pass), ${s.noCoc} have no COC on file, and ${s.failed} ${s.failed === 1 ? "has a failed certificate" : "have failed certificates"}.${awaitingNote} Overall compliance is ${s.compliantPct}%, with ${k.outstanding} outstanding ${k.outstanding === 1 ? "action" : "actions"}. A COC is on record for ${k.cocCoveragePct}% of required shops.`;
 
   // Tinted KPI cards. Each card is a NESTED table (accent bar + tinted content) with a fixed height
   // on the NESTED table — this is the structure pd.js renders reliably. Putting heights on the OUTER
@@ -214,11 +194,11 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
   const cocRow: any[] = [
     card("Compliance", `${s.compliantPct}%`, `${s.clear} of ${s.required} clear`, toneKey(s.compliantPct), s.compliantPct),
     card("COC coverage", `${k.cocCoveragePct}%`, "have a COC", toneKey(k.cocCoveragePct), k.cocCoveragePct),
-    card("Eval coverage", `${k.evalCoveragePct}%`, "have an eval", toneKey(k.evalCoveragePct), k.evalCoveragePct),
+    card("Outstanding actions", `${k.outstanding}`, "no-COC + failed", k.outstanding ? "amber" : "slate"),
     verdictCard(),
     sk
       ? card("COC expiry", `${sk.expiry.expired} / ${sk.expiry.within30} / ${sk.expiry.within90}`, "expired · ≤30d · ≤90d", "slate")
-      : card("Outstanding", `${k.outstanding}`, "no-COC + failed", k.outstanding ? "amber" : "slate"),
+      : card("Certificates", `${k.verdict.pass + k.verdict.fail + k.verdict.review + k.verdict.cv + k.verdict.pending}`, "on record", "slate"),
   ];
   const kpiTable = (cards: any[]): Content => ({ table: { widths: [138, 138, 138, 138, 138], body: [cards] }, layout: cardLayout, margin: [0, 0, 0, 6] });
   const glabel = (t: string): Content => ({ text: t, fontSize: 9, bold: true, color: "#185FA5", margin: [0, 6, 0, 6] });
@@ -254,8 +234,8 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
   ];
 
   const tablesBlock: Content[] = [
-    { text: "DB / COC Schedule", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 6] },
-    scheduleTableContent(model.scheduleTable),
+    // The imported "DB / COC Schedule" is a point-in-time import and goes stale as certificates are
+    // added or moved, so it is not printed: the verification table and file register are the record.
     { text: "COC Verification vs SANS 10142-1", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 2] },
     { text: "P Pass · F Fail · CV Cannot verify · N/A not applicable · · not captured", fontSize: 7, color: "#5F5E5A", margin: [0, 0, 0, 4] },
     verificationContent(model.verificationRows),
