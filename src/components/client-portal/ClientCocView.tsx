@@ -80,7 +80,7 @@ export function ClientCocView({ siteId, siteName, onPreview }: ClientCocViewProp
     try {
       const model = buildCocReportModel({
         siteName,
-        generatedAt: new Date().toLocaleDateString(),
+        generatedAt: new Date().toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" }),
         lastImport: null,
         clientName: null,
         address: null,
