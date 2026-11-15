@@ -1,6 +1,6 @@
 import type { TDocumentDefinitions, Content } from "pdfmake/interfaces";
 import { COC_SANS_RULES } from "./sansRules";
-import type { CocReportModel, VerdictKind, VerificationRow, FileRegisterRow } from "./cocReportModel";
+import type { CocReportModel, VerdictKind, VerificationRow } from "./cocReportModel";
 import { verdictTone, type Tone } from "./statusDisplay";
 import { miniBar, gaugeBar, segmentedBar } from "../pdfBars";
 import { createBaseDocDefinition } from "../pdfMakeConfig";
@@ -42,7 +42,7 @@ function verificationContent(rows: VerificationRow[]): Content {
   const body = rows.map(r => {
     const vt = TONE[verdictTone(r.verdict)];
     return [
-      { text: r.shop || "—", fontSize: 6 },
+      { text: r.shop && r.shop.toUpperCase() !== "NOSHOP" ? r.shop : "—", fontSize: 6 },
       { text: r.certNo || "—", fontSize: 6 },
       { text: (r.type || "").slice(0, 1), fontSize: 6, alignment: "center" as const },
       { text: shortVerdict(r.verdict), fontSize: 6, fillColor: vt.fill, color: vt.text },
@@ -52,24 +52,6 @@ function verificationContent(rows: VerificationRow[]): Content {
   return { table: { headerRows: 2, widths: [42, 58, 14, 58, ...Array(all.length).fill("*")], body: [head1, head2, ...body] }, layout: stripeLayout(2), margin: [0, 0, 0, 8] };
 }
 
-function fileRegisterContent(rows: FileRegisterRow[]): Content {
-  const head = ["File", "Matched", "Doc type", "Cert no", "Type", "9(2)", "Issued", "Conf"].map(hcell);
-  const confColor = (c: string) => { const v = (c || "").toLowerCase(); return v === "high" ? "#0F6E56" : v === "med" ? "#854F0B" : v === "low" ? "#A32D2D" : "#5F5E5A"; };
-  const body = rows.map(r => {
-    const isCoc = r.docType === "electrical_coc";
-    return [
-      { text: r.file || "—", fontSize: 6 },
-      { text: r.matched || "—", fontSize: 6 },
-      { text: r.docType || "—", fontSize: 6, fillColor: isCoc ? TONE.green.fill : "#F1EFE8", color: isCoc ? TONE.green.text : "#5F5E5A" },
-      { text: r.certNo || "—", fontSize: 6 },
-      { text: r.type || "—", fontSize: 6 },
-      { text: (r.clause92 || "").toUpperCase() || "—", fontSize: 6, alignment: "center" as const },
-      { text: r.issued ?? "—", fontSize: 6 },
-      { text: r.conf || "—", fontSize: 6, color: confColor(r.conf) },
-    ];
-  });
-  return { table: { headerRows: 1, widths: ["*", 60, 70, 70, 50, 26, 54, 34], body: [head, ...body] }, layout: stripeLayout(1), margin: [0, 0, 0, 8] };
-}
 
 // Bar primitives (table-based, canvas-free) live in the shared pdfBars.ts —
 // they were originally authored here and lifted out; the local copies are gone.
@@ -137,7 +119,7 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
     { table: { widths: ["auto", "*"], body: [
       [{ text: "Prepared for", color: "#5F5E5A" }, { text: (cov.clientName || "—").replace(/_/g, " "), bold: true }],
       [{ text: "Prepared by", color: "#5F5E5A" }, { text: "Watson Mattheus Consulting Electrical Engineers" }],
-      [{ text: "Generated", color: "#5F5E5A" }, { text: `${model.generatedAt}${model.lastImport ? ` · data as of ${model.lastImport}` : ""}` }],
+      [{ text: "Generated", color: "#5F5E5A" }, { text: model.generatedAt }],
     ] }, layout: "noBorders", fontSize: 10, margin: [0, 0, 0, 26] },
     { text: `${s.compliantPct}% compliant`, fontSize: 26, bold: true, color: tone(s.compliantPct), margin: [0, 18, 0, 0] },
     gaugeBar(s.compliantPct, tone(s.compliantPct)),
@@ -153,7 +135,7 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
   const awaitingNote = s.awaitingSignOff
     ? ` A further ${s.awaitingSignOff} ${s.awaitingSignOff === 1 ? "shop has a COC" : "shops have COCs"} on file whose re-verification verdict is awaiting engineer sign-off; ${s.awaitingSignOff === 1 ? "it is" : "they are"} listed under that verdict, not as missing.`
     : "";
-  const narrative = `${model.siteName} has ${s.required} COC-required shops. ${s.clear} are clear (Pass), ${s.noCoc} have no COC on file, and ${s.failed} ${s.failed === 1 ? "has a failed certificate" : "have failed certificates"}.${awaitingNote} Overall compliance is ${s.compliantPct}%, with ${k.outstanding} outstanding ${k.outstanding === 1 ? "action" : "actions"}. A COC is on record for ${k.cocCoveragePct}% of required shops.`;
+  const narrative = `${model.siteName} has ${s.required} COC-required ${s.required === 1 ? "shop" : "shops"}. ${s.clear} ${s.clear === 1 ? "is" : "are"} clear (Pass), ${s.noCoc} ${s.noCoc === 1 ? "has" : "have"} no COC on file, and ${s.failed} ${s.failed === 1 ? "has a failed certificate" : "have failed certificates"}.${awaitingNote} Overall compliance is ${s.compliantPct}%, with ${k.outstanding} outstanding ${k.outstanding === 1 ? "action" : "actions"}. A COC is on record for ${k.cocCoveragePct}% of required shops.`;
 
   // Tinted KPI cards. Each card is a NESTED table (accent bar + tinted content) with a fixed height
   // on the NESTED table — this is the structure pd.js renders reliably. Putting heights on the OUTER
@@ -210,7 +192,9 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
     kpiTable([
       card("Open snags", `${sk.snagsOpen}`, `${sk.snagsHighRisk} high-risk`, sk.snagsHighRisk ? "red" : sk.snagsOpen ? "amber" : "green"),
       card("Oldest snag", sk.oldestOpenDays != null ? `${sk.oldestOpenDays}d` : "—", "open ageing", "slate"),
-      card("Inspection pass", `${sk.inspectionPassPct}%`, `${sk.inspectionPass}/${sk.inspectionPass + sk.inspectionFail} items`, toneKey(sk.inspectionPassPct), sk.inspectionPassPct),
+      (sk.inspectionPass + sk.inspectionFail)
+        ? card("Inspection pass", `${sk.inspectionPassPct}%`, `${sk.inspectionPass}/${sk.inspectionPass + sk.inspectionFail} items`, toneKey(sk.inspectionPassPct), sk.inspectionPassPct)
+        : card("Inspection pass", "—", "no items recorded", "slate"),
       card("Site readiness", `${sk.readinessPct}%`, "deliverables", toneKey(sk.readinessPct), sk.readinessPct),
       card("Metering", sk.meteringTotal ? `${sk.meteringDone}/${sk.meteringTotal}` : "—", "subsections", toneKey(mPct), mPct),
     ]),
@@ -237,10 +221,10 @@ export function buildSiteCocReportDocDef(model: CocReportModel, logoDataUrl?: st
     // The imported "DB / COC Schedule" is a point-in-time import and goes stale as certificates are
     // added or moved, so it is not printed: the verification table and file register are the record.
     { text: "COC Verification vs SANS 10142-1", fontSize: 14, bold: true, headlineLevel: 1, margin: [0, 0, 0, 2] },
-    { text: "P Pass · F Fail · CV Cannot verify · N/A not applicable · · not captured", fontSize: 7, color: "#5F5E5A", margin: [0, 0, 0, 4] },
+    { text: "P Pass · F Fail · CV Cannot verify · FLAG noted, not failed · ASSERTED ticked compliant, no value written · N/A not applicable · · not captured", fontSize: 7, color: "#5F5E5A", margin: [0, 0, 0, 4] },
     verificationContent(model.verificationRows),
-    { text: "File register", fontSize: 14, bold: true, margin: [0, 8, 0, 6] },
-    fileRegisterContent(model.fileRegister),
+    // The file register (source file paths, document types, match confidence) is a working table
+    // for the engineer and is not printed in the client report.
   ];
 
   // Built through createBaseDocDefinition so this report carries the same PDF
