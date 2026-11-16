@@ -41,6 +41,9 @@ async function clearIndexedDB(): Promise<void> {
   const dbNames = [
     'wm_compliance_offline',
     'wm_floor_plan_offline',
+    // workbox's expiration bookkeeping. clearServiceWorkerCaches() deletes every cache,
+    // so records left here would point at nothing and count toward maxEntries.
+    'workbox-expiration',
   ];
   
   for (const dbName of dbNames) {
